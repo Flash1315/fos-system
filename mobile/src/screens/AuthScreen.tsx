@@ -15,6 +15,7 @@ export function AuthScreen({
   const [mode, setMode] = useState<"login" | "register">("login");
   const [orgSlug, setOrgSlug] = useState("");
   const [orgName, setOrgName] = useState("");
+  const [currency, setCurrency] = useState("IDR");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -26,6 +27,7 @@ export function AuthScreen({
         const res = await registerOrg({
           name: orgName,
           slug: orgSlug.toLowerCase().trim(),
+          currency: currency.trim().toUpperCase() || "IDR",
           owner_email: email,
           owner_name: name,
           owner_password: password,
@@ -57,6 +59,8 @@ export function AuthScreen({
           <>
             <Label>Company name</Label>
             <Field value={orgName} onChangeText={setOrgName} />
+            <Label>Currency</Label>
+            <Field autoCapitalize="characters" value={currency} onChangeText={setCurrency} placeholder="IDR" />
             <Label>Your name</Label>
             <Field value={name} onChangeText={setName} />
           </>

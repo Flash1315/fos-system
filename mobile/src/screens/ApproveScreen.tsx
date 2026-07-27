@@ -29,15 +29,26 @@ export function ApproveScreen({
   useFocusEffect(reload);
 
   const decide = async (id: number, approve: boolean) => {
-    setBusy(true);
-    try {
-      await decideRecord(id, approve);
-      await reload();
-    } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-    } finally {
-      setBusy(false);
+    const run = async (note = "") => {
+      setBusy(true);
+      try {
+        await decideRecord(id, approve, note);
+        await reload();
+      } catch (e) {
+        Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      } finally {
+        setBusy(false);
+      }
+    };
+    if (!approve) {
+      Alert.prompt
+        ? Alert.prompt("Reject note", "Optional reason", async (note) => {
+            await run(note || "");
+          })
+        : await run("rejected");
+      return;
     }
+    await run();
   };
 
   return (

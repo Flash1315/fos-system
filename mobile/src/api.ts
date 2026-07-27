@@ -1,4 +1,4 @@
-import * as SecureStore from "expo-secure-store";
+import { storageDelete, storageGet, storageSet } from "./storage";
 
 /** Change to your machine LAN IP when testing on a phone. */
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -47,20 +47,20 @@ export type OrgReport = {
 };
 
 async function authHeaders(): Promise<Record<string, string>> {
-  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  const token = await storageGet(TOKEN_KEY);
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export async function saveToken(token: string) {
-  await SecureStore.setItemAsync(TOKEN_KEY, token);
+  await storageSet(TOKEN_KEY, token);
 }
 
 export async function clearToken() {
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await storageDelete(TOKEN_KEY);
 }
 
 export async function getToken() {
-  return SecureStore.getItemAsync(TOKEN_KEY);
+  return storageGet(TOKEN_KEY);
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

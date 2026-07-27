@@ -34,6 +34,7 @@ export type MoneyRecord = {
   created_by?: number;
   created_by_name?: string;
   created_at: string;
+  occurred_at?: string | null;
   decided_at?: string | null;
   decided_by?: number | null;
 };
@@ -161,6 +162,10 @@ export function listMembers() {
   return request<User[]>("/orgs/members");
 }
 
+export function orgDirectory() {
+  return request<User[]>("/orgs/directory");
+}
+
 export function setMemberActive(id: number, is_active: boolean) {
   return request<User>(`/orgs/members/${id}/active`, {
     method: "POST",
@@ -250,6 +255,7 @@ export function createRecord(body: {
   liters?: number;
   odometer?: number;
   created_for_user_id?: number;
+  occurred_at?: string;
 }) {
   return request<MoneyRecord>("/records", {
     method: "POST",

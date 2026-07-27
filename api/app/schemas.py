@@ -69,6 +69,8 @@ class RecordCreate(BaseModel):
     payment_source: str = ""
     # Manager can file on behalf of a teammate (balances attribute to them)
     created_for_user_id: Optional[int] = None
+    # ISO datetime or date when money moved (optional; defaults to created_at)
+    occurred_at: Optional[datetime] = None
 
 
 class RecordUpdate(BaseModel):
@@ -84,6 +86,7 @@ class RecordUpdate(BaseModel):
     client_name: Optional[str] = None
     payment_method: Optional[str] = None
     payment_source: Optional[str] = None
+    occurred_at: Optional[datetime] = None
 
 
 class RecordOut(BaseModel):
@@ -106,6 +109,7 @@ class RecordOut(BaseModel):
     created_by: int
     created_by_name: str = ""
     created_at: datetime
+    occurred_at: Optional[datetime] = None
     decided_at: Optional[datetime]
     decided_by: Optional[int]
 

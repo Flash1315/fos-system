@@ -90,6 +90,8 @@ class MoneyRecord(Base):
     # expense/fuel: who paid — inspired by RJ My pocket / Cash on hand
     payment_source: Mapped[str] = mapped_column(String(40), default="")  # my_pocket / cash_on_hand
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    # When the money actually moved (may differ from created_at for late entries)
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 

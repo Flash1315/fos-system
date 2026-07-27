@@ -1,9 +1,8 @@
 """Colleague cash transfer — RJ-inspired, multi-tenant SQL.
 
-Creates:
-- pending expense (payment_source=cash_on_hand) for sender, category Transfer
-- pending income (payment_method=cash) for recipient
-Both still go through approval unless caller is owner/manager and auto flag set later.
+Creates paired expense (sender, cash_on_hand) + income (recipient, cash).
+Peer transfers are auto-approved so cash balances move immediately; they
+remain visible in the org ledger.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,7 +13,7 @@ from app.auth import get_current_user
 from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User
 from app.schemas import RecordOut
-from app.routers.records import _record_out
+from app.routers.records import _record_out, _utcnow
 
 router = APIRouter(prefix="/transfers", tags=["transfers"])
 
@@ -53,24 +52,28 @@ def create_transfer(
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
     note = body.comment or f"Cash transfer to {recipient.full_name}"
+    now = _utcnow()
 
     sender_rec = MoneyRecord(
         organization_id=user.organization_id,
         created_by=user.id,
         kind=RecordKind.expense,
-        status=RecordStatus.pending,
+        status=RecordStatus.approved,
         amount=body.amount,
         currency=currency,
         category="Transfer",
         purpose="Other",
         comment=note,
         payment_source="cash_on_hand",
+        decided_at=now,
+        decided_by=user.id,
+        occurred_at=now,
     )
     recipient_rec = MoneyRecord(
         organization_id=user.organization_id,
         created_by=recipient.id,
         kind=RecordKind.income,
-        status=RecordStatus.pending,
+        status=RecordStatus.approved,
         amount=body.amount,
         currency=currency,
         category="Transfer",
@@ -78,6 +81,9 @@ def create_transfer(
         comment=f"Cash from {user.full_name}" + (f" — {body.comment}" if body.comment else ""),
         client_name=user.full_name,
         payment_method="cash",
+        decided_at=now,
+        decided_by=user.id,
+        occurred_at=now,
     )
     db.add(sender_rec)
     db.add(recipient_rec)

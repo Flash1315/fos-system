@@ -41,6 +41,7 @@ export function CreateScreen({
   const [photoUrl, setPhotoUrl] = useState("");
   const [members, setMembers] = useState<User[]>([]);
   const [forUserId, setForUserId] = useState<number | null>(null);
+  const [occurredDate, setOccurredDate] = useState("");
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
@@ -132,6 +133,7 @@ export function CreateScreen({
         liters: kind === "fuel" && liters ? Number(liters.replace(",", ".")) : undefined,
         odometer: kind === "fuel" && odometer ? Number(odometer.replace(",", ".")) : undefined,
         created_for_user_id: forUserId ?? undefined,
+        occurred_at: occurredDate.trim() ? `${occurredDate.trim()}T12:00:00` : undefined,
       });
       onCreated();
     } catch (e) {
@@ -160,6 +162,8 @@ export function CreateScreen({
         <Field editable={false} value={purpose} />
         <Label>Amount</Label>
         <Field editable={false} value={String(value)} />
+        <Label>When</Label>
+        <Field editable={false} value={occurredDate || "now"} />
         <Label>Category</Label>
         <Field editable={false} value={category || "—"} />
         <Label>Place</Label>
@@ -227,6 +231,8 @@ export function CreateScreen({
       </View>
       <Label>Amount</Label>
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
+      <Label>When (optional YYYY-MM-DD)</Label>
+      <Field autoCapitalize="none" value={occurredDate} onChangeText={setOccurredDate} placeholder="leave empty = now" />
       <Label>Category</Label>
       <View style={styles.kinds}>
         {categories.map((c) => (

@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { Alert } from "react-native";
-import { transferCash } from "../api";
-import { Btn, Field, Label, Screen, Sub, TopBar } from "../components/ui";
+import React, { useEffect, useState } from "react";
+import { Alert, View, StyleSheet } from "react-native";
+import { me, orgDirectory, transferCash, type User } from "../api";
+import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
 export function TransferScreen({
   busy,
@@ -14,14 +14,27 @@ export function TransferScreen({
   onBack: () => void;
   onDone: () => void;
 }) {
+  const [members, setMembers] = useState<User[]>([]);
   const [email, setEmail] = useState("");
   const [amount, setAmount] = useState("");
   const [comment, setComment] = useState("");
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const u = await me();
+        const rows = await orgDirectory();
+        setMembers(rows.filter((m) => m.id !== u.id));
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, []);
+
   const submit = async () => {
     const value = Number(amount.replace(",", "."));
     if (!email.trim() || !value || value <= 0) {
-      Alert.alert("Fos", "Recipient email and amount required");
+      Alert.alert("Fos", "Recipient and amount required");
       return;
     }
     setBusy(true);
@@ -31,7 +44,7 @@ export function TransferScreen({
         amount: value,
         comment,
       });
-      Alert.alert("Fos", "Transfer submitted for approval (both sides)");
+      Alert.alert("Fos", "Transfer recorded — cash balances updated");
       onDone();
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -44,9 +57,30 @@ export function TransferScreen({
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Transfer cash to teammate</Label>
-      <Sub>Creates pending expense for you and pending cash income for them.</Sub>
+      <Sub>Moves cash on hand immediately (approved transfer pair).</Sub>
+      {members.length > 0 && (
+        <>
+          <Label>Teammate</Label>
+          <View style={styles.kinds}>
+            {members.map((m) => (
+              <Chip
+                key={m.id}
+                label={m.full_name}
+                on={email === m.email}
+                onPress={() => setEmail(m.email)}
+              />
+            ))}
+          </View>
+        </>
+      )}
       <Label>Teammate email</Label>
-      <Field autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
+      <Field
+        autoCapitalize="none"
+        keyboardType="email-address"
+        value={email}
+        onChangeText={setEmail}
+        placeholder="colleague@example.com"
+      />
       <Label>Amount</Label>
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
       <Label>Comment</Label>
@@ -55,3 +89,7 @@ export function TransferScreen({
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  kinds: { flexDirection: "row", gap: 8, marginBottom: 8, flexWrap: "wrap" },
+});

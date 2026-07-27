@@ -5,6 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.models import MoneyRecord, Payout, PayoutKind, RecordKind, RecordStatus, User
 
+# Prefer occurred_at when present (late entries), else created_at
+_effective_at = func.coalesce(MoneyRecord.occurred_at, MoneyRecord.created_at)
+
 
 def last_payout_at(db: Session, org_id: int, user_id: int, kind: PayoutKind):
     row = (
@@ -34,7 +37,7 @@ def user_balance(db: Session, user: User) -> dict:
             MoneyRecord.payment_method == "cash",
         )
         if since_hand is not None:
-            q = q.filter(MoneyRecord.created_at > since_hand)
+            q = q.filter(_effective_at > since_hand)
         return float(q.scalar() or 0)
 
     def sum_out(sources: list[str], since) -> float:
@@ -46,7 +49,7 @@ def user_balance(db: Session, user: User) -> dict:
             MoneyRecord.payment_source.in_(sources),
         )
         if since is not None:
-            q = q.filter(MoneyRecord.created_at > since)
+            q = q.filter(_effective_at > since)
         return float(q.scalar() or 0)
 
     income_cash = sum_income_cash()

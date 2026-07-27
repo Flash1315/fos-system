@@ -178,7 +178,12 @@ def test_transfer_creates_two_pending(client):
     body = xfer.json()
     assert body["sender_record"]["kind"] == "expense"
     assert body["recipient_record"]["kind"] == "income"
-    assert body["sender_record"]["status"] == "pending"
+    assert body["sender_record"]["status"] == "approved"
+    assert body["recipient_record"]["status"] == "approved"
+    # Cash moved: sender cash down, recipient cash up after approval path
+    sender_bal = client.get("/records/balance/me", headers=eh).json()
+    assert sender_bal["cash_on_hand"] == -25000
+
 
 
 def test_expense_payout_resets_spendings(client):
@@ -358,3 +363,58 @@ def test_create_on_behalf_edit_export_role(client):
     assert csv.status_code == 200
     assert "record," in csv.text
     assert "type,id,kind" in csv.text
+
+
+def test_occurred_at_affects_spendings_cutoff(client):
+    owner = _register(client, "flow-occurred", "occ-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    seed = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 1000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "purpose": "Office",
+        },
+    ).json()["id"]
+    client.post(f"/records/{seed}/decide", headers=h, json={"approve": True})
+    pay = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "expense_payout", "amount": 1000, "payment_method": "cash"},
+    )
+    assert pay.status_code == 200
+    assert pay.json()["overpayment"] == 0
+    # Late expense dated before payout should NOT count in current spendings
+    late = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 9000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "purpose": "Office",
+            "occurred_at": "2020-01-01T12:00:00",
+        },
+    )
+    assert late.status_code == 200
+    client.post(f"/records/{late.json()['id']}/decide", headers=h, json={"approve": True})
+    assert client.get("/records/balance/me", headers=h).json()["spendings"] == 0
+    # Fresh expense (no occurred_at) does count
+    fresh = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 3000,
+            "category": "Food",
+            "payment_source": "my_pocket",
+            "purpose": "Office",
+        },
+    ).json()["id"]
+    client.post(f"/records/{fresh}/decide", headers=h, json={"approve": True})
+    assert client.get("/records/balance/me", headers=h).json()["spendings"] == 3000

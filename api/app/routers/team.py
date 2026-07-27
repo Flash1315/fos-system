@@ -23,6 +23,21 @@ def list_members(
     return [MemberOut.model_validate(r) for r in rows]
 
 
+@router.get("/directory", response_model=list[MemberOut])
+def org_directory(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Active teammates visible to everyone (for transfers / filing)."""
+    rows = (
+        db.query(User)
+        .filter(User.organization_id == user.organization_id, User.is_active.is_(True))
+        .order_by(User.full_name.asc())
+        .all()
+    )
+    return [MemberOut.model_validate(r) for r in rows]
+
+
 @router.post("/members/{member_id}/active", response_model=MemberOut)
 def set_member_active(
     member_id: int,

@@ -38,6 +38,7 @@ def ensure_money_record_columns() -> None:
             ("place", "VARCHAR(200) DEFAULT ''"),
             ("payment_source", "VARCHAR(40) DEFAULT ''"),
             ("bike", "VARCHAR(120) DEFAULT ''"),
+            ("occurred_at", "DATETIME"),
         ],
     )
     _ensure_columns("payouts", [("overpayment", "FLOAT DEFAULT 0")])

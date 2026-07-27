@@ -86,6 +86,7 @@ def create_record(
         client_name=body.client_name,
         payment_method=body.payment_method,
         payment_source=source,
+        occurred_at=body.occurred_at,
     )
     db.add(rec)
     db.commit()

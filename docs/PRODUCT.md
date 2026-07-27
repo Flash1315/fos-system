@@ -240,6 +240,8 @@ Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`
 - [x] Manager/owner approve/reject
 - [x] Cash on hand endpoint + mobile home
 - [x] Expo auth/home/create/approve screens
+- [x] Team / reports / ledger / receipt photo (local)
 - [x] README quick start
-- [ ] Production Postgres deploy
-- [ ] Store builds (EAS)
+- [x] API pytest + CI workflow
+- [ ] Production Postgres deploy (compose file ready)
+- [ ] Store builds (EAS config stub in `mobile/eas.json`)

@@ -58,6 +58,10 @@ class PasswordChangeIn(BaseModel):
     new_password: str = Field(min_length=6, max_length=128)
 
 
+class MemberPasswordResetIn(BaseModel):
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 class RecordCreate(BaseModel):
     kind: RecordKind
     amount: float = Field(gt=0)

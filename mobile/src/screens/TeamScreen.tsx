@@ -1,7 +1,14 @@
 import React, { useState } from "react";
 import { Alert, FlatList, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { listMembers, setMemberActive, setMemberRole, type User } from "../api";
+import {
+  listMembers,
+  resetMemberPassword,
+  setMemberActive,
+  setMemberRole,
+  type User,
+} from "../api";
+import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Screen, Sub, TopBar } from "../components/ui";
 import { colors } from "../theme";
 
@@ -17,6 +24,7 @@ export function TeamScreen({
   onBack: () => void;
 }) {
   const [rows, setRows] = useState<User[]>([]);
+  const [resetId, setResetId] = useState<number | null>(null);
 
   const reload = async () => {
     try {
@@ -93,10 +101,39 @@ export function TeamScreen({
                   disabled={busy}
                   onPress={() => toggle(item)}
                 />
+                <Btn
+                  title="Reset password"
+                  variant="ghost"
+                  disabled={busy}
+                  onPress={() => setResetId(item.id)}
+                />
               </>
             )}
           </View>
         )}
+      />
+      <NoteModal
+        visible={resetId != null}
+        title="New password (min 6)"
+        onCancel={() => setResetId(null)}
+        onSubmit={async (pwd) => {
+          const id = resetId;
+          setResetId(null);
+          if (id == null) return;
+          if (!pwd || pwd.length < 6) {
+            Alert.alert("Fos", "Password must be at least 6 characters");
+            return;
+          }
+          setBusy(true);
+          try {
+            await resetMemberPassword(id, pwd);
+            Alert.alert("Fos", "Password reset");
+          } catch (e) {
+            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+          } finally {
+            setBusy(false);
+          }
+        }}
       />
     </Screen>
   );

@@ -156,6 +156,12 @@ export function RecordDetailScreen({
             <Text style={styles.line}>
               {rec.created_by_name || rec.created_by} · {formatWhen(rec.created_at)}
             </Text>
+            {!!rec.occurred_at && (
+              <>
+                <Label>Occurred</Label>
+                <Text style={styles.line}>{formatWhen(rec.occurred_at)}</Text>
+              </>
+            )}
             {!!rec.client_name && (
               <>
                 <Label>Client</Label>

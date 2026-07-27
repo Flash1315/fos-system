@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_roles
+from app.schemas import MemberOut, MemberActiveIn, MemberRoleIn, MemberPasswordResetIn
+from app.auth import get_current_user, require_roles, hash_password
 from app.db import get_db
 from app.models import User, UserRole
-from app.schemas import MemberOut, MemberActiveIn, MemberRoleIn
 
 router = APIRouter(prefix="/orgs", tags=["team"])
 
@@ -93,6 +93,22 @@ def set_member_role(
         if owners <= 1:
             raise HTTPException(400, "Cannot demote the last owner")
     member.role = body.role
+    db.commit()
+    db.refresh(member)
+    return MemberOut.model_validate(member)
+
+
+@router.post("/members/{member_id}/password", response_model=MemberOut)
+def reset_member_password(
+    member_id: int,
+    body: MemberPasswordResetIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner)),
+):
+    member = db.get(User, member_id)
+    if not member or member.organization_id != user.organization_id:
+        raise HTTPException(404, "User not found")
+    member.hashed_password = hash_password(body.new_password)
     db.commit()
     db.refresh(member)
     return MemberOut.model_validate(member)

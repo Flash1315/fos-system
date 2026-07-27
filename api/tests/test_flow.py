@@ -591,3 +591,44 @@ def test_batch_take_all_cash_and_my_requests(client):
     assert batch.status_code == 200, batch.text
     assert len(batch.json()) >= 1
     assert client.get("/records/balance/me", headers=h).json()["cash_on_hand"] == 0
+
+
+def test_owner_resets_member_password(client):
+    owner = _register(client, "flow-reset", "reset-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "reset-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    assert inv.status_code == 200
+    emp_id = inv.json()["id"]
+    reset = client.post(
+        f"/orgs/members/{emp_id}/password",
+        headers=h,
+        json={"new_password": "brandnew1"},
+    )
+    assert reset.status_code == 200, reset.text
+    bad = client.post(
+        "/auth/login",
+        json={
+            "email": "reset-emp@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-reset",
+        },
+    )
+    assert bad.status_code == 401
+    ok = client.post(
+        "/auth/login",
+        json={
+            "email": "reset-emp@example.com",
+            "password": "brandnew1",
+            "organization_slug": "flow-reset",
+        },
+    )
+    assert ok.status_code == 200

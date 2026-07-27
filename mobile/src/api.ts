@@ -199,6 +199,13 @@ export function setMemberRole(id: number, role: "owner" | "manager" | "employee"
   });
 }
 
+export function resetMemberPassword(id: number, new_password: string) {
+  return request<User>(`/orgs/members/${id}/password`, {
+    method: "POST",
+    body: JSON.stringify({ new_password }),
+  });
+}
+
 export function myBalance() {
   return request<{
     cash_on_hand: number;

@@ -5,6 +5,7 @@ import {
   createRecord,
   getCategories,
   listMembers,
+  myBalance,
   uploadPhoto,
   type User,
 } from "../api";
@@ -113,6 +114,19 @@ export function CreateScreen({
       return;
     }
     if (!confirming) {
+      if (kind !== "income" && paymentSource === "cash_on_hand") {
+        try {
+          const bal = await myBalance();
+          if (value > bal.cash_on_hand) {
+            Alert.alert(
+              "Fos",
+              `Cash on hand is ${bal.cash_on_hand.toLocaleString()} ${bal.currency}. Amount exceeds held cash — continue anyway on confirm if intentional.`,
+            );
+          }
+        } catch {
+          /* ignore balance check */
+        }
+      }
       setConfirming(true);
       return;
     }

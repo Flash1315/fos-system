@@ -14,6 +14,7 @@ from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User
 from app.schemas import RecordOut
 from app.routers.records import _record_out, _utcnow
+from app.services.balances import user_balance
 
 router = APIRouter(prefix="/transfers", tags=["transfers"])
 
@@ -48,6 +49,13 @@ def create_transfer(
         raise HTTPException(404, "Recipient not found in your organization")
     if recipient.id == user.id:
         raise HTTPException(400, "Cannot transfer to yourself")
+
+    bal = user_balance(db, user)
+    if body.amount > float(bal["cash_on_hand"]) + 1e-6:
+        raise HTTPException(
+            400,
+            f"Insufficient cash on hand ({bal['cash_on_hand']}). Transfer amount exceeds held cash.",
+        )
 
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"

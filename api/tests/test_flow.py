@@ -169,6 +169,20 @@ def test_transfer_creates_two_pending(client):
         json={"email": "xfer-recv@example.com", "full_name": "Recv", "role": "employee", "password": "secret12"},
     )
     assert inv2.status_code == 200
+    # Seed cash on hand for sender (approved cash income)
+    income = client.post(
+        "/records",
+        headers=eh,
+        json={
+            "kind": "income",
+            "amount": 50000,
+            "category": "Other",
+            "payment_method": "cash",
+            "purpose": "Other",
+        },
+    )
+    assert income.status_code == 200
+    client.post(f"/records/{income.json()['id']}/decide", headers=oh, json={"approve": True})
     xfer = client.post(
         "/transfers",
         headers=eh,
@@ -180,9 +194,25 @@ def test_transfer_creates_two_pending(client):
     assert body["recipient_record"]["kind"] == "income"
     assert body["sender_record"]["status"] == "approved"
     assert body["recipient_record"]["status"] == "approved"
-    # Cash moved: sender cash down, recipient cash up after approval path
     sender_bal = client.get("/records/balance/me", headers=eh).json()
-    assert sender_bal["cash_on_hand"] == -25000
+    assert sender_bal["cash_on_hand"] == 25000
+
+
+def test_transfer_rejects_when_insufficient_cash(client):
+    owner = _register(client, "flow-xfer-cash", "xfer2-owner@example.com")
+    oh = {"Authorization": f"Bearer {owner['access_token']}"}
+    client.post(
+        "/orgs/invite",
+        headers=oh,
+        json={"email": "xfer2-recv@example.com", "full_name": "Recv", "role": "employee", "password": "secret12"},
+    )
+    denied = client.post(
+        "/transfers",
+        headers=oh,
+        json={"to_email": "xfer2-recv@example.com", "amount": 999999, "comment": "too much"},
+    )
+    assert denied.status_code == 400
+    assert "Insufficient cash" in denied.json()["detail"]
 
 
 

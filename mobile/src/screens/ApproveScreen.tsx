@@ -57,12 +57,28 @@ export function ApproveScreen({
     }
   };
 
+  const rejectAll = async () => {
+    if (!rows.length) return;
+    setBusy(true);
+    try {
+      await decideBatch(rows.map((r) => r.id), false, "batch reject");
+      await reload();
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Screen>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Text style={styles.title}>Approvals</Text>
       {rows.length > 0 && (
-        <Btn title={busy ? "…" : `Approve all (${rows.length})`} onPress={approveAll} disabled={busy} />
+        <Row>
+          <Btn title={busy ? "…" : `Approve all (${rows.length})`} onPress={approveAll} disabled={busy} />
+          <Btn title="Reject all" variant="danger" onPress={rejectAll} disabled={busy} />
+        </Row>
       )}
       <FlatList
         data={rows}

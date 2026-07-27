@@ -1,12 +1,14 @@
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import require_roles
 from app.db import get_db
-from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
+from app.models import MoneyRecord, Organization, Payout, RecordKind, RecordStatus, User, UserRole
 from app.schemas import OrgReportOut, CategoryTotal, PurposeTotal
 from app.services.balances import user_balance
 
@@ -102,4 +104,57 @@ def org_report(
         total_cash_held=total_cash_held,
         by_category=by_category,
         by_purpose=by_purpose,
+    )
+
+
+@router.get("/export.csv", response_class=PlainTextResponse)
+def export_csv(
+    days: int | None = Query(default=None, ge=1, le=3650),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    oid = user.organization_id
+    since = None
+    if days:
+        since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+
+    q = db.query(MoneyRecord).filter(MoneyRecord.organization_id == oid)
+    if since is not None:
+        q = q.filter(MoneyRecord.created_at >= since)
+    rows = q.order_by(MoneyRecord.created_at.asc()).limit(5000).all()
+
+    buf = StringIO()
+    buf.write(
+        "type,id,kind,status,amount,currency,category,purpose,place,bike,"
+        "payment_source,payment_method,created_by,created_at,comment\n"
+    )
+    for r in rows:
+        creator = db.get(User, r.created_by)
+        name = (creator.full_name if creator else "").replace(",", " ")
+        comment = (r.comment or "").replace("\n", " ").replace(",", ";")
+        kind = r.kind.value if hasattr(r.kind, "value") else str(r.kind)
+        status = r.status.value if hasattr(r.status, "value") else str(r.status)
+        buf.write(
+            f"record,{r.id},{kind},{status},{r.amount},{r.currency},"
+            f"{r.category},{r.purpose},{r.place},{r.bike},"
+            f"{r.payment_source},{r.payment_method},{name},{r.created_at.isoformat()},{comment}\n"
+        )
+
+    pq = db.query(Payout).filter(Payout.organization_id == oid)
+    if since is not None:
+        pq = pq.filter(Payout.created_at >= since)
+    for p in pq.order_by(Payout.created_at.asc()).limit(2000).all():
+        u = db.get(User, p.user_id)
+        name = (u.full_name if u else "").replace(",", " ")
+        pkind = p.kind.value if hasattr(p.kind, "value") else str(p.kind)
+        note = (p.note or "").replace("\n", " ").replace(",", ";")
+        buf.write(
+            f"payout,{p.id},{pkind},settled,{p.amount},{p.currency},"
+            f",,,,{p.payment_method},{name},{p.created_at.isoformat()},{note}\n"
+        )
+
+    return PlainTextResponse(
+        buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="fos-export.csv"'},
     )

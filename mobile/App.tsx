@@ -82,6 +82,7 @@ export default function App() {
       <CreateScreen
         busy={busy}
         setBusy={setBusy}
+        user={user}
         onBack={() => setScreen("home")}
         onCreated={() => setScreen("home")}
       />

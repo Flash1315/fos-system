@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { Alert, FlatList, Text, StyleSheet } from "react-native";
+import { Alert, FlatList, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { listMembers, setMemberActive, type User } from "../api";
-import { Btn, Row, Screen, Sub, TopBar } from "../components/ui";
+import { listMembers, setMemberActive, setMemberRole, type User } from "../api";
+import { Btn, Chip, Screen, Sub, TopBar } from "../components/ui";
 import { colors } from "../theme";
 
 export function TeamScreen({
@@ -44,6 +44,20 @@ export function TeamScreen({
     }
   };
 
+  const changeRole = async (member: User, role: "owner" | "manager" | "employee") => {
+    if (currentUser.role !== "owner") return;
+    if (member.role === role) return;
+    setBusy(true);
+    try {
+      await setMemberRole(member.id, role);
+      await reload();
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Screen>
       <TopBar onBack={onBack} onCancel={onBack} />
@@ -53,21 +67,35 @@ export function TeamScreen({
         keyExtractor={(item) => String(item.id)}
         ListEmptyComponent={<Sub>No members</Sub>}
         renderItem={({ item }) => (
-          <Row>
+          <View style={styles.card}>
             <Text style={styles.row}>
               {item.full_name} · {item.role}
               {"\n"}
-              <Text style={styles.meta}>{item.email} · {item.is_active === false ? "inactive" : "active"}</Text>
+              <Text style={styles.meta}>
+                {item.email} · {item.is_active === false ? "inactive" : "active"}
+              </Text>
             </Text>
             {currentUser.role === "owner" && item.id !== currentUser.id && (
-              <Btn
-                title={item.is_active === false ? "Activate" : "Deactivate"}
-                variant="ghost"
-                disabled={busy}
-                onPress={() => toggle(item)}
-              />
+              <>
+                <View style={styles.kinds}>
+                  {(["employee", "manager", "owner"] as const).map((r) => (
+                    <Chip
+                      key={r}
+                      label={r}
+                      on={item.role === r}
+                      onPress={() => changeRole(item, r)}
+                    />
+                  ))}
+                </View>
+                <Btn
+                  title={item.is_active === false ? "Activate" : "Deactivate"}
+                  variant="ghost"
+                  disabled={busy}
+                  onPress={() => toggle(item)}
+                />
+              </>
             )}
-          </Row>
+          </View>
         )}
       />
     </Screen>
@@ -76,6 +104,8 @@ export function TeamScreen({
 
 const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 26, fontWeight: "700", marginVertical: 8 },
-  row: { color: colors.text, flex: 1, fontWeight: "600" },
+  card: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 8 },
+  row: { color: colors.text, fontWeight: "600" },
   meta: { color: colors.muted, fontWeight: "400" },
+  kinds: { flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" },
 });

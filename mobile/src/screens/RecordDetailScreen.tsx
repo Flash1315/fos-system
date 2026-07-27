@@ -7,11 +7,12 @@ import {
   decideRecord,
   getRecord,
   mediaUrl,
+  updateRecord,
   type MoneyRecord,
   type User,
 } from "../api";
 import { NoteModal } from "../components/NoteModal";
-import { Btn, Card, Label, Row, Screen, Sub, TopBar } from "../components/ui";
+import { Btn, Card, Field, Label, Row, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
 
@@ -31,11 +32,19 @@ export function RecordDetailScreen({
   const [rec, setRec] = useState<MoneyRecord | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editAmount, setEditAmount] = useState("");
+  const [editPlace, setEditPlace] = useState("");
+  const [editComment, setEditComment] = useState("");
   const isManager = user.role === "owner" || user.role === "manager";
 
   const reload = async () => {
     try {
-      setRec(await getRecord(id));
+      const row = await getRecord(id);
+      setRec(row);
+      setEditAmount(String(row.amount));
+      setEditPlace(row.place || "");
+      setEditComment(row.comment || "");
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     }
@@ -77,7 +86,33 @@ export function RecordDetailScreen({
     }
   };
 
+  const onSaveEdit = async () => {
+    const value = Number(editAmount.replace(",", "."));
+    if (!value || value <= 0) {
+      Alert.alert("Fos", "Enter a valid amount");
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await updateRecord(id, {
+        amount: value,
+        place: editPlace,
+        comment: editComment,
+      });
+      setRec(updated);
+      setEditing(false);
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const canCancel =
+    !!rec &&
+    rec.status === "pending" &&
+    (rec.created_by === user.id || isManager);
+  const canEdit =
     !!rec &&
     rec.status === "pending" &&
     (rec.created_by === user.id || isManager);
@@ -157,6 +192,23 @@ export function RecordDetailScreen({
               <Btn title="Approve" disabled={busy} onPress={() => decide(true)} />
               <Btn title="Reject" variant="danger" disabled={busy} onPress={() => setRejectOpen(true)} />
             </Row>
+          )}
+          {canEdit && !editing && (
+            <Btn title="Edit pending" variant="ghost" disabled={busy} onPress={() => setEditing(true)} />
+          )}
+          {canEdit && editing && (
+            <Card>
+              <Label>Edit amount</Label>
+              <Field keyboardType="decimal-pad" value={editAmount} onChangeText={setEditAmount} />
+              <Label>Place</Label>
+              <Field value={editPlace} onChangeText={setEditPlace} />
+              <Label>Comment</Label>
+              <Field value={editComment} onChangeText={setEditComment} />
+              <Row>
+                <Btn title="Save" disabled={busy} onPress={onSaveEdit} />
+                <Btn title="Cancel edit" variant="ghost" onPress={() => setEditing(false)} />
+              </Row>
+            </Card>
           )}
           {canCancel && (
             <Btn title="Cancel record" variant="ghost" disabled={busy} onPress={onCancel} />

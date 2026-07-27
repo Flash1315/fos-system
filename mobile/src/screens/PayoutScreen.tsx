@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
-import { createPayout, listMembers, type User } from "../api";
+import { createPayout, listMembers, teamBalances, type TeamBalance, type User } from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
 export function PayoutScreen({
@@ -15,6 +15,7 @@ export function PayoutScreen({
   onDone: () => void;
 }) {
   const [members, setMembers] = useState<User[]>([]);
+  const [balances, setBalances] = useState<TeamBalance[]>([]);
   const [userId, setUserId] = useState<number | null>(null);
   const [kind, setKind] = useState<"expense_payout" | "income_handover">("expense_payout");
   const [amount, setAmount] = useState("");
@@ -24,14 +25,26 @@ export function PayoutScreen({
   useEffect(() => {
     (async () => {
       try {
-        const rows = await listMembers();
+        const [rows, bals] = await Promise.all([listMembers(), teamBalances()]);
         setMembers(rows.filter((m) => m.is_active !== false));
+        setBalances(bals);
         if (rows[0]) setUserId(rows[0].id);
       } catch (e) {
         Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
       }
     })();
   }, []);
+
+  const selectedBal = balances.find((b) => b.user_id === userId);
+  const suggested =
+    kind === "expense_payout"
+      ? selectedBal?.spendings ?? 0
+      : selectedBal?.cash_on_hand ?? 0;
+
+  useEffect(() => {
+    if (suggested > 0) setAmount(String(suggested));
+    else setAmount("");
+  }, [userId, kind, suggested]);
 
   const submit = async () => {
     const value = Number(amount.replace(",", "."));
@@ -73,8 +86,21 @@ export function PayoutScreen({
           <Chip key={m.id} label={m.full_name} on={userId === m.id} onPress={() => setUserId(m.id)} />
         ))}
       </View>
+      {selectedBal && (
+        <Sub>
+          Spendings {selectedBal.spendings.toLocaleString()} · Cash held{" "}
+          {selectedBal.cash_on_hand.toLocaleString()}
+        </Sub>
+      )}
       <Label>Amount</Label>
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
+      <View style={styles.kinds}>
+        <Chip
+          label={kind === "expense_payout" ? "Pay all owed" : "Take all held"}
+          on={Number(amount) === suggested && suggested > 0}
+          onPress={() => suggested > 0 && setAmount(String(suggested))}
+        />
+      </View>
       <Sub>
         Paying more than current spendings auto-stores overpayment and reduces the next cycle.
       </Sub>

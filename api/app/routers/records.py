@@ -8,7 +8,16 @@ from app.auth import get_current_user, require_roles
 from app.categories import PAYMENT_SOURCES, PURPOSES, categories_for
 from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
-from app.schemas import BalanceOut, CategoriesOut, CommentIn, DecideBatchIn, DecideIn, RecordCreate, RecordOut
+from app.schemas import (
+    BalanceOut,
+    CategoriesOut,
+    CommentIn,
+    DecideBatchIn,
+    DecideIn,
+    RecordCreate,
+    RecordOut,
+    RecordUpdate,
+)
 from app.services.balances import user_balance
 
 router = APIRouter(prefix="/records", tags=["records"])
@@ -47,9 +56,21 @@ def create_record(
     source = body.payment_source
     if body.kind in (RecordKind.expense, RecordKind.fuel) and not source:
         source = "cash_on_hand"
+    owner_id = user.id
+    body_comment = body.comment
+    if body.created_for_user_id is not None:
+        if user.role not in (UserRole.owner, UserRole.manager):
+            raise HTTPException(403, "Only managers can create on behalf")
+        target = db.get(User, body.created_for_user_id)
+        if not target or target.organization_id != user.organization_id or not target.is_active:
+            raise HTTPException(404, "Target user not found")
+        owner_id = target.id
+        stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
+        note = f"[filed by {user.full_name} {stamp}]"
+        body_comment = (body.comment + "\n" + note).strip() if body.comment else note
     rec = MoneyRecord(
         organization_id=user.organization_id,
-        created_by=user.id,
+        created_by=owner_id,
         kind=body.kind,
         status=RecordStatus.pending,
         amount=body.amount,
@@ -58,7 +79,7 @@ def create_record(
         purpose=body.purpose,
         place=body.place,
         bike=body.bike,
-        comment=body.comment,
+        comment=body_comment,
         photo_url=body.photo_url,
         liters=body.liters,
         odometer=body.odometer,
@@ -205,6 +226,30 @@ def get_record(
     is_manager = user.role in (UserRole.owner, UserRole.manager)
     if rec.created_by != user.id and not is_manager:
         raise HTTPException(403, "Insufficient role")
+    return _record_out(db, rec)
+
+
+@router.patch("/{record_id}", response_model=RecordOut)
+def update_pending_record(
+    record_id: int,
+    body: RecordUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Creator or manager can edit fields while status is still pending."""
+    rec = db.get(MoneyRecord, record_id)
+    if not rec or rec.organization_id != user.organization_id:
+        raise HTTPException(404, "Record not found")
+    is_manager = user.role in (UserRole.owner, UserRole.manager)
+    if rec.created_by != user.id and not is_manager:
+        raise HTTPException(403, "Insufficient role")
+    if rec.status != RecordStatus.pending:
+        raise HTTPException(400, "Only pending records can be edited")
+    data = body.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        setattr(rec, key, value)
+    db.commit()
+    db.refresh(rec)
     return _record_out(db, rec)
 
 

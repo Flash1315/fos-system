@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user, require_roles
 from app.db import get_db
 from app.models import User, UserRole
-from app.schemas import MemberOut, MemberActiveIn
+from app.schemas import MemberOut, MemberActiveIn, MemberRoleIn
 
 router = APIRouter(prefix="/orgs", tags=["team"])
 
@@ -48,6 +48,36 @@ def set_member_active(
         if owners <= 1:
             raise HTTPException(400, "Cannot deactivate the last active owner")
     member.is_active = body.is_active
+    db.commit()
+    db.refresh(member)
+    return MemberOut.model_validate(member)
+
+
+@router.post("/members/{member_id}/role", response_model=MemberOut)
+def set_member_role(
+    member_id: int,
+    body: MemberRoleIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner)),
+):
+    member = db.get(User, member_id)
+    if not member or member.organization_id != user.organization_id:
+        raise HTTPException(404, "User not found")
+    if member.id == user.id and body.role != UserRole.owner:
+        raise HTTPException(400, "Cannot demote yourself")
+    if member.role == UserRole.owner and body.role != UserRole.owner:
+        owners = (
+            db.query(User)
+            .filter(
+                User.organization_id == user.organization_id,
+                User.role == UserRole.owner,
+                User.is_active.is_(True),
+            )
+            .count()
+        )
+        if owners <= 1:
+            raise HTTPException(400, "Cannot demote the last owner")
+    member.role = body.role
     db.commit()
     db.refresh(member)
     return MemberOut.model_validate(member)

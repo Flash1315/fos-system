@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { Alert, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { orgReport, type OrgReport } from "../api";
-import { Card, Chip, Label, Screen, Sub, TopBar } from "../components/ui";
+import { exportReportCsv, getToken, orgReport, type OrgReport } from "../api";
+import { Btn, Card, Chip, Label, Screen, Sub, TopBar } from "../components/ui";
 import { colors } from "../theme";
 
 const PERIODS: { label: string; days?: number }[] = [
@@ -15,6 +15,7 @@ const PERIODS: { label: string; days?: number }[] = [
 export function ReportsScreen({ onBack }: { onBack: () => void }) {
   const [report, setReport] = useState<OrgReport | null>(null);
   const [days, setDays] = useState<number | undefined>(undefined);
+  const [exporting, setExporting] = useState(false);
 
   const reload = async () => {
     try {
@@ -28,6 +29,34 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   React.useEffect(() => {
     void reload();
   }, [days]);
+
+  const onExport = async () => {
+    setExporting(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(exportReportCsv(days), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const text = await res.text();
+      if (typeof document !== "undefined") {
+        const blob = new Blob([text], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "fos-export.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+        Alert.alert("Fos", "CSV downloaded");
+      } else {
+        Alert.alert("Fos", `Exported ${Math.max(0, text.split("\n").length - 1)} rows`);
+      }
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <Screen scroll>
@@ -43,6 +72,7 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
           />
         ))}
       </View>
+      <Btn title={exporting ? "…" : "Export CSV"} variant="ghost" onPress={onExport} disabled={exporting} />
       {!report ? (
         <Sub>Loading…</Sub>
       ) : (
@@ -52,7 +82,9 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
             <Text style={styles.big}>
               {report.cash_position.toLocaleString()} {report.currency}
             </Text>
-            <Sub>{report.pending_count} pending · {report.team_count} active teammates</Sub>
+            <Sub>
+              {report.pending_count} pending · {report.team_count} active teammates
+            </Sub>
             <Label>Team held cash</Label>
             <Text style={styles.line}>{(report.total_cash_held ?? 0).toLocaleString()}</Text>
             <Label>Team spendings owed</Label>
@@ -63,7 +95,9 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
             <Text style={styles.line}>Expense: {report.approved_expense_total.toLocaleString()}</Text>
             <Text style={styles.line}>Fuel: {report.approved_fuel_total.toLocaleString()}</Text>
             <Text style={styles.line}>Income cash: {report.approved_income_cash.toLocaleString()}</Text>
-            <Text style={styles.line}>Income transfer: {report.approved_income_transfer.toLocaleString()}</Text>
+            <Text style={styles.line}>
+              Income transfer: {report.approved_income_transfer.toLocaleString()}
+            </Text>
           </Card>
           <Card>
             <Label>By category</Label>

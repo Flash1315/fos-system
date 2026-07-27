@@ -168,6 +168,13 @@ export function setMemberActive(id: number, is_active: boolean) {
   });
 }
 
+export function setMemberRole(id: number, role: "owner" | "manager" | "employee") {
+  return request<User>(`/orgs/members/${id}/role`, {
+    method: "POST",
+    body: JSON.stringify({ role }),
+  });
+}
+
 export function myBalance() {
   return request<{
     cash_on_hand: number;
@@ -242,9 +249,33 @@ export function createRecord(body: {
   client_name?: string;
   liters?: number;
   odometer?: number;
+  created_for_user_id?: number;
 }) {
   return request<MoneyRecord>("/records", {
     method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateRecord(
+  id: number,
+  body: {
+    amount?: number;
+    category?: string;
+    purpose?: string;
+    place?: string;
+    bike?: string;
+    comment?: string;
+    photo_url?: string;
+    payment_method?: string;
+    payment_source?: string;
+    client_name?: string;
+    liters?: number;
+    odometer?: number;
+  },
+) {
+  return request<MoneyRecord>(`/records/${id}`, {
+    method: "PATCH",
     body: JSON.stringify(body),
   });
 }
@@ -270,6 +301,11 @@ export function decideBatch(ids: number[], approve: boolean, note = "") {
 export function orgReport(days?: number) {
   const suffix = days ? `?days=${days}` : "";
   return request<OrgReport>(`/reports/org${suffix}`);
+}
+
+export function exportReportCsv(days?: number) {
+  const suffix = days ? `?days=${days}` : "";
+  return `${API_URL}/reports/export.csv${suffix}`;
 }
 
 export function commentRecord(id: number, note: string) {

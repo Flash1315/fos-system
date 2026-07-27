@@ -4,21 +4,26 @@ import * as ImagePicker from "expo-image-picker";
 import {
   createRecord,
   getCategories,
+  listMembers,
   uploadPhoto,
+  type User,
 } from "../api";
-import { Btn, Chip, Field, Label, Screen, TopBar } from "../components/ui";
+import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
 export function CreateScreen({
   busy,
   setBusy,
+  user,
   onBack,
   onCreated,
 }: {
   busy: boolean;
   setBusy: (v: boolean) => void;
+  user: User;
   onBack: () => void;
   onCreated: () => void;
 }) {
+  const isManager = user.role === "owner" || user.role === "manager";
   const [kind, setKind] = useState<"expense" | "fuel" | "income">("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
@@ -34,7 +39,8 @@ export function CreateScreen({
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer">("cash");
   const [paymentSource, setPaymentSource] = useState<"my_pocket" | "cash_on_hand">("my_pocket");
   const [photoUrl, setPhotoUrl] = useState("");
-
+  const [members, setMembers] = useState<User[]>([]);
+  const [forUserId, setForUserId] = useState<number | null>(null);
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
@@ -53,6 +59,18 @@ export function CreateScreen({
       }
     })();
   }, [kind]);
+
+  useEffect(() => {
+    if (!isManager) return;
+    (async () => {
+      try {
+        const rows = await listMembers();
+        setMembers(rows.filter((m) => m.is_active !== false));
+      } catch {
+        /* optional */
+      }
+    })();
+  }, [isManager]);
 
   const pickPhoto = async (fromCamera: boolean) => {
     if (fromCamera) {
@@ -113,6 +131,7 @@ export function CreateScreen({
         client_name: kind === "income" ? clientName : "",
         liters: kind === "fuel" && liters ? Number(liters.replace(",", ".")) : undefined,
         odometer: kind === "fuel" && odometer ? Number(odometer.replace(",", ".")) : undefined,
+        created_for_user_id: forUserId ?? undefined,
       });
       onCreated();
     } catch (e) {
@@ -122,12 +141,19 @@ export function CreateScreen({
     }
   };
 
+  const forName =
+    forUserId == null
+      ? "Myself"
+      : members.find((m) => m.id === forUserId)?.full_name || "Teammate";
+
   if (confirming) {
     const value = Number(amount.replace(",", ".") || 0);
     return (
       <Screen scroll>
         <TopBar onBack={() => setConfirming(false)} onCancel={onBack} />
         <Label>Confirm record</Label>
+        <Label>For</Label>
+        <Field editable={false} value={forName} />
         <Label>Kind</Label>
         <Field editable={false} value={kind} />
         <Label>Purpose</Label>
@@ -143,7 +169,10 @@ export function CreateScreen({
         {kind !== "income" && (
           <>
             <Label>Payment source</Label>
-            <Field editable={false} value={paymentSource === "my_pocket" ? "My pocket" : "Cash on hand"} />
+            <Field
+              editable={false}
+              value={paymentSource === "my_pocket" ? "My pocket" : "Cash on hand"}
+            />
           </>
         )}
         {kind === "income" && (
@@ -166,6 +195,25 @@ export function CreateScreen({
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>New record</Label>
+      {isManager && members.length > 0 && (
+        <>
+          <Label>File for</Label>
+          <Sub>Balances attribute to the selected teammate.</Sub>
+          <View style={styles.kinds}>
+            <Chip label="Myself" on={forUserId == null} onPress={() => setForUserId(null)} />
+            {members
+              .filter((m) => m.id !== user.id)
+              .map((m) => (
+                <Chip
+                  key={m.id}
+                  label={m.full_name.split(" ")[0] || m.full_name}
+                  on={forUserId === m.id}
+                  onPress={() => setForUserId(m.id)}
+                />
+              ))}
+          </View>
+        </>
+      )}
       <View style={styles.kinds}>
         {(["expense", "fuel", "income"] as const).map((k) => (
           <Chip key={k} label={k} on={kind === k} onPress={() => setKind(k)} />
@@ -197,8 +245,16 @@ export function CreateScreen({
         <>
           <Label>Payment source</Label>
           <View style={styles.kinds}>
-            <Chip label="My pocket" on={paymentSource === "my_pocket"} onPress={() => setPaymentSource("my_pocket")} />
-            <Chip label="Cash on hand" on={paymentSource === "cash_on_hand"} onPress={() => setPaymentSource("cash_on_hand")} />
+            <Chip
+              label="My pocket"
+              on={paymentSource === "my_pocket"}
+              onPress={() => setPaymentSource("my_pocket")}
+            />
+            <Chip
+              label="Cash on hand"
+              on={paymentSource === "cash_on_hand"}
+              onPress={() => setPaymentSource("cash_on_hand")}
+            />
           </View>
         </>
       )}
@@ -224,7 +280,12 @@ export function CreateScreen({
       )}
       <Label>Comment</Label>
       <Field value={comment} onChangeText={setComment} />
-      <Btn title={photoUrl ? "Photo attached ✓ (library)" : "Photo from library"} onPress={() => pickPhoto(false)} variant="ghost" disabled={busy} />
+      <Btn
+        title={photoUrl ? "Photo attached ✓ (library)" : "Photo from library"}
+        onPress={() => pickPhoto(false)}
+        variant="ghost"
+        disabled={busy}
+      />
       <Btn title="Photo from camera" onPress={() => pickPhoto(true)} variant="ghost" disabled={busy} />
       <Btn title={busy ? "…" : "Review"} onPress={submit} disabled={busy} />
     </Screen>

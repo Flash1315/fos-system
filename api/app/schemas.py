@@ -67,6 +67,23 @@ class RecordCreate(BaseModel):
     client_name: str = ""
     payment_method: str = ""
     payment_source: str = ""
+    # Manager can file on behalf of a teammate (balances attribute to them)
+    created_for_user_id: Optional[int] = None
+
+
+class RecordUpdate(BaseModel):
+    amount: Optional[float] = Field(default=None, gt=0)
+    category: Optional[str] = None
+    purpose: Optional[str] = None
+    place: Optional[str] = None
+    bike: Optional[str] = None
+    comment: Optional[str] = None
+    photo_url: Optional[str] = None
+    liters: Optional[float] = None
+    odometer: Optional[float] = None
+    client_name: Optional[str] = None
+    payment_method: Optional[str] = None
+    payment_source: Optional[str] = None
 
 
 class RecordOut(BaseModel):
@@ -130,6 +147,10 @@ class MemberOut(BaseModel):
 
 class MemberActiveIn(BaseModel):
     is_active: bool
+
+
+class MemberRoleIn(BaseModel):
+    role: UserRole
 
 
 class CategoryTotal(BaseModel):

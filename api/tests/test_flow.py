@@ -301,3 +301,60 @@ def test_overpayment_reduces_next_cycle(client):
     client.post(f"/records/{rid2}/decide", headers=h, json={"approve": True})
     # 5000 spend - 2000 overpay carry = 3000 owed
     assert client.get("/records/balance/me", headers=h).json()["spendings"] == 3000
+
+
+def test_create_on_behalf_edit_export_role(client):
+    owner = _register(client, "flow-behalf", "behalf-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "emp-behalf@example.com",
+            "full_name": "Emp B",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    assert inv.status_code == 200
+    emp_id = inv.json()["id"]
+
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 1500,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "created_for_user_id": emp_id,
+        },
+    )
+    assert rec.status_code == 200, rec.text
+    body = rec.json()
+    assert body["created_by"] == emp_id
+    assert "filed by" in body["comment"]
+    rid = body["id"]
+
+    patched = client.patch(
+        f"/records/{rid}",
+        headers=h,
+        json={"amount": 1600, "place": "Shop"},
+    )
+    assert patched.status_code == 200
+    assert patched.json()["amount"] == 1600
+    assert patched.json()["place"] == "Shop"
+
+    role = client.post(
+        f"/orgs/members/{emp_id}/role",
+        headers=h,
+        json={"role": "manager"},
+    )
+    assert role.status_code == 200
+    assert role.json()["role"] == "manager"
+
+    csv = client.get("/reports/export.csv?days=30", headers=h)
+    assert csv.status_code == 200
+    assert "record," in csv.text
+    assert "type,id,kind" in csv.text

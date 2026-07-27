@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
-import { createPayout, listMembers, teamBalances, type TeamBalance, type User } from "../api";
+import {
+  batchPaySpendings,
+  createPayout,
+  listMembers,
+  teamBalances,
+  type TeamBalance,
+  type User,
+} from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
 export function PayoutScreen({
@@ -22,13 +29,17 @@ export function PayoutScreen({
   const [method, setMethod] = useState<"cash" | "transfer">("cash");
   const [note, setNote] = useState("");
 
+  const reloadBalances = async () => {
+    setBalances(await teamBalances());
+  };
+
   useEffect(() => {
     (async () => {
       try {
-        const [rows, bals] = await Promise.all([listMembers(), teamBalances()]);
+        const rows = await listMembers();
         setMembers(rows.filter((m) => m.is_active !== false));
-        setBalances(bals);
         if (rows[0]) setUserId(rows[0].id);
+        await reloadBalances();
       } catch (e) {
         Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
       }
@@ -37,9 +48,7 @@ export function PayoutScreen({
 
   const selectedBal = balances.find((b) => b.user_id === userId);
   const suggested =
-    kind === "expense_payout"
-      ? selectedBal?.spendings ?? 0
-      : selectedBal?.cash_on_hand ?? 0;
+    kind === "expense_payout" ? selectedBal?.spendings ?? 0 : selectedBal?.cash_on_hand ?? 0;
 
   useEffect(() => {
     if (suggested > 0) setAmount(String(suggested));
@@ -61,7 +70,24 @@ export function PayoutScreen({
         payment_method: method,
         note,
       });
-      Alert.alert("Fos", kind === "expense_payout" ? "Expense payout recorded" : "Income handover recorded");
+      Alert.alert(
+        "Fos",
+        kind === "expense_payout" ? "Expense payout recorded" : "Income handover recorded",
+      );
+      onDone();
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const payAllSpendings = async () => {
+    setBusy(true);
+    try {
+      const rows = (await batchPaySpendings(method)) as unknown[];
+      Alert.alert("Fos", `Paid spendings for ${Array.isArray(rows) ? rows.length : 0} teammate(s)`);
+      await reloadBalances();
       onDone();
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -75,10 +101,20 @@ export function PayoutScreen({
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Settlements</Label>
       <Sub>Expense payout clears my-pocket spendings. Income handover resets cash-on-hand cycle.</Sub>
+      <Btn
+        title={busy ? "…" : "Pay all team spendings"}
+        variant="secondary"
+        onPress={payAllSpendings}
+        disabled={busy}
+      />
       <Label>Type</Label>
       <View style={styles.kinds}>
         <Chip label="Pay expense" on={kind === "expense_payout"} onPress={() => setKind("expense_payout")} />
-        <Chip label="Receive income" on={kind === "income_handover"} onPress={() => setKind("income_handover")} />
+        <Chip
+          label="Receive income"
+          on={kind === "income_handover"}
+          onPress={() => setKind("income_handover")}
+        />
       </View>
       <Label>Teammate</Label>
       <View style={styles.kinds}>

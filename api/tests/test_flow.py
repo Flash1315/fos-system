@@ -534,3 +534,27 @@ def test_my_report(client):
     body = rep.json()
     assert body["approved_expense_total"] == 400
     assert any(p["purpose"] == "Rental" for p in body["by_purpose"])
+
+
+def test_batch_pay_all_spendings(client):
+    owner = _register(client, "flow-batch-pay", "batch-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    rid = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 8000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "purpose": "Office",
+        },
+    ).json()["id"]
+    client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
+    assert client.get("/records/balance/me", headers=h).json()["spendings"] == 8000
+    batch = client.post("/payouts/batch-spendings?payment_method=cash", headers=h)
+    assert batch.status_code == 200, batch.text
+    assert len(batch.json()) >= 1
+    assert any(x["user_id"] == uid and x["amount"] == 8000 for x in batch.json())
+    assert client.get("/records/balance/me", headers=h).json()["spendings"] == 0

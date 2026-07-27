@@ -405,6 +405,12 @@ export function createPayout(body: {
   });
 }
 
+export function batchPaySpendings(payment_method = "cash") {
+  return request(`/payouts/batch-spendings?payment_method=${encodeURIComponent(payment_method)}`, {
+    method: "POST",
+  });
+}
+
 export function requestSettlement(body: {
   kind: "expense_payout" | "income_handover";
   amount: number;

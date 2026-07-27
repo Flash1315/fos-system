@@ -180,6 +180,40 @@ class SettlementRequestOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+@router.post("/batch-spendings", response_model=list[PayoutOut])
+def batch_pay_all_spendings(
+    payment_method: str = "cash",
+    db: Session = Depends(get_db),
+    manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    """Create expense_payout for every teammate with spendings > 0 (pay-all owed)."""
+    members = (
+        db.query(User)
+        .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
+        .all()
+    )
+    out: list[PayoutOut] = []
+    for m in members:
+        bal = user_balance(db, m)
+        owed = float(bal.get("spendings") or 0)
+        if owed <= 0:
+            continue
+        out.append(
+            create_payout(
+                PayoutCreate(
+                    user_id=m.id,
+                    kind=PayoutKind.expense_payout,
+                    amount=owed,
+                    payment_method=payment_method,
+                    note="batch pay all spendings",
+                ),
+                db=db,
+                manager=manager,
+            )
+        )
+    return out
+
+
 @router.post("/requests", response_model=SettlementRequestOut)
 def request_settlement(
     body: SettlementRequestIn,

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Alert, FlatList, Pressable, Text, StyleSheet, View } from "react-native";
+import { Alert, FlatList, Pressable, RefreshControl, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import { orgRecords, type MoneyRecord } from "../api";
 import { Chip, Screen, Sub, TopBar } from "../components/ui";
+import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
 
 export function LedgerScreen({
@@ -15,6 +16,7 @@ export function LedgerScreen({
   const [rows, setRows] = useState<MoneyRecord[]>([]);
   const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected">("");
   const [kind, setKind] = useState<"" | "expense" | "fuel" | "income">("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const reload = async () => {
     try {
@@ -51,14 +53,27 @@ export function LedgerScreen({
       <FlatList
         data={rows}
         keyExtractor={(item) => String(item.id)}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={colors.accent}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await reload();
+              setRefreshing(false);
+            }}
+          />
+        }
         ListEmptyComponent={<Sub>No records</Sub>}
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => onRecord(item.id)}>
             <Text style={styles.rowTitle}>
-              {item.kind} · {item.status} · {item.amount.toLocaleString()} {item.currency}
+              {item.kind} · <Text style={{ color: statusColor(item.status) }}>{item.status}</Text>
+              {" · "}
+              {formatMoney(item.amount, item.currency)}
             </Text>
             <Text style={styles.rowMeta}>
-              {item.created_by_name || "—"} · {item.category || "—"}
+              {item.created_by_name || "—"} · {item.category || "—"} · {formatWhen(item.created_at)}
             </Text>
           </Pressable>
         )}

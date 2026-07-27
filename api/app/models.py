@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     String, Integer, Float, DateTime, ForeignKey, Enum, Text, Boolean, UniqueConstraint,
@@ -7,6 +7,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class UserRole(str, enum.Enum):
@@ -34,7 +38,7 @@ class Organization(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="IDR")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     users: Mapped[list["User"]] = relationship(back_populates="organization")
     records: Mapped[list["MoneyRecord"]] = relationship(back_populates="organization")
@@ -51,7 +55,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.employee)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     organization: Mapped[Organization] = relationship(back_populates="users")
     records: Mapped[list["MoneyRecord"]] = relationship(
@@ -80,7 +84,7 @@ class MoneyRecord(Base):
     # income extras
     client_name: Mapped[str] = mapped_column(String(200), default="")
     payment_method: Mapped[str] = mapped_column(String(40), default="")  # cash / transfer
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 

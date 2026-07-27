@@ -9,6 +9,7 @@ from app.routers import media as media_router
 from app.routers import records as records_router
 from app.routers import reports as reports_router
 from app.routers import team as team_router
+from app.routers import transfers as transfers_router
 
 Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
@@ -29,6 +30,7 @@ app.include_router(records_router.router)
 app.include_router(team_router.router)
 app.include_router(reports_router.router)
 app.include_router(media_router.router)
+app.include_router(transfers_router.router)
 
 
 @app.get("/health")

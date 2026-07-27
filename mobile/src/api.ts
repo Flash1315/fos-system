@@ -239,6 +239,13 @@ export function orgReport() {
   return request<OrgReport>("/reports/org");
 }
 
+export function transferCash(body: { to_email: string; amount: number; comment?: string }) {
+  return request<{ sender_record: MoneyRecord; recipient_record: MoneyRecord }>("/transfers", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export async function uploadPhoto(uri: string, name = "receipt.jpg") {
   const form = new FormData();
   form.append("file", {

@@ -70,6 +70,8 @@ export function ApproveScreen({
             </Text>
             <Text style={styles.rowMeta}>
               {item.created_by_name || "—"} · {item.category || item.comment || "—"}
+              {item.purpose ? ` · ${item.purpose}` : ""}
+              {item.payment_source === "my_pocket" ? " · my pocket" : item.payment_source === "cash_on_hand" ? " · cash" : ""}
             </Text>
             <Text style={styles.rowMeta}>{formatWhen(item.created_at)}</Text>
             <Row>

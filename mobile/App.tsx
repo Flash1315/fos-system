@@ -16,6 +16,7 @@ import { TeamScreen } from "./src/screens/TeamScreen";
 import { ReportsScreen } from "./src/screens/ReportsScreen";
 import { RecordDetailScreen } from "./src/screens/RecordDetailScreen";
 import { LedgerScreen } from "./src/screens/LedgerScreen";
+import { TransferScreen } from "./src/screens/TransferScreen";
 
 type Screen =
   | "boot"
@@ -27,6 +28,7 @@ type Screen =
   | "team"
   | "reports"
   | "ledger"
+  | "transfer"
   | "record";
 
 export default function App() {
@@ -133,6 +135,17 @@ export default function App() {
     );
   }
 
+  if (screen === "transfer" && user) {
+    return (
+      <TransferScreen
+        busy={busy}
+        setBusy={setBusy}
+        onBack={() => setScreen("home")}
+        onDone={() => setScreen("home")}
+      />
+    );
+  }
+
   if (screen === "record" && user && recordId != null) {
     return (
       <RecordDetailScreen
@@ -154,6 +167,7 @@ export default function App() {
       onTeam={() => setScreen("team")}
       onReports={() => setScreen("reports")}
       onLedger={() => setScreen("ledger")}
+      onTransfer={() => setScreen("transfer")}
       onRecord={(id) => {
         setRecordId(id);
         setScreen("record");

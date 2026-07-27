@@ -146,3 +146,36 @@ def test_tenant_isolation(client):
 
     other = client.get(f"/records/{rid}", headers=bh)
     assert other.status_code == 404
+
+
+def test_transfer_creates_two_pending(client):
+    owner = _register(client, "flow-xfer", "xfer-owner@example.com")
+    oh = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=oh,
+        json={"email": "xfer-emp@example.com", "full_name": "Emp", "role": "employee", "password": "secret12"},
+    )
+    assert inv.status_code == 200
+    login = client.post(
+        "/auth/login",
+        json={"email": "xfer-emp@example.com", "password": "secret12", "organization_slug": "flow-xfer"},
+    )
+    eh = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    # invite a second employee as recipient via owner
+    inv2 = client.post(
+        "/orgs/invite",
+        headers=oh,
+        json={"email": "xfer-recv@example.com", "full_name": "Recv", "role": "employee", "password": "secret12"},
+    )
+    assert inv2.status_code == 200
+    xfer = client.post(
+        "/transfers",
+        headers=eh,
+        json={"to_email": "xfer-recv@example.com", "amount": 25000, "comment": "change"},
+    )
+    assert xfer.status_code == 200, xfer.text
+    body = xfer.json()
+    assert body["sender_record"]["kind"] == "expense"
+    assert body["recipient_record"]["kind"] == "income"
+    assert body["sender_record"]["status"] == "pending"

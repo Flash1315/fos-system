@@ -16,6 +16,7 @@ PRESETS: dict[RecordKind, list[str]] = {
         "Tires pressure / Wheel repair",
         "Supplies",
         "Food",
+        "Transfer",
         "Other",
     ],
     RecordKind.fuel: [

@@ -14,6 +14,7 @@ export function HomeScreen({
   onTeam,
   onReports,
   onLedger,
+  onTransfer,
   onRecord,
   onLogout,
 }: {
@@ -24,6 +25,7 @@ export function HomeScreen({
   onTeam: () => void;
   onReports: () => void;
   onLedger: () => void;
+  onTransfer: () => void;
   onRecord: (id: number) => void;
   onLogout: () => void;
 }) {
@@ -104,6 +106,7 @@ export function HomeScreen({
         </Row>
       )}
       {isManager && <Btn title="Org ledger" onPress={onLedger} variant="ghost" />}
+      <Btn title="Transfer cash" onPress={onTransfer} variant="ghost" />
       <View style={styles.filters}>
         {(["", "pending", "approved", "rejected"] as const).map((s) => (
           <Chip key={s || "all"} label={s || "all"} on={status === s} onPress={() => setStatus(s)} />
@@ -133,6 +136,8 @@ export function HomeScreen({
             </Text>
             <Text style={styles.rowMeta}>
               {formatMoney(item.amount, item.currency)} · {item.category || "—"}
+              {item.purpose ? ` · ${item.purpose}` : ""}
+              {item.payment_source === "my_pocket" ? " · my pocket" : ""}
             </Text>
             <Text style={styles.rowMeta}>{formatWhen(item.created_at)}</Text>
           </Pressable>

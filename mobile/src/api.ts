@@ -142,6 +142,13 @@ export function me() {
   return request<User>("/auth/me");
 }
 
+export function changePassword(current_password: string, new_password: string) {
+  return request<{ ok: boolean }>("/auth/password", {
+    method: "POST",
+    body: JSON.stringify({ current_password, new_password }),
+  });
+}
+
 export function myOrg() {
   return request<{ id: number; name: string; slug: string; currency: string }>("/orgs/me");
 }
@@ -376,6 +383,40 @@ export function createPayout(body: {
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+export function requestSettlement(body: {
+  kind: "expense_payout" | "income_handover";
+  amount: number;
+  note?: string;
+}) {
+  return request("/payouts/requests", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listSettlementRequests() {
+  return request<
+    {
+      id: number;
+      user_id: number;
+      user_name: string;
+      kind: string;
+      amount: number;
+      note: string;
+      status: string;
+      created_at: string;
+    }[]
+  >("/payouts/requests");
+}
+
+export function approveSettlementRequest(id: number) {
+  return request(`/payouts/requests/${id}/approve`, { method: "POST" });
+}
+
+export function cancelSettlementRequest(id: number) {
+  return request(`/payouts/requests/${id}/cancel`, { method: "POST" });
 }
 
 export async function uploadPhoto(uri: string, name = "receipt.jpg") {

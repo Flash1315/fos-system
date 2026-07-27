@@ -418,3 +418,54 @@ def test_occurred_at_affects_spendings_cutoff(client):
     ).json()["id"]
     client.post(f"/records/{fresh}/decide", headers=h, json={"approve": True})
     assert client.get("/records/balance/me", headers=h).json()["spendings"] == 3000
+
+
+def test_password_and_settlement_request(client):
+    owner = _register(client, "flow-acct", "acct-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    bad = client.post(
+        "/auth/password",
+        headers=h,
+        json={"current_password": "wrong", "new_password": "newsecret"},
+    )
+    assert bad.status_code == 400
+    ok = client.post(
+        "/auth/password",
+        headers=h,
+        json={"current_password": "secret12", "new_password": "newsecret"},
+    )
+    assert ok.status_code == 200
+
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "acct-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    assert inv.status_code == 200
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "acct-emp@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-acct",
+        },
+    )
+    eh = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    req = client.post(
+        "/payouts/requests",
+        headers=eh,
+        json={"kind": "income_handover", "amount": 5000, "note": "end of day"},
+    )
+    assert req.status_code == 200, req.text
+    rid = req.json()["id"]
+    pending = client.get("/payouts/requests", headers=h)
+    assert pending.status_code == 200
+    assert any(x["id"] == rid for x in pending.json())
+    approved = client.post(f"/payouts/requests/{rid}/approve", headers=h)
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["kind"] == "income_handover"

@@ -122,3 +122,27 @@ class Payout(Base):
     overpayment: Mapped[float] = mapped_column(Float, default=0.0)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class SettlementRequestStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    cancelled = "cancelled"
+
+
+class SettlementRequest(Base):
+    """Employee asks manager to settle (expense payout or income handover)."""
+    __tablename__ = "settlement_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    kind: Mapped[PayoutKind] = mapped_column(Enum(PayoutKind), nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    note: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[SettlementRequestStatus] = mapped_column(
+        Enum(SettlementRequestStatus), default=SettlementRequestStatus.pending
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)

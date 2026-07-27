@@ -18,6 +18,7 @@ export function HomeScreen({
   onPayout,
   onPayoutHistory,
   onBalances,
+  onAccount,
   onRecord,
   onLogout,
 }: {
@@ -32,6 +33,7 @@ export function HomeScreen({
   onPayout: () => void;
   onPayoutHistory: () => void;
   onBalances: () => void;
+  onAccount: () => void;
   onRecord: (id: number) => void;
   onLogout: () => void;
 }) {
@@ -117,6 +119,7 @@ export function HomeScreen({
       <Btn title="Payout history" onPress={onPayoutHistory} variant="ghost" />
       {isManager && <Btn title="Team balances" onPress={onBalances} variant="ghost" />}
       <Btn title="Transfer cash" onPress={onTransfer} variant="ghost" />
+      <Btn title="Account" onPress={onAccount} variant="ghost" />
       <View style={styles.filters}>
         {(["", "pending", "approved", "rejected"] as const).map((s) => (
           <Chip key={s || "all"} label={s || "all"} on={status === s} onPress={() => setStatus(s)} />

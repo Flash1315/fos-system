@@ -7,7 +7,7 @@ from app.auth import (
 )
 from app.db import get_db
 from app.models import Organization, User, UserRole
-from app.schemas import InviteIn, LoginIn, OrgCreate, OrgOut, TokenOut, UserOut
+from app.schemas import InviteIn, LoginIn, OrgCreate, OrgOut, PasswordChangeIn, TokenOut, UserOut
 
 router = APIRouter(tags=["auth"])
 
@@ -65,6 +65,19 @@ def login_form(
 @router.get("/auth/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
     return UserOut.model_validate(user)
+
+
+@router.post("/auth/password")
+def change_password(
+    body: PasswordChangeIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not verify_password(body.current_password, user.hashed_password):
+        raise HTTPException(400, "Current password is wrong")
+    user.hashed_password = hash_password(body.new_password)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/orgs/me", response_model=OrgOut)

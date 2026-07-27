@@ -53,6 +53,11 @@ class InviteIn(BaseModel):
     password: str = Field(min_length=6, max_length=128)
 
 
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 class RecordCreate(BaseModel):
     kind: RecordKind
     amount: float = Field(gt=0)

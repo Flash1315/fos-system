@@ -208,3 +208,52 @@ def test_expense_payout_resets_spendings(client):
     assert pay.status_code == 200, pay.text
     bal2 = client.get("/records/balance/me", headers=h).json()
     assert bal2["spendings"] == 0
+
+
+def test_cancel_pending_and_comment(client):
+    owner = _register(client, "flow-cancel", "cancel-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 777, "category": "Supplies", "purpose": "Office"},
+    )
+    rid = rec.json()["id"]
+
+    note = client.post(f"/records/{rid}/comment", headers=h, json={"note": "check receipt"})
+    assert note.status_code == 200, note.text
+    assert "check receipt" in note.json()["comment"]
+
+    cancelled = client.delete(f"/records/{rid}", headers=h)
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "rejected"
+    assert "[cancelled]" in cancelled.json()["comment"]
+
+    again = client.delete(f"/records/{rid}", headers=h)
+    assert again.status_code == 400
+
+
+def test_purpose_filter_and_period_report(client):
+    owner = _register(client, "flow-filter", "filter-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    a = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 100, "category": "Taxi", "purpose": "Rental"},
+    ).json()["id"]
+    b = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 200, "category": "Food", "purpose": "Office"},
+    ).json()["id"]
+    client.post(f"/records/{a}/decide", headers=h, json={"approve": True})
+    client.post(f"/records/{b}/decide", headers=h, json={"approve": True})
+
+    rental = client.get("/records/mine?purpose=Rental", headers=h)
+    assert rental.status_code == 200
+    assert all(x["purpose"] == "Rental" for x in rental.json())
+    assert any(x["id"] == a for x in rental.json())
+
+    report = client.get("/reports/org?days=30", headers=h)
+    assert report.status_code == 200
+    assert report.json()["approved_expense_total"] == 300

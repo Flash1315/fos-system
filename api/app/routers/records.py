@@ -8,7 +8,7 @@ from app.auth import get_current_user, require_roles
 from app.categories import PAYMENT_SOURCES, PURPOSES, categories_for
 from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
-from app.schemas import BalanceOut, CategoriesOut, DecideBatchIn, DecideIn, RecordCreate, RecordOut
+from app.schemas import BalanceOut, CategoriesOut, CommentIn, DecideBatchIn, DecideIn, RecordCreate, RecordOut
 from app.services.balances import user_balance
 
 router = APIRouter(prefix="/records", tags=["records"])
@@ -76,6 +76,7 @@ def create_record(
 def my_records(
     kind: RecordKind | None = None,
     status: RecordStatus | None = None,
+    purpose: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -87,6 +88,8 @@ def my_records(
         q = q.filter(MoneyRecord.kind == kind)
     if status:
         q = q.filter(MoneyRecord.status == status)
+    if purpose:
+        q = q.filter(MoneyRecord.purpose == purpose)
     rows = q.order_by(MoneyRecord.created_at.desc()).limit(100).all()
     return [_record_out(db, r) for r in rows]
 
@@ -95,6 +98,7 @@ def my_records(
 def org_records(
     kind: RecordKind | None = None,
     status: RecordStatus | None = None,
+    purpose: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -103,6 +107,8 @@ def org_records(
         q = q.filter(MoneyRecord.kind == kind)
     if status:
         q = q.filter(MoneyRecord.status == status)
+    if purpose:
+        q = q.filter(MoneyRecord.purpose == purpose)
     rows = q.order_by(MoneyRecord.created_at.desc()).limit(200).all()
     return [_record_out(db, r) for r in rows]
 
@@ -216,6 +222,47 @@ def decide_record(
     rec.decided_by = user.id
     if body.note:
         rec.comment = (rec.comment + f"\n[review] {body.note}").strip()
+    db.commit()
+    db.refresh(rec)
+    return _record_out(db, rec)
+
+
+@router.post("/{record_id}/comment", response_model=RecordOut)
+def comment_record(
+    record_id: int,
+    body: CommentIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    rec = db.get(MoneyRecord, record_id)
+    if not rec or rec.organization_id != user.organization_id:
+        raise HTTPException(404, "Record not found")
+    stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
+    rec.comment = (rec.comment + f"\n[mgr {user.full_name} {stamp}] {body.note}").strip()
+    db.commit()
+    db.refresh(rec)
+    return _record_out(db, rec)
+
+
+@router.delete("/{record_id}", response_model=RecordOut)
+def cancel_pending_record(
+    record_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Creator (or manager) can cancel a still-pending record by rejecting it."""
+    rec = db.get(MoneyRecord, record_id)
+    if not rec or rec.organization_id != user.organization_id:
+        raise HTTPException(404, "Record not found")
+    is_manager = user.role in (UserRole.owner, UserRole.manager)
+    if rec.created_by != user.id and not is_manager:
+        raise HTTPException(403, "Insufficient role")
+    if rec.status != RecordStatus.pending:
+        raise HTTPException(400, "Only pending records can be cancelled")
+    rec.status = RecordStatus.rejected
+    rec.decided_at = _utcnow()
+    rec.decided_by = user.id
+    rec.comment = (rec.comment + "\n[cancelled]").strip()
     db.commit()
     db.refresh(rec)
     return _record_out(db, rec)

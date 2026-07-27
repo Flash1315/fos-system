@@ -18,6 +18,7 @@ import { RecordDetailScreen } from "./src/screens/RecordDetailScreen";
 import { LedgerScreen } from "./src/screens/LedgerScreen";
 import { TransferScreen } from "./src/screens/TransferScreen";
 import { PayoutScreen } from "./src/screens/PayoutScreen";
+import { PayoutHistoryScreen } from "./src/screens/PayoutHistoryScreen";
 import { BalancesScreen } from "./src/screens/BalancesScreen";
 
 type Screen =
@@ -32,6 +33,7 @@ type Screen =
   | "ledger"
   | "transfer"
   | "payout"
+  | "payoutHistory"
   | "balances"
   | "record";
 
@@ -161,6 +163,10 @@ export default function App() {
     );
   }
 
+  if (screen === "payoutHistory" && user) {
+    return <PayoutHistoryScreen user={user} onBack={() => setScreen("home")} />;
+  }
+
   if (screen === "balances" && user) {
     return <BalancesScreen onBack={() => setScreen("home")} />;
   }
@@ -188,6 +194,7 @@ export default function App() {
       onLedger={() => setScreen("ledger")}
       onTransfer={() => setScreen("transfer")}
       onPayout={() => setScreen("payout")}
+      onPayoutHistory={() => setScreen("payoutHistory")}
       onBalances={() => setScreen("balances")}
       onRecord={(id) => {
         setRecordId(id);

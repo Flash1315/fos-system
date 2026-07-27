@@ -190,18 +190,20 @@ export function teamBalances() {
   return request<TeamBalance[]>("/records/balance/team");
 }
 
-export function myRecords(params?: { kind?: string; status?: string }) {
+export function myRecords(params?: { kind?: string; status?: string; purpose?: string }) {
   const q = new URLSearchParams();
   if (params?.kind) q.set("kind", params.kind);
   if (params?.status) q.set("status", params.status);
+  if (params?.purpose) q.set("purpose", params.purpose);
   const suffix = q.toString() ? `?${q}` : "";
   return request<MoneyRecord[]>(`/records/mine${suffix}`);
 }
 
-export function orgRecords(params?: { kind?: string; status?: string }) {
+export function orgRecords(params?: { kind?: string; status?: string; purpose?: string }) {
   const q = new URLSearchParams();
   if (params?.kind) q.set("kind", params.kind);
   if (params?.status) q.set("status", params.status);
+  if (params?.purpose) q.set("purpose", params.purpose);
   const suffix = q.toString() ? `?${q}` : "";
   return request<MoneyRecord[]>(`/records/org${suffix}`);
 }
@@ -258,8 +260,52 @@ export function decideBatch(ids: number[], approve: boolean, note = "") {
   });
 }
 
-export function orgReport() {
-  return request<OrgReport>("/reports/org");
+export function orgReport(days?: number) {
+  const suffix = days ? `?days=${days}` : "";
+  return request<OrgReport>(`/reports/org${suffix}`);
+}
+
+export function commentRecord(id: number, note: string) {
+  return request<MoneyRecord>(`/records/${id}/comment`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+}
+
+export function cancelRecord(id: number) {
+  return request<MoneyRecord>(`/records/${id}`, { method: "DELETE" });
+}
+
+export function listMyPayouts() {
+  return request<
+    {
+      id: number;
+      user_id: number;
+      user_name: string;
+      kind: string;
+      amount: number;
+      currency: string;
+      payment_method: string;
+      note: string;
+      created_at: string;
+    }[]
+  >("/payouts/mine");
+}
+
+export function listOrgPayouts() {
+  return request<
+    {
+      id: number;
+      user_id: number;
+      user_name: string;
+      kind: string;
+      amount: number;
+      currency: string;
+      payment_method: string;
+      note: string;
+      created_at: string;
+    }[]
+  >("/payouts/org");
 }
 
 export function transferCash(body: { to_email: string; amount: number; comment?: string }) {

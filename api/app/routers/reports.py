@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -13,12 +15,16 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 @router.get("/org", response_model=OrgReportOut)
 def org_report(
+    days: int | None = Query(default=None, ge=1, le=3650),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
     oid = user.organization_id
+    since = None
+    if days:
+        since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
     def sum_approved(kind: RecordKind, payment: str | None = None) -> float:
         q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
@@ -28,18 +34,21 @@ def org_report(
         )
         if payment is not None:
             q = q.filter(MoneyRecord.payment_method == payment)
+        if since is not None:
+            q = q.filter(MoneyRecord.created_at >= since)
         return float(q.scalar() or 0)
 
     expense = sum_approved(RecordKind.expense)
     fuel = sum_approved(RecordKind.fuel)
     income_cash = sum_approved(RecordKind.income, "cash")
     income_transfer = sum_approved(RecordKind.income, "transfer")
-    pending = (
-        db.query(func.count(MoneyRecord.id))
-        .filter(MoneyRecord.organization_id == oid, MoneyRecord.status == RecordStatus.pending)
-        .scalar()
-        or 0
+    pending_q = db.query(func.count(MoneyRecord.id)).filter(
+        MoneyRecord.organization_id == oid,
+        MoneyRecord.status == RecordStatus.pending,
     )
+    if since is not None:
+        pending_q = pending_q.filter(MoneyRecord.created_at >= since)
+    pending = pending_q.scalar() or 0
     members = (
         db.query(User)
         .filter(User.organization_id == oid, User.is_active.is_(True))
@@ -49,19 +58,17 @@ def org_report(
     total_spendings = sum(b["spendings"] for b in team_bals)
     total_cash_held = sum(b["cash_on_hand"] for b in team_bals)
 
-    cat_rows = (
-        db.query(
-            MoneyRecord.kind,
-            MoneyRecord.category,
-            func.coalesce(func.sum(MoneyRecord.amount), 0.0),
-        )
-        .filter(
-            MoneyRecord.organization_id == oid,
-            MoneyRecord.status == RecordStatus.approved,
-        )
-        .group_by(MoneyRecord.kind, MoneyRecord.category)
-        .all()
+    cat_q = db.query(
+        MoneyRecord.kind,
+        MoneyRecord.category,
+        func.coalesce(func.sum(MoneyRecord.amount), 0.0),
+    ).filter(
+        MoneyRecord.organization_id == oid,
+        MoneyRecord.status == RecordStatus.approved,
     )
+    if since is not None:
+        cat_q = cat_q.filter(MoneyRecord.created_at >= since)
+    cat_rows = cat_q.group_by(MoneyRecord.kind, MoneyRecord.category).all()
     by_category = [
         CategoryTotal(kind=k.value if hasattr(k, "value") else str(k), category=c or "—", total=float(t))
         for k, c, t in cat_rows

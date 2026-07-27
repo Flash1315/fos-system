@@ -16,6 +16,7 @@ export function LedgerScreen({
   const [rows, setRows] = useState<MoneyRecord[]>([]);
   const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected">("");
   const [kind, setKind] = useState<"" | "expense" | "fuel" | "income">("");
+  const [purpose, setPurpose] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
   const reload = async () => {
@@ -24,6 +25,7 @@ export function LedgerScreen({
         await orgRecords({
           status: status || undefined,
           kind: kind || undefined,
+          purpose: purpose || undefined,
         }),
       );
     } catch (e) {
@@ -34,7 +36,7 @@ export function LedgerScreen({
   useFocusEffect(reload);
   useEffect(() => {
     void reload();
-  }, [status, kind]);
+  }, [status, kind, purpose]);
 
   return (
     <Screen>
@@ -48,6 +50,11 @@ export function LedgerScreen({
       <View style={styles.kinds}>
         {(["", "expense", "fuel", "income"] as const).map((k) => (
           <Chip key={k || "any"} label={k || "any"} on={kind === k} onPress={() => setKind(k)} />
+        ))}
+      </View>
+      <View style={styles.kinds}>
+        {(["", "Rental", "Lesson", "Office", "Other"] as const).map((p) => (
+          <Chip key={p || "any-purpose"} label={p || "any purpose"} on={purpose === p} onPress={() => setPurpose(p)} />
         ))}
       </View>
       <FlatList
@@ -73,7 +80,8 @@ export function LedgerScreen({
               {formatMoney(item.amount, item.currency)}
             </Text>
             <Text style={styles.rowMeta}>
-              {item.created_by_name || "—"} · {item.category || "—"} · {formatWhen(item.created_at)}
+              {item.created_by_name || "—"} · {item.purpose || "—"} · {item.category || "—"} ·{" "}
+              {formatWhen(item.created_at)}
             </Text>
           </Pressable>
         )}

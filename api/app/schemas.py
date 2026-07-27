@@ -113,6 +113,10 @@ class DecideBatchIn(BaseModel):
     note: str = ""
 
 
+class CommentIn(BaseModel):
+    note: str = Field(min_length=1, max_length=2000)
+
+
 class MemberOut(BaseModel):
     id: int
     email: EmailStr

@@ -1,7 +1,15 @@
 import React, { useState } from "react";
 import { Alert, Image, Text, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { decideRecord, getRecord, mediaUrl, type MoneyRecord, type User } from "../api";
+import {
+  cancelRecord,
+  commentRecord,
+  decideRecord,
+  getRecord,
+  mediaUrl,
+  type MoneyRecord,
+  type User,
+} from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Card, Label, Row, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
@@ -22,6 +30,7 @@ export function RecordDetailScreen({
 }) {
   const [rec, setRec] = useState<MoneyRecord | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [commentOpen, setCommentOpen] = useState(false);
   const isManager = user.role === "owner" || user.role === "manager";
 
   const reload = async () => {
@@ -44,6 +53,34 @@ export function RecordDetailScreen({
       setBusy(false);
     }
   };
+
+  const onCancel = async () => {
+    setBusy(true);
+    try {
+      setRec(await cancelRecord(id));
+      Alert.alert("Fos", "Record cancelled");
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onComment = async (note: string) => {
+    setBusy(true);
+    try {
+      setRec(await commentRecord(id, note));
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const canCancel =
+    !!rec &&
+    rec.status === "pending" &&
+    (rec.created_by === user.id || isManager);
 
   return (
     <Screen scroll>
@@ -75,15 +112,21 @@ export function RecordDetailScreen({
             {!!rec.payment_source && (
               <>
                 <Label>Payment source</Label>
-                <Text style={styles.line}>{rec.payment_source === "my_pocket" ? "My pocket" : "Cash on hand"}</Text>
+                <Text style={styles.line}>
+                  {rec.payment_source === "my_pocket" ? "My pocket" : "Cash on hand"}
+                </Text>
               </>
             )}
             <Label>By</Label>
-            <Text style={styles.line}>{rec.created_by_name || rec.created_by} · {formatWhen(rec.created_at)}</Text>
+            <Text style={styles.line}>
+              {rec.created_by_name || rec.created_by} · {formatWhen(rec.created_at)}
+            </Text>
             {!!rec.client_name && (
               <>
                 <Label>Client</Label>
-                <Text style={styles.line}>{rec.client_name} · {rec.payment_method || "—"}</Text>
+                <Text style={styles.line}>
+                  {rec.client_name} · {rec.payment_method || "—"}
+                </Text>
               </>
             )}
             {(rec.liters != null || rec.odometer != null) && (
@@ -115,6 +158,17 @@ export function RecordDetailScreen({
               <Btn title="Reject" variant="danger" disabled={busy} onPress={() => setRejectOpen(true)} />
             </Row>
           )}
+          {canCancel && (
+            <Btn title="Cancel record" variant="ghost" disabled={busy} onPress={onCancel} />
+          )}
+          {isManager && (
+            <Btn
+              title="Add manager note"
+              variant="ghost"
+              disabled={busy}
+              onPress={() => setCommentOpen(true)}
+            />
+          )}
         </>
       )}
       <NoteModal
@@ -124,6 +178,15 @@ export function RecordDetailScreen({
         onSubmit={async (note) => {
           setRejectOpen(false);
           await decide(false, note);
+        }}
+      />
+      <NoteModal
+        visible={commentOpen}
+        title="Manager note"
+        onCancel={() => setCommentOpen(false)}
+        onSubmit={async (note) => {
+          setCommentOpen(false);
+          await onComment(note);
         }}
       />
     </Screen>

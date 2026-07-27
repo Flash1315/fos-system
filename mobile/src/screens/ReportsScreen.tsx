@@ -1,25 +1,48 @@
 import React, { useState } from "react";
-import { Alert, Text, StyleSheet } from "react-native";
+import { Alert, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import { orgReport, type OrgReport } from "../api";
-import { Card, Label, Screen, Sub, TopBar } from "../components/ui";
+import { Card, Chip, Label, Screen, Sub, TopBar } from "../components/ui";
 import { colors } from "../theme";
+
+const PERIODS: { label: string; days?: number }[] = [
+  { label: "all" },
+  { label: "7d", days: 7 },
+  { label: "30d", days: 30 },
+  { label: "90d", days: 90 },
+];
 
 export function ReportsScreen({ onBack }: { onBack: () => void }) {
   const [report, setReport] = useState<OrgReport | null>(null);
+  const [days, setDays] = useState<number | undefined>(undefined);
 
-  useFocusEffect(async () => {
+  const reload = async () => {
     try {
-      setReport(await orgReport());
+      setReport(await orgReport(days));
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     }
-  });
+  };
+
+  useFocusEffect(reload);
+  React.useEffect(() => {
+    void reload();
+  }, [days]);
 
   return (
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Text style={styles.title}>Org report</Text>
+      <View style={styles.kinds}>
+        {PERIODS.map((p) => (
+          <Chip
+            key={p.label}
+            label={p.label}
+            on={days === p.days}
+            onPress={() => setDays(p.days)}
+          />
+        ))}
+      </View>
       {!report ? (
         <Sub>Loading…</Sub>
       ) : (
@@ -64,4 +87,5 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 26, fontWeight: "700", marginVertical: 8 },
   big: { color: colors.text, fontSize: 24, fontWeight: "700" },
   line: { color: colors.text, marginTop: 6 },
+  kinds: { flexDirection: "row", gap: 8, marginBottom: 8, flexWrap: "wrap" },
 });

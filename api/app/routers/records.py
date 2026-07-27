@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
@@ -11,6 +11,10 @@ from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User
 from app.schemas import BalanceOut, CategoriesOut, DecideIn, RecordCreate, RecordOut
 
 router = APIRouter(prefix="/records", tags=["records"])
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { myBalance, myOrg, myRecords, pendingRecords, type MoneyRecord, type User } from "../api";
+import { listSettlementRequests, myBalance, myOrg, myRecords, pendingRecords, type MoneyRecord, type User } from "../api";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
@@ -43,6 +43,7 @@ export function HomeScreen({
   const [spendings, setSpendings] = useState("—");
   const [orgName, setOrgName] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
+  const [settlementCount, setSettlementCount] = useState(0);
   const [rows, setRows] = useState<MoneyRecord[]>([]);
   const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected">("");
   const [purpose, setPurpose] = useState("");
@@ -70,8 +71,15 @@ export function HomeScreen({
         } catch {
           setPendingCount(b.pending_count);
         }
+        try {
+          const reqs = await listSettlementRequests();
+          setSettlementCount(reqs.length);
+        } catch {
+          setSettlementCount(0);
+        }
       } else {
         setPendingCount(b.pending_count);
+        setSettlementCount(0);
       }
       setRows(list);
     } catch (e) {
@@ -127,7 +135,7 @@ export function HomeScreen({
       {isManager && <Btn title="Team balances" onPress={onBalances} variant="ghost" />}
       <Btn title="Transfer cash" onPress={onTransfer} variant="ghost" />
       <Btn title="My stats" onPress={onMyReport} variant="ghost" />
-      <Btn title="Account" onPress={onAccount} variant="ghost" />
+      <Btn title={settlementCount > 0 ? `Account (${settlementCount} requests)` : "Account"} onPress={onAccount} variant="ghost" />
       <Field
         value={search}
         onChangeText={setSearch}

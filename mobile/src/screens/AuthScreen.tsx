@@ -21,21 +21,47 @@ export function AuthScreen({
   const [password, setPassword] = useState("");
 
   const submit = async () => {
+    if (!orgSlug.trim()) {
+      Alert.alert("Fos", "Organization slug is required");
+      return;
+    }
+    if (!email.trim() || !password) {
+      Alert.alert("Fos", "Email and password are required");
+      return;
+    }
+    if (password.length < 6) {
+      Alert.alert("Fos", "Password must be at least 6 characters");
+      return;
+    }
+    if (mode === "register") {
+      if (!orgName.trim() || orgName.trim().length < 2) {
+        Alert.alert("Fos", "Company name must be at least 2 characters");
+        return;
+      }
+      if (!name.trim() || name.trim().length < 2) {
+        Alert.alert("Fos", "Your name must be at least 2 characters");
+        return;
+      }
+      if (!/^[a-z0-9-]+$/.test(orgSlug.toLowerCase().trim())) {
+        Alert.alert("Fos", "Slug: lowercase letters, numbers, hyphens only");
+        return;
+      }
+    }
     setBusy(true);
     try {
       if (mode === "register") {
         const res = await registerOrg({
-          name: orgName,
+          name: orgName.trim(),
           slug: orgSlug.toLowerCase().trim(),
           currency: currency.trim().toUpperCase() || "IDR",
-          owner_email: email,
-          owner_name: name,
+          owner_email: email.trim(),
+          owner_name: name.trim(),
           owner_password: password,
         });
         onDone(res.access_token, res.user);
       } else {
         const res = await login({
-          email,
+          email: email.trim(),
           password,
           organization_slug: orgSlug.toLowerCase().trim(),
         });

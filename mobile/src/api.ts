@@ -21,7 +21,15 @@ export type MoneyRecord = {
   currency: string;
   category: string;
   comment: string;
+  photo_url?: string;
+  liters?: number | null;
+  odometer?: number | null;
+  client_name?: string;
+  payment_method?: string;
+  created_by?: number;
   created_at: string;
+  decided_at?: string | null;
+  decided_by?: number | null;
 };
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -94,6 +102,18 @@ export function me() {
   return request<User>("/auth/me");
 }
 
+export function inviteUser(body: {
+  email: string;
+  full_name: string;
+  role: "owner" | "manager" | "employee";
+  password: string;
+}) {
+  return request<User>("/orgs/invite", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function myBalance() {
   return request<{ cash_on_hand: number; currency: string; pending_count: number }>(
     "/records/balance/me",
@@ -124,9 +144,9 @@ export function pendingRecords() {
   return request<MoneyRecord[]>("/records/pending");
 }
 
-export function decideRecord(id: number, approve: boolean) {
+export function decideRecord(id: number, approve: boolean, note = "") {
   return request<MoneyRecord>(`/records/${id}/decide`, {
     method: "POST",
-    body: JSON.stringify({ approve }),
+    body: JSON.stringify({ approve, note }),
   });
 }

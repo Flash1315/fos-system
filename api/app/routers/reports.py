@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -15,18 +15,48 @@ from app.services.balances import user_balance
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
+def _parse_day(value: str | None, *, end: bool = False) -> datetime | None:
+    if not value:
+        return None
+    try:
+        day = datetime.strptime(value.strip()[:10], "%Y-%m-%d")
+    except ValueError as exc:
+        raise HTTPException(400, "date_from/date_to must be YYYY-MM-DD") from exc
+    if end:
+        return day.replace(hour=23, minute=59, second=59)
+    return day
+
+
+def _window(
+    days: int | None,
+    date_from: str | None,
+    date_to: str | None,
+) -> tuple[datetime | None, datetime | None]:
+    if date_from or date_to:
+        return _parse_day(date_from), _parse_day(date_to, end=True)
+    if days:
+        since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+        return since, None
+    return None, None
+
+
+def _effective_at():
+    return func.coalesce(MoneyRecord.occurred_at, MoneyRecord.created_at)
+
+
 @router.get("/me", response_model=MyReportOut)
 def my_report(
     days: int | None = Query(default=None, ge=1, le=3650),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
     bal = user_balance(db, user)
-    since = None
-    if days:
-        since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    since, until = _window(days, date_from, date_to)
+    eff = _effective_at()
 
     def sum_kind(kind: RecordKind, payment: str | None = None) -> float:
         q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
@@ -38,7 +68,9 @@ def my_report(
         if payment is not None:
             q = q.filter(MoneyRecord.payment_method == payment)
         if since is not None:
-            q = q.filter(MoneyRecord.created_at >= since)
+            q = q.filter(eff >= since)
+        if until is not None:
+            q = q.filter(eff <= until)
         return float(q.scalar() or 0)
 
     purpose_q = db.query(
@@ -51,7 +83,9 @@ def my_report(
         MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
     )
     if since is not None:
-        purpose_q = purpose_q.filter(MoneyRecord.created_at >= since)
+        purpose_q = purpose_q.filter(eff >= since)
+    if until is not None:
+        purpose_q = purpose_q.filter(eff <= until)
     by_purpose = [
         PurposeTotal(purpose=p or "—", total=float(t)) for p, t in purpose_q.group_by(MoneyRecord.purpose).all()
     ]
@@ -66,7 +100,9 @@ def my_report(
         MoneyRecord.status == RecordStatus.approved,
     )
     if since is not None:
-        cat_q = cat_q.filter(MoneyRecord.created_at >= since)
+        cat_q = cat_q.filter(eff >= since)
+    if until is not None:
+        cat_q = cat_q.filter(eff <= until)
     by_category = [
         CategoryTotal(kind=k.value if hasattr(k, "value") else str(k), category=c or "—", total=float(t))
         for k, c, t in cat_q.group_by(MoneyRecord.kind, MoneyRecord.category).all()
@@ -88,15 +124,16 @@ def my_report(
 @router.get("/org", response_model=OrgReportOut)
 def org_report(
     days: int | None = Query(default=None, ge=1, le=3650),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
     oid = user.organization_id
-    since = None
-    if days:
-        since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    since, until = _window(days, date_from, date_to)
+    eff = _effective_at()
 
     def sum_approved(kind: RecordKind, payment: str | None = None) -> float:
         q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
@@ -107,7 +144,9 @@ def org_report(
         if payment is not None:
             q = q.filter(MoneyRecord.payment_method == payment)
         if since is not None:
-            q = q.filter(MoneyRecord.created_at >= since)
+            q = q.filter(eff >= since)
+        if until is not None:
+            q = q.filter(eff <= until)
         return float(q.scalar() or 0)
 
     expense = sum_approved(RecordKind.expense)
@@ -119,7 +158,9 @@ def org_report(
         MoneyRecord.status == RecordStatus.pending,
     )
     if since is not None:
-        pending_q = pending_q.filter(MoneyRecord.created_at >= since)
+        pending_q = pending_q.filter(eff >= since)
+    if until is not None:
+        pending_q = pending_q.filter(eff <= until)
     pending = pending_q.scalar() or 0
     members = (
         db.query(User)
@@ -139,7 +180,9 @@ def org_report(
         MoneyRecord.status == RecordStatus.approved,
     )
     if since is not None:
-        cat_q = cat_q.filter(MoneyRecord.created_at >= since)
+        cat_q = cat_q.filter(eff >= since)
+    if until is not None:
+        cat_q = cat_q.filter(eff <= until)
     cat_rows = cat_q.group_by(MoneyRecord.kind, MoneyRecord.category).all()
     by_category = [
         CategoryTotal(kind=k.value if hasattr(k, "value") else str(k), category=c or "—", total=float(t))
@@ -155,7 +198,9 @@ def org_report(
         MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
     )
     if since is not None:
-        purpose_q = purpose_q.filter(MoneyRecord.created_at >= since)
+        purpose_q = purpose_q.filter(eff >= since)
+    if until is not None:
+        purpose_q = purpose_q.filter(eff <= until)
     purpose_rows = purpose_q.group_by(MoneyRecord.purpose).all()
     by_purpose = [
         PurposeTotal(purpose=p or "—", total=float(t)) for p, t in purpose_rows
@@ -180,17 +225,20 @@ def org_report(
 @router.get("/export.csv", response_class=PlainTextResponse)
 def export_csv(
     days: int | None = Query(default=None, ge=1, le=3650),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
     oid = user.organization_id
-    since = None
-    if days:
-        since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    since, until = _window(days, date_from, date_to)
+    eff = _effective_at()
 
     q = db.query(MoneyRecord).filter(MoneyRecord.organization_id == oid)
     if since is not None:
-        q = q.filter(MoneyRecord.created_at >= since)
+        q = q.filter(eff >= since)
+    if until is not None:
+        q = q.filter(eff <= until)
     rows = q.order_by(MoneyRecord.created_at.asc()).limit(5000).all()
 
     buf = StringIO()
@@ -213,6 +261,8 @@ def export_csv(
     pq = db.query(Payout).filter(Payout.organization_id == oid)
     if since is not None:
         pq = pq.filter(Payout.created_at >= since)
+    if until is not None:
+        pq = pq.filter(Payout.created_at <= until)
     for p in pq.order_by(Payout.created_at.asc()).limit(2000).all():
         u = db.get(User, p.user_id)
         name = (u.full_name if u else "").replace(",", " ")

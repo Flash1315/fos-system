@@ -816,3 +816,46 @@ def test_approve_now_on_create(client):
         },
     )
     assert denied.status_code == 403
+
+
+def test_report_custom_date_range(client):
+    owner = _register(client, "flow-dates", "dates-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    old = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 100,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "occurred_at": "2024-01-15T12:00:00",
+            "approve_now": True,
+        },
+    )
+    assert old.status_code == 200, old.text
+    new = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 250,
+            "category": "Food",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "occurred_at": "2026-07-01T12:00:00",
+            "approve_now": True,
+        },
+    )
+    assert new.status_code == 200, new.text
+    ranged = client.get("/reports/org?date_from=2026-01-01&date_to=2026-12-31", headers=h)
+    assert ranged.status_code == 200, ranged.text
+    assert ranged.json()["approved_expense_total"] == 250
+    all_time = client.get("/reports/org", headers=h)
+    assert all_time.json()["approved_expense_total"] == 350
+    mine = client.get("/reports/me?date_from=2024-01-01&date_to=2024-12-31", headers=h)
+    assert mine.status_code == 200
+    assert mine.json()["approved_expense_total"] == 100
+    bad = client.get("/reports/org?date_from=not-a-date", headers=h)
+    assert bad.status_code == 400

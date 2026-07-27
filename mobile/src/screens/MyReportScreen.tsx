@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { Alert, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { myReport, type MyReport } from "../api";
-import { Card, Chip, Label, Screen, Sub, TopBar } from "../components/ui";
+import { myReport, type MyReport, type ReportPeriod } from "../api";
+import { Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { colors } from "../theme";
 
 const PERIODS: { label: string; days?: number }[] = [
@@ -15,10 +15,20 @@ const PERIODS: { label: string; days?: number }[] = [
 export function MyReportScreen({ onBack }: { onBack: () => void }) {
   const [report, setReport] = useState<MyReport | null>(null);
   const [days, setDays] = useState<number | undefined>(undefined);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [custom, setCustom] = useState(false);
+
+  const period = (): ReportPeriod | undefined => {
+    if (custom && (dateFrom.trim() || dateTo.trim())) {
+      return { date_from: dateFrom.trim() || undefined, date_to: dateTo.trim() || undefined };
+    }
+    return days != null ? { days } : undefined;
+  };
 
   const reload = async () => {
     try {
-      setReport(await myReport(days));
+      setReport(await myReport(period()));
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     }
@@ -27,7 +37,7 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
   useFocusEffect(reload);
   React.useEffect(() => {
     void reload();
-  }, [days]);
+  }, [days, custom, dateFrom, dateTo]);
 
   return (
     <Screen scroll>
@@ -35,9 +45,33 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
       <Text style={styles.title}>My stats</Text>
       <View style={styles.kinds}>
         {PERIODS.map((p) => (
-          <Chip key={p.label} label={p.label} on={days === p.days} onPress={() => setDays(p.days)} />
+          <Chip
+            key={p.label}
+            label={p.label}
+            on={!custom && days === p.days}
+            onPress={() => {
+              setCustom(false);
+              setDays(p.days);
+            }}
+          />
         ))}
+        <Chip
+          label="custom"
+          on={custom}
+          onPress={() => {
+            setCustom(true);
+            setDays(undefined);
+          }}
+        />
       </View>
+      {custom && (
+        <>
+          <Label>From (YYYY-MM-DD)</Label>
+          <Field autoCapitalize="none" value={dateFrom} onChangeText={setDateFrom} placeholder="optional" />
+          <Label>To (YYYY-MM-DD)</Label>
+          <Field autoCapitalize="none" value={dateTo} onChangeText={setDateTo} placeholder="optional" />
+        </>
+      )}
       {!report ? (
         <Sub>Loading…</Sub>
       ) : (

@@ -346,19 +346,35 @@ export function decideBatch(ids: number[], approve: boolean, note = "") {
   });
 }
 
-export function orgReport(days?: number) {
-  const suffix = days ? `?days=${days}` : "";
-  return request<OrgReport>(`/reports/org${suffix}`);
+export type ReportPeriod = {
+  days?: number;
+  date_from?: string;
+  date_to?: string;
+};
+
+function reportQuery(period?: ReportPeriod | number) {
+  const q = new URLSearchParams();
+  if (typeof period === "number") {
+    q.set("days", String(period));
+  } else if (period) {
+    if (period.days != null) q.set("days", String(period.days));
+    if (period.date_from) q.set("date_from", period.date_from);
+    if (period.date_to) q.set("date_to", period.date_to);
+  }
+  const s = q.toString();
+  return s ? `?${s}` : "";
 }
 
-export function myReport(days?: number) {
-  const suffix = days ? `?days=${days}` : "";
-  return request<MyReport>(`/reports/me${suffix}`);
+export function orgReport(period?: ReportPeriod | number) {
+  return request<OrgReport>(`/reports/org${reportQuery(period)}`);
 }
 
-export function exportReportCsv(days?: number) {
-  const suffix = days ? `?days=${days}` : "";
-  return `${API_URL}/reports/export.csv${suffix}`;
+export function myReport(period?: ReportPeriod | number) {
+  return request<MyReport>(`/reports/me${reportQuery(period)}`);
+}
+
+export function exportReportCsv(period?: ReportPeriod | number) {
+  return `${API_URL}/reports/export.csv${reportQuery(period)}`;
 }
 
 export function commentRecord(id: number, note: string) {

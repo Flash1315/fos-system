@@ -179,3 +179,32 @@ def test_transfer_creates_two_pending(client):
     assert body["sender_record"]["kind"] == "expense"
     assert body["recipient_record"]["kind"] == "income"
     assert body["sender_record"]["status"] == "pending"
+
+
+def test_expense_payout_resets_spendings(client):
+    owner = _register(client, "flow-pay", "pay-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 10000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "purpose": "Office",
+        },
+    )
+    rid = rec.json()["id"]
+    client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
+    bal1 = client.get("/records/balance/me", headers=h).json()
+    assert bal1["spendings"] == 10000
+    pay = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "expense_payout", "amount": 10000, "payment_method": "cash"},
+    )
+    assert pay.status_code == 200, pay.text
+    bal2 = client.get("/records/balance/me", headers=h).json()
+    assert bal2["spendings"] == 0

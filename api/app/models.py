@@ -97,3 +97,24 @@ class MoneyRecord(Base):
     created_by_user: Mapped[User] = relationship(
         back_populates="records", foreign_keys=[created_by],
     )
+
+
+class PayoutKind(str, enum.Enum):
+    expense_payout = "expense_payout"
+    income_handover = "income_handover"
+
+
+class Payout(Base):
+    """Manager settlement rows — RJ Expense payout / Income handover."""
+    __tablename__ = "payouts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    kind: Mapped[PayoutKind] = mapped_column(Enum(PayoutKind), nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), default="IDR")
+    payment_method: Mapped[str] = mapped_column(String(40), default="cash")  # cash / transfer
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

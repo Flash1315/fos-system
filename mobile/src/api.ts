@@ -246,6 +246,19 @@ export function transferCash(body: { to_email: string; amount: number; comment?:
   });
 }
 
+export function createPayout(body: {
+  user_id: number;
+  kind: "expense_payout" | "income_handover";
+  amount: number;
+  payment_method?: string;
+  note?: string;
+}) {
+  return request("/payouts", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export async function uploadPhoto(uri: string, name = "receipt.jpg") {
   const form = new FormData();
   form.append("file", {

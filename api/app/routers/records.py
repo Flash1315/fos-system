@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user, require_roles
 from app.categories import PAYMENT_SOURCES, PURPOSES, categories_for
 from app.db import get_db
-from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
+from app.models import MoneyRecord, Organization, Payout, PayoutKind, RecordKind, RecordStatus, User, UserRole
 from app.schemas import BalanceOut, CategoriesOut, DecideIn, RecordCreate, RecordOut
 
 router = APIRouter(prefix="/records", tags=["records"])
@@ -15,6 +15,20 @@ router = APIRouter(prefix="/records", tags=["records"])
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _last_payout_at(db: Session, user: User, kind: PayoutKind):
+    row = (
+        db.query(Payout)
+        .filter(
+            Payout.organization_id == user.organization_id,
+            Payout.user_id == user.id,
+            Payout.kind == kind,
+        )
+        .order_by(Payout.created_at.desc())
+        .first()
+    )
+    return row.created_at if row else None
 
 
 def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
@@ -129,44 +143,42 @@ def my_balance(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """RJ-inspired dual track (per user, approved only):
-    - cash_on_hand: income(cash) − expense/fuel paid from cash_on_hand (or legacy blank)
-    - spendings: expense/fuel paid from my_pocket (owed to employee)
+    """RJ-inspired dual track with payout cutoffs (per user, approved only):
+    - cash_on_hand since last income_handover
+    - spendings (my_pocket) since last expense_payout
     """
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
+    since_hand = _last_payout_at(db, user, PayoutKind.income_handover)
+    since_pay = _last_payout_at(db, user, PayoutKind.expense_payout)
 
     def sum_income_cash() -> float:
-        return float(
-            db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0))
-            .filter(
-                MoneyRecord.organization_id == user.organization_id,
-                MoneyRecord.created_by == user.id,
-                MoneyRecord.kind == RecordKind.income,
-                MoneyRecord.status == RecordStatus.approved,
-                MoneyRecord.payment_method == "cash",
-            )
-            .scalar()
-            or 0
+        q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
+            MoneyRecord.organization_id == user.organization_id,
+            MoneyRecord.created_by == user.id,
+            MoneyRecord.kind == RecordKind.income,
+            MoneyRecord.status == RecordStatus.approved,
+            MoneyRecord.payment_method == "cash",
         )
+        if since_hand is not None:
+            q = q.filter(MoneyRecord.created_at > since_hand)
+        return float(q.scalar() or 0)
 
-    def sum_out(sources: list[str]) -> float:
-        return float(
-            db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0))
-            .filter(
-                MoneyRecord.organization_id == user.organization_id,
-                MoneyRecord.created_by == user.id,
-                MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
-                MoneyRecord.status == RecordStatus.approved,
-                MoneyRecord.payment_source.in_(sources),
-            )
-            .scalar()
-            or 0
+    def sum_out(sources: list[str], since) -> float:
+        q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
+            MoneyRecord.organization_id == user.organization_id,
+            MoneyRecord.created_by == user.id,
+            MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
+            MoneyRecord.status == RecordStatus.approved,
+            MoneyRecord.payment_source.in_(sources),
         )
+        if since is not None:
+            q = q.filter(MoneyRecord.created_at > since)
+        return float(q.scalar() or 0)
 
     income_cash = sum_income_cash()
-    from_cash = sum_out(["cash_on_hand", ""])
-    spendings = sum_out(["my_pocket"])
+    from_cash = sum_out(["cash_on_hand", ""], since_hand)
+    spendings = sum_out(["my_pocket"], since_pay)
     pending = (
         db.query(func.count(MoneyRecord.id))
         .filter(

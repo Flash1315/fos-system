@@ -15,6 +15,7 @@ export function HomeScreen({
   onReports,
   onLedger,
   onTransfer,
+  onPayout,
   onRecord,
   onLogout,
 }: {
@@ -26,6 +27,7 @@ export function HomeScreen({
   onReports: () => void;
   onLedger: () => void;
   onTransfer: () => void;
+  onPayout: () => void;
   onRecord: (id: number) => void;
   onLogout: () => void;
 }) {
@@ -106,6 +108,7 @@ export function HomeScreen({
         </Row>
       )}
       {isManager && <Btn title="Org ledger" onPress={onLedger} variant="ghost" />}
+      {isManager && <Btn title="Settlements" onPress={onPayout} variant="ghost" />}
       <Btn title="Transfer cash" onPress={onTransfer} variant="ghost" />
       <View style={styles.filters}>
         {(["", "pending", "approved", "rejected"] as const).map((s) => (

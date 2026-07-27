@@ -5,9 +5,11 @@ import {
   listSettlementRequests,
   listMySettlementRequests,
   myBalance,
+  myOrg,
   requestSettlement,
   approveSettlementRequest,
   cancelSettlementRequest,
+  updateOrg,
   type User,
 } from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
@@ -33,6 +35,7 @@ export function AccountScreen({
   onBack: () => void;
 }) {
   const isManager = user.role === "owner" || user.role === "manager";
+  const isOwner = user.role === "owner";
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [kind, setKind] = useState<"expense_payout" | "income_handover">("income_handover");
@@ -40,6 +43,20 @@ export function AccountScreen({
   const [note, setNote] = useState("");
   const [requests, setRequests] = useState<ReqRow[]>([]);
   const [mine, setMine] = useState<ReqRow[]>([]);
+  const [orgName, setOrgName] = useState("");
+  const [orgSlug, setOrgSlug] = useState("");
+  const [currency, setCurrency] = useState("RUB");
+
+  const reloadOrg = async () => {
+    try {
+      const org = await myOrg();
+      setOrgName(org.name);
+      setOrgSlug(org.slug);
+      setCurrency(org.currency || "RUB");
+    } catch {
+      /* ignore */
+    }
+  };
 
   const reloadRequests = async () => {
     try {
@@ -57,6 +74,7 @@ export function AccountScreen({
 
   useEffect(() => {
     (async () => {
+      await reloadOrg();
       try {
         const b = await myBalance();
         setAmount(String(kind === "expense_payout" ? b.spendings : b.cash_on_hand));
@@ -78,6 +96,24 @@ export function AccountScreen({
       setCurrent("");
       setNext("");
       Alert.alert("Fos", "Password updated");
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSaveOrg = async () => {
+    if (!orgName.trim()) {
+      Alert.alert("Fos", "Company name required");
+      return;
+    }
+    setBusy(true);
+    try {
+      const org = await updateOrg({ name: orgName.trim(), currency: currency.trim() || "RUB" });
+      setOrgName(org.name);
+      setCurrency(org.currency);
+      Alert.alert("Fos", "Company updated");
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
@@ -111,6 +147,25 @@ export function AccountScreen({
       <Sub>
         {user.full_name} · {user.email} · {user.role}
       </Sub>
+      <Sub>
+        {orgName || "…"}
+        {orgSlug ? ` · /${orgSlug}` : ""}
+      </Sub>
+
+      {isOwner && (
+        <>
+          <Label>Company settings</Label>
+          <Sub>Owners can rename the company and set currency. Slug stays fixed for login.</Sub>
+          <Field value={orgName} onChangeText={setOrgName} placeholder="Company name" />
+          <Field
+            value={currency}
+            onChangeText={setCurrency}
+            placeholder="Currency (RUB)"
+            autoCapitalize="characters"
+          />
+          <Btn title={busy ? "…" : "Save company"} onPress={onSaveOrg} disabled={busy} />
+        </>
+      )}
 
       <Label>Change password</Label>
       <Field secureTextEntry value={current} onChangeText={setCurrent} placeholder="Current password" />

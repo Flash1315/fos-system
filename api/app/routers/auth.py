@@ -7,7 +7,7 @@ from app.auth import (
 )
 from app.db import get_db
 from app.models import Organization, User, UserRole
-from app.schemas import InviteIn, LoginIn, OrgCreate, OrgOut, PasswordChangeIn, TokenOut, UserOut
+from app.schemas import InviteIn, LoginIn, OrgCreate, OrgOut, OrgUpdate, PasswordChangeIn, TokenOut, UserOut
 
 router = APIRouter(tags=["auth"])
 
@@ -85,6 +85,25 @@ def my_org(user: User = Depends(get_current_user), db: Session = Depends(get_db)
     org = db.get(Organization, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")
+    return OrgOut.model_validate(org)
+
+
+@router.patch("/orgs/me", response_model=OrgOut)
+def update_org(
+    body: OrgUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner)),
+):
+    org = db.get(Organization, user.organization_id)
+    if not org:
+        raise HTTPException(404, "Organization not found")
+    data = body.model_dump(exclude_unset=True)
+    if "name" in data and data["name"] is not None:
+        org.name = data["name"].strip()
+    if "currency" in data and data["currency"] is not None:
+        org.currency = data["currency"].strip().upper()
+    db.commit()
+    db.refresh(org)
     return OrgOut.model_validate(org)
 
 

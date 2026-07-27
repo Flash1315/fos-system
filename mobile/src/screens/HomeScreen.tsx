@@ -42,6 +42,7 @@ export function HomeScreen({
   const [balance, setBalance] = useState("—");
   const [spendings, setSpendings] = useState("—");
   const [orgName, setOrgName] = useState("");
+  const [orgSlug, setOrgSlug] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
   const [settlementCount, setSettlementCount] = useState(0);
   const [rows, setRows] = useState<MoneyRecord[]>([]);
@@ -64,6 +65,7 @@ export function HomeScreen({
       setBalance(formatMoney(b.cash_on_hand, b.currency));
       setSpendings(formatMoney(b.spendings ?? 0, b.currency));
       setOrgName(org.name);
+      setOrgSlug(org.slug);
       if (user?.role === "owner" || user?.role === "manager") {
         try {
           const pend = await pendingRecords();
@@ -100,7 +102,9 @@ export function HomeScreen({
         <View>
           <Brand small />
           <Sub>
-            {orgName ? `${orgName} · ` : ""}
+            {orgName ? `${orgName}` : ""}
+            {orgSlug ? ` · /${orgSlug}` : ""}
+            {orgName || orgSlug ? " · " : ""}
             {user?.full_name} · {user?.role}
           </Sub>
         </View>

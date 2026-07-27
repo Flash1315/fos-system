@@ -177,7 +177,7 @@ export default function App() {
   }
 
   if (screen === "balances" && user) {
-    return <BalancesScreen onBack={() => setScreen("home")} />;
+    return <BalancesScreen busy={busy} setBusy={setBusy} onBack={() => setScreen("home")} />;
   }
 
   if (screen === "account" && user) {

@@ -166,6 +166,13 @@ export function myOrg() {
   return request<{ id: number; name: string; slug: string; currency: string }>("/orgs/me");
 }
 
+export function updateOrg(body: { name?: string; currency?: string }) {
+  return request<{ id: number; name: string; slug: string; currency: string }>("/orgs/me", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
 export function inviteUser(body: {
   email: string;
   full_name: string;

@@ -654,3 +654,111 @@ def test_pending_purpose_filter_and_decider_name(client):
     decided = client.post(f"/records/{a}/decide", headers=h, json={"approve": True})
     assert decided.status_code == 200
     assert decided.json()["decided_by_name"] == "Owner"
+
+
+def test_update_org_owner_only(client):
+    owner = _register(client, "flow-org-upd", "orgupd-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    before = client.get("/orgs/me", headers=h)
+    assert before.status_code == 200
+    assert before.json()["slug"] == "flow-org-upd"
+    patched = client.patch(
+        "/orgs/me",
+        headers=h,
+        json={"name": "Renamed Co", "currency": "usd"},
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["name"] == "Renamed Co"
+    assert patched.json()["currency"] == "USD"
+    assert patched.json()["slug"] == "flow-org-upd"
+    after = client.get("/orgs/me", headers=h).json()
+    assert after["name"] == "Renamed Co"
+    assert after["currency"] == "USD"
+
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "orgupd-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    assert inv.status_code == 200
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "orgupd-emp@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-org-upd",
+        },
+    )
+    eh = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    denied = client.patch("/orgs/me", headers=eh, json={"name": "Hacked"})
+    assert denied.status_code == 403
+
+
+def test_quick_settle_from_balances(client):
+    owner = _register(client, "flow-quick", "quick-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    income = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 50000,
+            "category": "Cash",
+            "payment_method": "cash",
+            "purpose": "Rental",
+        },
+    ).json()["id"]
+    client.post(f"/records/{income}/decide", headers=h, json={"approve": True})
+    expense = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 7000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "purpose": "Office",
+        },
+    ).json()["id"]
+    client.post(f"/records/{expense}/decide", headers=h, json={"approve": True})
+    bal = client.get("/records/balance/me", headers=h).json()
+    assert bal["spendings"] == 7000
+    assert bal["cash_on_hand"] >= 50000
+    team = client.get("/records/balance/team", headers=h)
+    assert team.status_code == 200
+    me_row = next(x for x in team.json() if x["user_id"] == uid)
+    assert me_row["spendings"] == 7000
+
+    pay = client.post(
+        "/payouts",
+        headers=h,
+        json={
+            "user_id": uid,
+            "kind": "expense_payout",
+            "amount": me_row["spendings"],
+            "payment_method": "cash",
+            "note": "quick pay from balances",
+        },
+    )
+    assert pay.status_code == 200, pay.text
+    take = client.post(
+        "/payouts",
+        headers=h,
+        json={
+            "user_id": uid,
+            "kind": "income_handover",
+            "amount": 50000,
+            "payment_method": "cash",
+            "note": "quick take from balances",
+        },
+    )
+    assert take.status_code == 200, take.text
+    bal2 = client.get("/records/balance/me", headers=h).json()
+    assert bal2["spendings"] == 0
+    assert bal2["cash_on_hand"] == bal["cash_on_hand"] - 50000

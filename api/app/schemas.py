@@ -24,6 +24,11 @@ class OrgOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class OrgUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=2, max_length=200)
+    currency: Optional[str] = Field(default=None, min_length=1, max_length=8)
+
+
 class UserOut(BaseModel):
     id: int
     email: EmailStr

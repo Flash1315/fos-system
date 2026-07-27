@@ -1,0 +1,76 @@
+import React, { useEffect, useState } from "react";
+import { Alert, FlatList, Pressable, Text, StyleSheet, View } from "react-native";
+import { useFocusEffect } from "../useFocus";
+import { orgRecords, type MoneyRecord } from "../api";
+import { Chip, Screen, Sub, TopBar } from "../components/ui";
+import { colors } from "../theme";
+
+export function LedgerScreen({
+  onBack,
+  onRecord,
+}: {
+  onBack: () => void;
+  onRecord: (id: number) => void;
+}) {
+  const [rows, setRows] = useState<MoneyRecord[]>([]);
+  const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected">("");
+  const [kind, setKind] = useState<"" | "expense" | "fuel" | "income">("");
+
+  const reload = async () => {
+    try {
+      setRows(
+        await orgRecords({
+          status: status || undefined,
+          kind: kind || undefined,
+        }),
+      );
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    }
+  };
+
+  useFocusEffect(reload);
+  useEffect(() => {
+    void reload();
+  }, [status, kind]);
+
+  return (
+    <Screen>
+      <TopBar onBack={onBack} onCancel={onBack} />
+      <Text style={styles.title}>Org ledger</Text>
+      <View style={styles.kinds}>
+        {(["", "pending", "approved", "rejected"] as const).map((s) => (
+          <Chip key={s || "all"} label={s || "all"} on={status === s} onPress={() => setStatus(s)} />
+        ))}
+      </View>
+      <View style={styles.kinds}>
+        {(["", "expense", "fuel", "income"] as const).map((k) => (
+          <Chip key={k || "any"} label={k || "any"} on={kind === k} onPress={() => setKind(k)} />
+        ))}
+      </View>
+      <FlatList
+        data={rows}
+        keyExtractor={(item) => String(item.id)}
+        ListEmptyComponent={<Sub>No records</Sub>}
+        renderItem={({ item }) => (
+          <Pressable style={styles.row} onPress={() => onRecord(item.id)}>
+            <Text style={styles.rowTitle}>
+              {item.kind} · {item.status} · {item.amount.toLocaleString()} {item.currency}
+            </Text>
+            <Text style={styles.rowMeta}>
+              {item.created_by_name || "—"} · {item.category || "—"}
+            </Text>
+          </Pressable>
+        )}
+      />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  title: { color: colors.text, fontSize: 26, fontWeight: "700", marginVertical: 8 },
+  kinds: { flexDirection: "row", gap: 8, marginBottom: 8, flexWrap: "wrap" },
+  row: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 8 },
+  rowTitle: { color: colors.text, fontWeight: "600", textTransform: "capitalize" },
+  rowMeta: { color: colors.muted, marginTop: 4 },
+});

@@ -27,6 +27,15 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-secure-store"]
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Fos to attach receipt photos.",
+          "cameraPermission": "Allow Fos to photograph receipts."
+        }
+      ]
+    ]
   }
 }

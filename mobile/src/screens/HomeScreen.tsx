@@ -1,8 +1,8 @@
-import React, { useCallback, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import { myBalance, myRecords, type MoneyRecord, type User } from "../api";
-import { Brand, Btn, Card, Label, LinkText, Row, Screen, Sub } from "../components/ui";
+import { Brand, Btn, Card, Chip, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { colors } from "../theme";
 
 export function HomeScreen({
@@ -12,6 +12,7 @@ export function HomeScreen({
   onInvite,
   onTeam,
   onReports,
+  onLedger,
   onRecord,
   onLogout,
 }: {
@@ -21,23 +22,28 @@ export function HomeScreen({
   onInvite: () => void;
   onTeam: () => void;
   onReports: () => void;
+  onLedger: () => void;
   onRecord: (id: number) => void;
   onLogout: () => void;
 }) {
   const [balance, setBalance] = useState("—");
   const [rows, setRows] = useState<MoneyRecord[]>([]);
+  const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected">("");
 
   const reload = async () => {
     try {
       const b = await myBalance();
       setBalance(`${b.cash_on_hand.toLocaleString()} ${b.currency}`);
-      setRows(await myRecords());
+      setRows(await myRecords({ status: status || undefined }));
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Load failed");
     }
   };
 
   useFocusEffect(reload);
+  useEffect(() => {
+    void reload();
+  }, [status]);
 
   const isManager = user?.role === "owner" || user?.role === "manager";
 
@@ -65,6 +71,12 @@ export function HomeScreen({
           <Btn title="Reports" onPress={onReports} variant="ghost" />
         </Row>
       )}
+      {isManager && <Btn title="Org ledger" onPress={onLedger} variant="ghost" />}
+      <View style={styles.filters}>
+        {(["", "pending", "approved", "rejected"] as const).map((s) => (
+          <Chip key={s || "all"} label={s || "all"} on={status === s} onPress={() => setStatus(s)} />
+        ))}
+      </View>
       <FlatList
         data={rows}
         keyExtractor={(item) => String(item.id)}
@@ -88,6 +100,7 @@ const styles = StyleSheet.create({
   topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   balance: { color: colors.text, fontSize: 24, fontWeight: "700" },
   section: { color: colors.text, fontWeight: "600", marginBottom: 8, marginTop: 8 },
+  filters: { flexDirection: "row", gap: 8, marginBottom: 8, flexWrap: "wrap" },
   row: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 8 },
   rowTitle: { color: colors.text, fontWeight: "600", textTransform: "capitalize" },
   rowMeta: { color: colors.muted, marginTop: 4 },

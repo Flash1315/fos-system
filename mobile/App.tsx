@@ -15,6 +15,7 @@ import { InviteScreen } from "./src/screens/InviteScreen";
 import { TeamScreen } from "./src/screens/TeamScreen";
 import { ReportsScreen } from "./src/screens/ReportsScreen";
 import { RecordDetailScreen } from "./src/screens/RecordDetailScreen";
+import { LedgerScreen } from "./src/screens/LedgerScreen";
 
 type Screen =
   | "boot"
@@ -25,6 +26,7 @@ type Screen =
   | "invite"
   | "team"
   | "reports"
+  | "ledger"
   | "record";
 
 export default function App() {
@@ -119,6 +121,18 @@ export default function App() {
     return <ReportsScreen onBack={() => setScreen("home")} />;
   }
 
+  if (screen === "ledger" && user) {
+    return (
+      <LedgerScreen
+        onBack={() => setScreen("home")}
+        onRecord={(id) => {
+          setRecordId(id);
+          setScreen("record");
+        }}
+      />
+    );
+  }
+
   if (screen === "record" && user && recordId != null) {
     return (
       <RecordDetailScreen
@@ -139,6 +153,7 @@ export default function App() {
       onInvite={() => setScreen("invite")}
       onTeam={() => setScreen("team")}
       onReports={() => setScreen("reports")}
+      onLedger={() => setScreen("ledger")}
       onRecord={(id) => {
         setRecordId(id);
         setScreen("record");

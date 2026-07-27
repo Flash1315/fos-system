@@ -43,16 +43,26 @@ export function CreateScreen({
     })();
   }, [kind]);
 
-  const pickPhoto = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert("Fos", "Photo permission required");
-      return;
+  const pickPhoto = async (fromCamera: boolean) => {
+    if (fromCamera) {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Fos", "Camera permission required");
+        return;
+      }
+    } else {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Fos", "Photo permission required");
+        return;
+      }
     }
-    const shot = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      quality: 0.7,
-    });
+    const shot = fromCamera
+      ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
+      : await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          quality: 0.7,
+        });
     if (shot.canceled || !shot.assets[0]) return;
     setBusy(true);
     try {
@@ -132,7 +142,8 @@ export function CreateScreen({
       )}
       <Label>Comment</Label>
       <Field value={comment} onChangeText={setComment} />
-      <Btn title={photoUrl ? "Photo attached ✓" : "Attach receipt photo"} onPress={pickPhoto} variant="ghost" disabled={busy} />
+      <Btn title={photoUrl ? "Photo attached ✓ (library)" : "Photo from library"} onPress={() => pickPhoto(false)} variant="ghost" disabled={busy} />
+      <Btn title="Photo from camera" onPress={() => pickPhoto(true)} variant="ghost" disabled={busy} />
       <Btn title={busy ? "…" : "Submit for approval"} onPress={submit} disabled={busy} />
     </Screen>
   );

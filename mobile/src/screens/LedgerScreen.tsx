@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import { listMembers, orgRecords, type MoneyRecord, type User } from "../api";
-import { Chip, Screen, Sub, TopBar } from "../components/ui";
+import { Chip, Field, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
 
@@ -19,6 +19,7 @@ export function LedgerScreen({
   const [kind, setKind] = useState<"" | "expense" | "fuel" | "income">("");
   const [purpose, setPurpose] = useState("");
   const [memberId, setMemberId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -39,6 +40,7 @@ export function LedgerScreen({
           kind: kind || undefined,
           purpose: purpose || undefined,
           created_by: memberId ?? undefined,
+          q: search.trim() || undefined,
         }),
       );
     } catch (e) {
@@ -49,12 +51,18 @@ export function LedgerScreen({
   useFocusEffect(reload);
   useEffect(() => {
     void reload();
-  }, [status, kind, purpose, memberId]);
+  }, [status, kind, purpose, memberId, search]);
 
   return (
     <Screen>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Text style={styles.title}>Org ledger</Text>
+      <Field
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search category, place, bike, comment…"
+        autoCapitalize="none"
+      />
       <View style={styles.kinds}>
         {(["", "pending", "approved", "rejected"] as const).map((s) => (
           <Chip key={s || "all"} label={s || "all"} on={status === s} onPress={() => setStatus(s)} />

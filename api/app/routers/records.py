@@ -99,20 +99,30 @@ def my_records(
     kind: RecordKind | None = None,
     status: RecordStatus | None = None,
     purpose: str | None = None,
+    q: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    q = db.query(MoneyRecord).filter(
+    query = db.query(MoneyRecord).filter(
         MoneyRecord.organization_id == user.organization_id,
         MoneyRecord.created_by == user.id,
     )
     if kind:
-        q = q.filter(MoneyRecord.kind == kind)
+        query = query.filter(MoneyRecord.kind == kind)
     if status:
-        q = q.filter(MoneyRecord.status == status)
+        query = query.filter(MoneyRecord.status == status)
     if purpose:
-        q = q.filter(MoneyRecord.purpose == purpose)
-    rows = q.order_by(MoneyRecord.created_at.desc()).limit(100).all()
+        query = query.filter(MoneyRecord.purpose == purpose)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            (MoneyRecord.category.ilike(like))
+            | (MoneyRecord.comment.ilike(like))
+            | (MoneyRecord.place.ilike(like))
+            | (MoneyRecord.bike.ilike(like))
+            | (MoneyRecord.client_name.ilike(like))
+        )
+    rows = query.order_by(MoneyRecord.created_at.desc()).limit(100).all()
     return [_record_out(db, r) for r in rows]
 
 
@@ -122,19 +132,29 @@ def org_records(
     status: RecordStatus | None = None,
     purpose: str | None = None,
     created_by: int | None = None,
+    q: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
-    q = db.query(MoneyRecord).filter(MoneyRecord.organization_id == user.organization_id)
+    query = db.query(MoneyRecord).filter(MoneyRecord.organization_id == user.organization_id)
     if kind:
-        q = q.filter(MoneyRecord.kind == kind)
+        query = query.filter(MoneyRecord.kind == kind)
     if status:
-        q = q.filter(MoneyRecord.status == status)
+        query = query.filter(MoneyRecord.status == status)
     if purpose:
-        q = q.filter(MoneyRecord.purpose == purpose)
+        query = query.filter(MoneyRecord.purpose == purpose)
     if created_by is not None:
-        q = q.filter(MoneyRecord.created_by == created_by)
-    rows = q.order_by(MoneyRecord.created_at.desc()).limit(200).all()
+        query = query.filter(MoneyRecord.created_by == created_by)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            (MoneyRecord.category.ilike(like))
+            | (MoneyRecord.comment.ilike(like))
+            | (MoneyRecord.place.ilike(like))
+            | (MoneyRecord.bike.ilike(like))
+            | (MoneyRecord.client_name.ilike(like))
+        )
+    rows = query.order_by(MoneyRecord.created_at.desc()).limit(200).all()
     return [_record_out(db, r) for r in rows]
 
 

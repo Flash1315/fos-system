@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import { myBalance, myOrg, myRecords, pendingRecords, type MoneyRecord, type User } from "../api";
-import { Brand, Btn, Card, Chip, Label, LinkText, Row, Screen, Sub } from "../components/ui";
+import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
 
@@ -44,6 +44,7 @@ export function HomeScreen({
   const [rows, setRows] = useState<MoneyRecord[]>([]);
   const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected">("");
   const [purpose, setPurpose] = useState("");
+  const [search, setSearch] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
   const reload = async () => {
@@ -51,7 +52,11 @@ export function HomeScreen({
       const [b, org, list] = await Promise.all([
         myBalance(),
         myOrg(),
-        myRecords({ status: status || undefined, purpose: purpose || undefined }),
+        myRecords({
+          status: status || undefined,
+          purpose: purpose || undefined,
+          q: search.trim() || undefined,
+        }),
       ]);
       setBalance(formatMoney(b.cash_on_hand, b.currency));
       setSpendings(formatMoney(b.spendings ?? 0, b.currency));
@@ -75,7 +80,7 @@ export function HomeScreen({
   useFocusEffect(reload);
   useEffect(() => {
     void reload();
-  }, [status, purpose]);
+  }, [status, purpose, search]);
 
   const isManager = user?.role === "owner" || user?.role === "manager";
 
@@ -120,6 +125,12 @@ export function HomeScreen({
       {isManager && <Btn title="Team balances" onPress={onBalances} variant="ghost" />}
       <Btn title="Transfer cash" onPress={onTransfer} variant="ghost" />
       <Btn title="Account" onPress={onAccount} variant="ghost" />
+      <Field
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search my records…"
+        autoCapitalize="none"
+      />
       <View style={styles.filters}>
         {(["", "pending", "approved", "rejected"] as const).map((s) => (
           <Chip key={s || "all"} label={s || "all"} on={status === s} onPress={() => setStatus(s)} />

@@ -469,3 +469,22 @@ def test_password_and_settlement_request(client):
     approved = client.post(f"/payouts/requests/{rid}/approve", headers=h)
     assert approved.status_code == 200, approved.text
     assert approved.json()["kind"] == "income_handover"
+
+
+def test_record_search(client):
+    owner = _register(client, "flow-search", "search-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 10, "category": "Taxi", "place": "Denpasar shop", "comment": "oil"},
+    )
+    client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 20, "category": "Food", "place": "Office", "comment": "lunch"},
+    )
+    hit = client.get("/records/mine?q=Denpasar", headers=h)
+    assert hit.status_code == 200
+    assert len(hit.json()) == 1
+    assert hit.json()[0]["place"] == "Denpasar shop"

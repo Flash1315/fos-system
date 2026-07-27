@@ -107,13 +107,24 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
       ) : (
         <>
           <Card>
-            <Label>Cash position</Label>
+            <Label>Net result (period)</Label>
             <Text style={styles.big}>
+              {(report.net_result ?? report.cash_position).toLocaleString()} {report.currency}
+            </Text>
+            <Sub>All income − all approved spend</Sub>
+            <Label>Cash movement (period)</Label>
+            <Text style={styles.line}>
               {report.cash_position.toLocaleString()} {report.currency}
             </Text>
+            <Sub>Cash income − spend paid from cash on hand</Sub>
             <Sub>
               {report.pending_count} pending · {report.team_count} active teammates
             </Sub>
+            <Label>Spend from cash / my pocket</Label>
+            <Text style={styles.line}>
+              {(report.spend_from_cash ?? 0).toLocaleString()} /{" "}
+              {(report.spend_from_pocket ?? 0).toLocaleString()}
+            </Text>
             <Label>Team held cash</Label>
             <Text style={styles.line}>{(report.total_cash_held ?? 0).toLocaleString()}</Text>
             <Label>Team spendings owed</Label>

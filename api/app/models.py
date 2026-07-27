@@ -120,6 +120,8 @@ class Payout(Base):
     note: Mapped[str] = mapped_column(Text, default="")
     # RJ-style: amount paid above current spendings reduces next-cycle owed
     overpayment: Mapped[float] = mapped_column(Float, default=0.0)
+    # Unpaid remainder after a partial settlement (carry into next cycle)
+    balance_after: Mapped[float] = mapped_column(Float, default=0.0)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 

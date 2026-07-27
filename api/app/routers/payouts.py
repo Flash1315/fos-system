@@ -40,6 +40,7 @@ class PayoutOut(BaseModel):
     payment_method: str
     note: str
     overpayment: float = 0.0
+    balance_after: float = 0.0
     created_by: int
     created_at: datetime
 
@@ -58,12 +59,27 @@ def create_payout(
     if not target.is_active:
         raise HTTPException(400, "User inactive")
     org = db.get(Organization, manager.organization_id)
+    bal = user_balance(db, target)
     overpayment = float(body.overpayment or 0)
-    if body.kind == PayoutKind.expense_payout and overpayment <= 0:
-        # Auto: paying more than current spendings → carry overpayment into next cycle
-        owed = float(user_balance(db, target).get("spendings") or 0)
-        if body.amount > owed:
-            overpayment = body.amount - owed
+    balance_after = 0.0
+    if body.kind == PayoutKind.expense_payout:
+        owed = float(bal.get("spendings") or 0)
+        if body.amount > owed + 1e-6:
+            if overpayment <= 0:
+                overpayment = body.amount - owed
+            balance_after = 0.0
+        else:
+            overpayment = 0.0
+            balance_after = max(0.0, owed - body.amount)
+    elif body.kind == PayoutKind.income_handover:
+        held = float(bal.get("cash_on_hand") or 0)
+        if body.amount > held + 1e-6:
+            raise HTTPException(
+                400,
+                f"Insufficient cash on hand ({held}). Cannot take {body.amount}.",
+            )
+        balance_after = max(0.0, held - body.amount)
+        overpayment = 0.0
     row = Payout(
         organization_id=manager.organization_id,
         user_id=target.id,
@@ -73,6 +89,7 @@ def create_payout(
         payment_method=body.payment_method or "cash",
         note=body.note,
         overpayment=overpayment,
+        balance_after=balance_after,
         created_by=manager.id,
         created_at=_utcnow(),
     )
@@ -81,7 +98,7 @@ def create_payout(
     db.refresh(row)
     print(
         f"payout org={manager.organization_id} kind={body.kind.value} "
-        f"user={target.id} amount={body.amount} overpay={overpayment}"
+        f"user={target.id} amount={body.amount} overpay={overpayment} after={balance_after}"
     )
     return PayoutOut(
         id=row.id,
@@ -93,6 +110,7 @@ def create_payout(
         payment_method=row.payment_method,
         note=row.note,
         overpayment=row.overpayment,
+        balance_after=float(row.balance_after or 0),
         created_by=row.created_by,
         created_at=row.created_at,
     )
@@ -121,6 +139,7 @@ def my_payouts(
             payment_method=r.payment_method,
             note=r.note,
             overpayment=float(r.overpayment or 0),
+            balance_after=float(r.balance_after or 0),
             created_by=r.created_by,
             created_at=r.created_at,
         )
@@ -154,6 +173,7 @@ def org_payouts(
                 payment_method=r.payment_method,
                 note=r.note,
                 overpayment=float(r.overpayment or 0),
+                balance_after=float(r.balance_after or 0),
                 created_by=r.created_by,
                 created_at=r.created_at,
             )

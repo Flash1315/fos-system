@@ -193,7 +193,12 @@ class OrgReportOut(BaseModel):
     approved_income_transfer: float
     pending_count: int
     team_count: int
+    # Period P&L: all income − all spend
+    net_result: float = 0.0
+    # Period cash movement: cash income − spend paid from cash_on_hand
     cash_position: float
+    spend_from_cash: float = 0.0
+    spend_from_pocket: float = 0.0
     total_spendings: float = 0.0
     total_cash_held: float = 0.0
     by_category: list[CategoryTotal]

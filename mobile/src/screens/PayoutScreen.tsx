@@ -115,7 +115,10 @@ export function PayoutScreen({
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Settlements</Label>
-      <Sub>Expense payout clears my-pocket spendings. Income handover resets cash-on-hand cycle.</Sub>
+      <Sub>
+        Partial pays leave a remainder (balance after). Paying more than owed stores overpayment for
+        the next cycle. Taking cash cannot exceed held cash.
+      </Sub>
       <Btn
         title={busy ? "…" : "Pay all team spendings"}
         variant="secondary"

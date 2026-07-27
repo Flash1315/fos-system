@@ -15,6 +15,8 @@ type PayoutRow = {
   currency: string;
   payment_method: string;
   note: string;
+  overpayment?: number;
+  balance_after?: number;
   created_at: string;
 };
 
@@ -80,6 +82,8 @@ export function PayoutHistoryScreen({
             {"\n"}
             <Text style={styles.rowMeta}>
               {item.user_name} · {item.payment_method} · {formatWhen(item.created_at)}
+              {item.balance_after ? ` · left ${formatMoney(item.balance_after, item.currency)}` : ""}
+              {item.overpayment ? ` · overpay ${formatMoney(item.overpayment, item.currency)}` : ""}
               {item.note ? ` · ${item.note}` : ""}
             </Text>
           </Text>

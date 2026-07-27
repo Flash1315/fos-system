@@ -9,8 +9,8 @@ from app.models import MoneyRecord, Payout, PayoutKind, RecordKind, RecordStatus
 _effective_at = func.coalesce(MoneyRecord.occurred_at, MoneyRecord.created_at)
 
 
-def last_payout_at(db: Session, org_id: int, user_id: int, kind: PayoutKind):
-    row = (
+def last_payout(db: Session, org_id: int, user_id: int, kind: PayoutKind) -> Payout | None:
+    return (
         db.query(Payout)
         .filter(
             Payout.organization_id == org_id,
@@ -20,13 +20,19 @@ def last_payout_at(db: Session, org_id: int, user_id: int, kind: PayoutKind):
         .order_by(Payout.created_at.desc())
         .first()
     )
+
+
+def last_payout_at(db: Session, org_id: int, user_id: int, kind: PayoutKind):
+    row = last_payout(db, org_id, user_id, kind)
     return row.created_at if row else None
 
 
 def user_balance(db: Session, user: User) -> dict:
     org_id = user.organization_id
-    since_hand = last_payout_at(db, org_id, user.id, PayoutKind.income_handover)
-    since_pay = last_payout_at(db, org_id, user.id, PayoutKind.expense_payout)
+    hand_cut = last_payout(db, org_id, user.id, PayoutKind.income_handover)
+    pay_cut = last_payout(db, org_id, user.id, PayoutKind.expense_payout)
+    since_hand = hand_cut.created_at if hand_cut else None
+    since_pay = pay_cut.created_at if pay_cut else None
 
     def sum_income_cash() -> float:
         q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
@@ -55,21 +61,14 @@ def user_balance(db: Session, user: User) -> dict:
     income_cash = sum_income_cash()
     from_cash = sum_out(["cash_on_hand", ""], since_hand)
     spendings_raw = sum_out(["my_pocket"], since_pay)
-    overpay = 0.0
-    if since_pay is not None:
-        cut = (
-            db.query(Payout)
-            .filter(
-                Payout.organization_id == org_id,
-                Payout.user_id == user.id,
-                Payout.kind == PayoutKind.expense_payout,
-                Payout.created_at == since_pay,
-            )
-            .first()
-        )
-        if cut is not None:
-            overpay = float(cut.overpayment or 0)
-    spendings = max(0.0, spendings_raw - overpay)
+
+    carry_cash = float(hand_cut.balance_after or 0) if hand_cut is not None else 0.0
+    carry_spend = float(pay_cut.balance_after or 0) if pay_cut is not None else 0.0
+    overpay = float(pay_cut.overpayment or 0) if pay_cut is not None else 0.0
+
+    spendings = max(0.0, spendings_raw + carry_spend - overpay)
+    cash_on_hand = income_cash - from_cash + carry_cash
+
     pending = (
         db.query(func.count(MoneyRecord.id))
         .filter(
@@ -84,7 +83,7 @@ def user_balance(db: Session, user: User) -> dict:
         "user_id": user.id,
         "full_name": user.full_name,
         "role": user.role.value if hasattr(user.role, "value") else str(user.role),
-        "cash_on_hand": income_cash - from_cash,
+        "cash_on_hand": cash_on_hand,
         "spendings": spendings,
         "owed_to_employee": spendings,
         "pending_count": int(pending),

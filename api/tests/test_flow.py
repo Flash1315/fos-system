@@ -488,6 +488,18 @@ def test_password_and_settlement_request(client):
         },
     )
     eh = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    income = client.post(
+        "/records",
+        headers=eh,
+        json={
+            "kind": "income",
+            "amount": 8000,
+            "category": "Cash",
+            "payment_method": "cash",
+            "purpose": "Other",
+        },
+    ).json()["id"]
+    client.post(f"/records/{income}/decide", headers=h, json={"approve": True})
     req = client.post(
         "/payouts/requests",
         headers=eh,
@@ -501,6 +513,9 @@ def test_password_and_settlement_request(client):
     approved = client.post(f"/payouts/requests/{rid}/approve", headers=h)
     assert approved.status_code == 200, approved.text
     assert approved.json()["kind"] == "income_handover"
+    assert approved.json()["balance_after"] == 3000
+    bal = client.get("/records/balance/me", headers=eh).json()
+    assert bal["cash_on_hand"] == 3000
 
 
 def test_record_search(client):
@@ -896,3 +911,101 @@ def test_approve_rejects_insufficient_cash_on_hand(client):
     )
     assert pocket.status_code == 200
     assert pocket.json()["status"] == "approved"
+
+
+def test_partial_payout_keeps_remainder(client):
+    owner = _register(client, "flow-partial", "partial-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 10000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert rec.status_code == 200
+    pay = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "expense_payout", "amount": 4000, "payment_method": "cash"},
+    )
+    assert pay.status_code == 200, pay.text
+    assert pay.json()["balance_after"] == 6000
+    bal = client.get("/records/balance/me", headers=h).json()
+    assert bal["spendings"] == 6000
+
+    income = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 20000,
+            "category": "Cash",
+            "payment_method": "cash",
+            "approve_now": True,
+        },
+    )
+    assert income.status_code == 200
+    take = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "income_handover", "amount": 5000, "payment_method": "cash"},
+    )
+    assert take.status_code == 200, take.text
+    assert take.json()["balance_after"] == 15000
+    bal2 = client.get("/records/balance/me", headers=h).json()
+    assert bal2["cash_on_hand"] == 15000
+    too_much = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "income_handover", "amount": 999999, "payment_method": "cash"},
+    )
+    assert too_much.status_code == 400
+
+
+def test_report_source_aware_metrics(client):
+    owner = _register(client, "flow-src", "src-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 100000,
+            "category": "Cash",
+            "payment_method": "cash",
+            "approve_now": True,
+        },
+    )
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 10000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 7000,
+            "category": "Parts",
+            "payment_source": "cash_on_hand",
+            "approve_now": True,
+        },
+    )
+    report = client.get("/reports/org", headers=h).json()
+    assert report["spend_from_pocket"] == 10000
+    assert report["spend_from_cash"] == 7000
+    assert report["cash_position"] == 93000  # 100000 - 7000
+    assert report["net_result"] == 83000  # 100000 - 10000 - 7000

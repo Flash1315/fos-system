@@ -153,6 +153,25 @@ def org_report(
     fuel = sum_approved(RecordKind.fuel)
     income_cash = sum_approved(RecordKind.income, "cash")
     income_transfer = sum_approved(RecordKind.income, "transfer")
+
+    def sum_spend_source(sources: list[str]) -> float:
+        q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
+            MoneyRecord.organization_id == oid,
+            MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
+            MoneyRecord.status == RecordStatus.approved,
+            MoneyRecord.payment_source.in_(sources),
+        )
+        if since is not None:
+            q = q.filter(eff >= since)
+        if until is not None:
+            q = q.filter(eff <= until)
+        return float(q.scalar() or 0)
+
+    spend_from_cash = sum_spend_source(["cash_on_hand", ""])
+    spend_from_pocket = sum_spend_source(["my_pocket"])
+    net_result = income_cash + income_transfer - expense - fuel
+    cash_position = income_cash - spend_from_cash
+
     pending_q = db.query(func.count(MoneyRecord.id)).filter(
         MoneyRecord.organization_id == oid,
         MoneyRecord.status == RecordStatus.pending,
@@ -214,7 +233,10 @@ def org_report(
         approved_income_transfer=income_transfer,
         pending_count=int(pending),
         team_count=len(members),
-        cash_position=income_cash - expense - fuel,
+        net_result=net_result,
+        cash_position=cash_position,
+        spend_from_cash=spend_from_cash,
+        spend_from_pocket=spend_from_pocket,
         total_spendings=total_spendings,
         total_cash_held=total_cash_held,
         by_category=by_category,
@@ -230,6 +252,8 @@ def export_csv(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    import csv
+
     oid = user.organization_id
     since, until = _window(days, date_from, date_to)
     eff = _effective_at()
@@ -242,20 +266,55 @@ def export_csv(
     rows = q.order_by(MoneyRecord.created_at.asc()).limit(5000).all()
 
     buf = StringIO()
-    buf.write(
-        "type,id,kind,status,amount,currency,category,purpose,place,bike,"
-        "payment_source,payment_method,created_by,created_at,comment\n"
+    writer = csv.writer(buf)
+    writer.writerow(
+        [
+            "type",
+            "id",
+            "kind",
+            "status",
+            "amount",
+            "currency",
+            "category",
+            "purpose",
+            "place",
+            "bike",
+            "payment_source",
+            "payment_method",
+            "created_by",
+            "created_at",
+            "occurred_at",
+            "overpayment",
+            "balance_after",
+            "comment",
+        ]
     )
     for r in rows:
         creator = db.get(User, r.created_by)
-        name = (creator.full_name if creator else "").replace(",", " ")
-        comment = (r.comment or "").replace("\n", " ").replace(",", ";")
+        name = creator.full_name if creator else ""
         kind = r.kind.value if hasattr(r.kind, "value") else str(r.kind)
         status = r.status.value if hasattr(r.status, "value") else str(r.status)
-        buf.write(
-            f"record,{r.id},{kind},{status},{r.amount},{r.currency},"
-            f"{r.category},{r.purpose},{r.place},{r.bike},"
-            f"{r.payment_source},{r.payment_method},{name},{r.created_at.isoformat()},{comment}\n"
+        writer.writerow(
+            [
+                "record",
+                r.id,
+                kind,
+                status,
+                r.amount,
+                r.currency,
+                r.category,
+                r.purpose,
+                r.place,
+                r.bike,
+                r.payment_source,
+                r.payment_method,
+                name,
+                r.created_at.isoformat() if r.created_at else "",
+                r.occurred_at.isoformat() if r.occurred_at else "",
+                "",
+                "",
+                r.comment or "",
+            ]
         )
 
     pq = db.query(Payout).filter(Payout.organization_id == oid)
@@ -265,16 +324,35 @@ def export_csv(
         pq = pq.filter(Payout.created_at <= until)
     for p in pq.order_by(Payout.created_at.asc()).limit(2000).all():
         u = db.get(User, p.user_id)
-        name = (u.full_name if u else "").replace(",", " ")
+        name = u.full_name if u else ""
         pkind = p.kind.value if hasattr(p.kind, "value") else str(p.kind)
-        note = (p.note or "").replace("\n", " ").replace(",", ";")
-        buf.write(
-            f"payout,{p.id},{pkind},settled,{p.amount},{p.currency},"
-            f",,,,{p.payment_method},{name},{p.created_at.isoformat()},{note}\n"
+        writer.writerow(
+            [
+                "payout",
+                p.id,
+                pkind,
+                "settled",
+                p.amount,
+                p.currency,
+                "",
+                "",
+                "",
+                "",
+                "",
+                p.payment_method,
+                name,
+                p.created_at.isoformat() if p.created_at else "",
+                "",
+                float(p.overpayment or 0),
+                float(p.balance_after or 0),
+                p.note or "",
+            ]
         )
 
+    stamp = (date_from or date_to or (f"{days}d" if days else "all"))
+    filename = f"fos-export-{stamp}.csv".replace("/", "-")
     return PlainTextResponse(
         buf.getvalue(),
         media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="fos-export.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

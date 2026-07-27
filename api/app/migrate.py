@@ -41,4 +41,10 @@ def ensure_money_record_columns() -> None:
             ("occurred_at", "DATETIME"),
         ],
     )
-    _ensure_columns("payouts", [("overpayment", "FLOAT DEFAULT 0")])
+    _ensure_columns(
+        "payouts",
+        [
+            ("overpayment", "FLOAT DEFAULT 0"),
+            ("balance_after", "FLOAT DEFAULT 0"),
+        ],
+    )

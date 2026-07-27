@@ -48,7 +48,10 @@ export type OrgReport = {
   approved_income_transfer: number;
   pending_count: number;
   team_count: number;
+  net_result?: number;
   cash_position: number;
+  spend_from_cash?: number;
+  spend_from_pocket?: number;
   total_spendings?: number;
   total_cash_held?: number;
   by_category: { kind: string; category: string; total: number }[];
@@ -399,6 +402,8 @@ export function listMyPayouts() {
       currency: string;
       payment_method: string;
       note: string;
+      overpayment?: number;
+      balance_after?: number;
       created_at: string;
     }[]
   >("/payouts/mine");
@@ -415,6 +420,8 @@ export function listOrgPayouts() {
       currency: string;
       payment_method: string;
       note: string;
+      overpayment?: number;
+      balance_after?: number;
       created_at: string;
     }[]
   >("/payouts/org");

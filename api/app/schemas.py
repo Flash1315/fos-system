@@ -59,6 +59,7 @@ class RecordCreate(BaseModel):
     category: str = ""
     purpose: str = ""
     place: str = ""
+    bike: str = ""
     comment: str = ""
     photo_url: str = ""
     liters: Optional[float] = None
@@ -77,6 +78,7 @@ class RecordOut(BaseModel):
     category: str
     purpose: str = ""
     place: str = ""
+    bike: str = ""
     comment: str
     photo_url: str
     liters: Optional[float]

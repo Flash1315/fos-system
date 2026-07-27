@@ -23,6 +23,7 @@ export type MoneyRecord = {
   category: string;
   purpose?: string;
   place?: string;
+  bike?: string;
   comment: string;
   photo_url?: string;
   liters?: number | null;
@@ -208,6 +209,7 @@ export function createRecord(body: {
   category?: string;
   purpose?: string;
   place?: string;
+  bike?: string;
   comment?: string;
   photo_url?: string;
   payment_method?: string;

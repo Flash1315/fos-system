@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { myBalance, myOrg, myRecords, type MoneyRecord, type User } from "../api";
+import { myBalance, myOrg, myRecords, pendingRecords, type MoneyRecord, type User } from "../api";
 import { Brand, Btn, Card, Chip, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
@@ -45,7 +45,16 @@ export function HomeScreen({
       setBalance(formatMoney(b.cash_on_hand, b.currency));
       setSpendings(formatMoney(b.spendings ?? 0, b.currency));
       setOrgName(org.name);
-      setPendingCount(b.pending_count);
+      if (user?.role === "owner" || user?.role === "manager") {
+        try {
+          const pend = await pendingRecords();
+          setPendingCount(pend.length);
+        } catch {
+          setPendingCount(b.pending_count);
+        }
+      } else {
+        setPendingCount(b.pending_count);
+      }
       setRows(list);
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Load failed");

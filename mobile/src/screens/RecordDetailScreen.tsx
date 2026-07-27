@@ -60,8 +60,24 @@ export function RecordDetailScreen({
             </Text>
             <Label>Amount</Label>
             <Text style={styles.big}>{formatMoney(rec.amount, rec.currency)}</Text>
+            <Label>Purpose</Label>
+            <Text style={styles.line}>{rec.purpose || "—"}</Text>
             <Label>Category</Label>
             <Text style={styles.line}>{rec.category || "—"}</Text>
+            <Label>Place</Label>
+            <Text style={styles.line}>{rec.place || "—"}</Text>
+            {!!rec.bike && (
+              <>
+                <Label>Bike</Label>
+                <Text style={styles.line}>{rec.bike}</Text>
+              </>
+            )}
+            {!!rec.payment_source && (
+              <>
+                <Label>Payment source</Label>
+                <Text style={styles.line}>{rec.payment_source === "my_pocket" ? "My pocket" : "Cash on hand"}</Text>
+              </>
+            )}
             <Label>By</Label>
             <Text style={styles.line}>{rec.created_by_name || rec.created_by} · {formatWhen(rec.created_at)}</Text>
             {!!rec.client_name && (

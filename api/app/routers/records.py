@@ -56,6 +56,7 @@ def create_record(
         category=body.category,
         purpose=body.purpose,
         place=body.place,
+        bike=body.bike,
         comment=body.comment,
         photo_url=body.photo_url,
         liters=body.liters,

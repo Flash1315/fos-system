@@ -52,23 +52,28 @@ export function AuthScreen({
     <Screen scroll>
       <Brand />
       <Sub>Field money. Clear books.</Sub>
+      <Sub>
+        {mode === "login"
+          ? "First time? Tap Register below to create your company."
+          : "Creates your organization and owner account."}
+      </Sub>
       <Card>
         <Label>Organization slug</Label>
         <Field autoCapitalize="none" value={orgSlug} onChangeText={setOrgSlug} placeholder="my-company" />
         {mode === "register" && (
           <>
             <Label>Company name</Label>
-            <Field value={orgName} onChangeText={setOrgName} />
+            <Field value={orgName} onChangeText={setOrgName} placeholder="My Company" />
             <Label>Currency</Label>
             <Field autoCapitalize="characters" value={currency} onChangeText={setCurrency} placeholder="IDR" />
             <Label>Your name</Label>
-            <Field value={name} onChangeText={setName} />
+            <Field value={name} onChangeText={setName} placeholder="Owner name" />
           </>
         )}
         <Label>Email</Label>
-        <Field autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
+        <Field autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="you@example.com" />
         <Label>Password</Label>
-        <Field secureTextEntry value={password} onChangeText={setPassword} />
+        <Field secureTextEntry value={password} onChangeText={setPassword} placeholder="min 6 characters" />
         <Btn title={busy ? "…" : mode === "login" ? "Log in" : "Create company"} onPress={submit} disabled={busy} />
         <LinkText onPress={() => setMode(mode === "login" ? "register" : "login")}>
           {mode === "login" ? "New company? Register" : "Have an account? Log in"}

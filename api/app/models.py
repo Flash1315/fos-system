@@ -78,6 +78,7 @@ class MoneyRecord(Base):
     category: Mapped[str] = mapped_column(String(120), default="")
     purpose: Mapped[str] = mapped_column(String(80), default="")  # Rental / Lesson / Office / Other
     place: Mapped[str] = mapped_column(String(200), default="")
+    bike: Mapped[str] = mapped_column(String(120), default="")
     comment: Mapped[str] = mapped_column(Text, default="")
     photo_url: Mapped[str] = mapped_column(String(500), default="")
     # fuel extras

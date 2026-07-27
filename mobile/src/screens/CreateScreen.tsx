@@ -26,6 +26,7 @@ export function CreateScreen({
   const [purposes, setPurposes] = useState<string[]>(["Rental", "Lesson", "Office", "Other"]);
   const [purpose, setPurpose] = useState("Other");
   const [place, setPlace] = useState("");
+  const [bike, setBike] = useState("");
   const [comment, setComment] = useState("");
   const [liters, setLiters] = useState("");
   const [odometer, setOdometer] = useState("");
@@ -33,6 +34,8 @@ export function CreateScreen({
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer">("cash");
   const [paymentSource, setPaymentSource] = useState<"my_pocket" | "cash_on_hand">("my_pocket");
   const [photoUrl, setPhotoUrl] = useState("");
+
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -90,6 +93,10 @@ export function CreateScreen({
       Alert.alert("Fos", "Enter a valid amount");
       return;
     }
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
     setBusy(true);
     try {
       await createRecord({
@@ -98,6 +105,7 @@ export function CreateScreen({
         category,
         purpose,
         place,
+        bike,
         comment,
         photo_url: photoUrl,
         payment_method: kind === "income" ? paymentMethod : "",
@@ -113,6 +121,46 @@ export function CreateScreen({
       setBusy(false);
     }
   };
+
+  if (confirming) {
+    const value = Number(amount.replace(",", ".") || 0);
+    return (
+      <Screen scroll>
+        <TopBar onBack={() => setConfirming(false)} onCancel={onBack} />
+        <Label>Confirm record</Label>
+        <Label>Kind</Label>
+        <Field editable={false} value={kind} />
+        <Label>Purpose</Label>
+        <Field editable={false} value={purpose} />
+        <Label>Amount</Label>
+        <Field editable={false} value={String(value)} />
+        <Label>Category</Label>
+        <Field editable={false} value={category || "—"} />
+        <Label>Place</Label>
+        <Field editable={false} value={place || "—"} />
+        <Label>Bike</Label>
+        <Field editable={false} value={bike || "—"} />
+        {kind !== "income" && (
+          <>
+            <Label>Payment source</Label>
+            <Field editable={false} value={paymentSource === "my_pocket" ? "My pocket" : "Cash on hand"} />
+          </>
+        )}
+        {kind === "income" && (
+          <>
+            <Label>Client / method</Label>
+            <Field editable={false} value={`${clientName || "—"} · ${paymentMethod}`} />
+          </>
+        )}
+        <Label>Comment</Label>
+        <Field editable={false} value={comment || "—"} />
+        <Label>Photo</Label>
+        <Field editable={false} value={photoUrl ? "Attached" : "None"} />
+        <Btn title={busy ? "…" : "Confirm & submit"} onPress={submit} disabled={busy} />
+        <Btn title="Back to edit" variant="ghost" onPress={() => setConfirming(false)} />
+      </Screen>
+    );
+  }
 
   return (
     <Screen scroll>
@@ -138,7 +186,13 @@ export function CreateScreen({
         ))}
       </View>
       <Label>Place</Label>
-      <Field value={place} onChangeText={setPlace} placeholder="Optional" />
+      <Field value={place} onChangeText={setPlace} placeholder="Station / shop (optional)" />
+      {(kind === "fuel" || kind === "expense") && (
+        <>
+          <Label>Bike</Label>
+          <Field value={bike} onChangeText={setBike} placeholder="Optional bike name" />
+        </>
+      )}
       {kind !== "income" && (
         <>
           <Label>Payment source</Label>
@@ -172,7 +226,7 @@ export function CreateScreen({
       <Field value={comment} onChangeText={setComment} />
       <Btn title={photoUrl ? "Photo attached ✓ (library)" : "Photo from library"} onPress={() => pickPhoto(false)} variant="ghost" disabled={busy} />
       <Btn title="Photo from camera" onPress={() => pickPhoto(true)} variant="ghost" disabled={busy} />
-      <Btn title={busy ? "…" : "Submit for approval"} onPress={submit} disabled={busy} />
+      <Btn title={busy ? "…" : "Review"} onPress={submit} disabled={busy} />
     </Screen>
   );
 }

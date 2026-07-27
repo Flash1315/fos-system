@@ -11,6 +11,7 @@ def ensure_money_record_columns() -> None:
         ("purpose", "VARCHAR(80) DEFAULT ''"),
         ("place", "VARCHAR(200) DEFAULT ''"),
         ("payment_source", "VARCHAR(40) DEFAULT ''"),
+        ("bike", "VARCHAR(120) DEFAULT ''"),
     ]
     with engine.begin() as conn:
         dialect = engine.dialect.name

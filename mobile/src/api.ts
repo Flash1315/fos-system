@@ -47,6 +47,8 @@ export type OrgReport = {
   pending_count: number;
   team_count: number;
   cash_position: number;
+  total_spendings?: number;
+  total_cash_held?: number;
   by_category: { kind: string; category: string; total: number }[];
 };
 
@@ -246,6 +248,13 @@ export function decideRecord(id: number, approve: boolean, note = "") {
   return request<MoneyRecord>(`/records/${id}/decide`, {
     method: "POST",
     body: JSON.stringify({ approve, note }),
+  });
+}
+
+export function decideBatch(ids: number[], approve: boolean, note = "") {
+  return request<MoneyRecord[]>("/records/decide-batch", {
+    method: "POST",
+    body: JSON.stringify({ ids, approve, note }),
   });
 }
 

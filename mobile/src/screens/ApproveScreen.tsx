@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { decideRecord, pendingRecords, type MoneyRecord } from "../api";
+import { decideBatch, decideRecord, pendingRecords, type MoneyRecord } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Row, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
@@ -44,10 +44,26 @@ export function ApproveScreen({
     }
   };
 
+  const approveAll = async () => {
+    if (!rows.length) return;
+    setBusy(true);
+    try {
+      await decideBatch(rows.map((r) => r.id), true);
+      await reload();
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Screen>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Text style={styles.title}>Approvals</Text>
+      {rows.length > 0 && (
+        <Btn title={busy ? "…" : `Approve all (${rows.length})`} onPress={approveAll} disabled={busy} />
+      )}
       <FlatList
         data={rows}
         keyExtractor={(item) => String(item.id)}

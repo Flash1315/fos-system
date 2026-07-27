@@ -30,6 +30,10 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
               {report.cash_position.toLocaleString()} {report.currency}
             </Text>
             <Sub>{report.pending_count} pending · {report.team_count} active teammates</Sub>
+            <Label>Team held cash</Label>
+            <Text style={styles.line}>{(report.total_cash_held ?? 0).toLocaleString()}</Text>
+            <Label>Team spendings owed</Label>
+            <Text style={styles.line}>{(report.total_spendings ?? 0).toLocaleString()}</Text>
           </Card>
           <Card>
             <Label>Approved totals</Label>

@@ -107,6 +107,12 @@ class DecideIn(BaseModel):
     note: str = ""
 
 
+class DecideBatchIn(BaseModel):
+    ids: list[int] = Field(min_length=1)
+    approve: bool
+    note: str = ""
+
+
 class MemberOut(BaseModel):
     id: int
     email: EmailStr
@@ -137,6 +143,8 @@ class OrgReportOut(BaseModel):
     pending_count: int
     team_count: int
     cash_position: float
+    total_spendings: float = 0.0
+    total_cash_held: float = 0.0
     by_category: list[CategoryTotal]
 
 

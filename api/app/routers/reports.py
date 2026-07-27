@@ -6,6 +6,7 @@ from app.auth import require_roles
 from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
 from app.schemas import OrgReportOut, CategoryTotal
+from app.services.balances import user_balance
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -39,12 +40,14 @@ def org_report(
         .scalar()
         or 0
     )
-    team = (
-        db.query(func.count(User.id))
+    members = (
+        db.query(User)
         .filter(User.organization_id == oid, User.is_active.is_(True))
-        .scalar()
-        or 0
+        .all()
     )
+    team_bals = [user_balance(db, m) for m in members]
+    total_spendings = sum(b["spendings"] for b in team_bals)
+    total_cash_held = sum(b["cash_on_hand"] for b in team_bals)
 
     cat_rows = (
         db.query(
@@ -71,7 +74,9 @@ def org_report(
         approved_income_cash=income_cash,
         approved_income_transfer=income_transfer,
         pending_count=int(pending),
-        team_count=int(team),
+        team_count=len(members),
         cash_position=income_cash - expense - fuel,
+        total_spendings=total_spendings,
+        total_cash_held=total_cash_held,
         by_category=by_category,
     )

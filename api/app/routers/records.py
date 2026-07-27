@@ -8,7 +8,7 @@ from app.auth import get_current_user, require_roles
 from app.categories import PAYMENT_SOURCES, PURPOSES, categories_for
 from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
-from app.schemas import BalanceOut, CategoriesOut, DecideIn, RecordCreate, RecordOut
+from app.schemas import BalanceOut, CategoriesOut, DecideBatchIn, DecideIn, RecordCreate, RecordOut
 from app.services.balances import user_balance
 
 router = APIRouter(prefix="/records", tags=["records"])
@@ -155,6 +155,33 @@ def team_balances(
         .all()
     )
     return [user_balance(db, m) for m in members]
+
+
+
+@router.post("/decide-batch", response_model=list[RecordOut])
+def decide_batch(
+    body: DecideBatchIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    """Approve/reject many pending records in one call."""
+    out = []
+    for rid in body.ids:
+        rec = db.get(MoneyRecord, rid)
+        if not rec or rec.organization_id != user.organization_id:
+            continue
+        if rec.status != RecordStatus.pending:
+            continue
+        rec.status = RecordStatus.approved if body.approve else RecordStatus.rejected
+        rec.decided_at = _utcnow()
+        rec.decided_by = user.id
+        if body.note:
+            rec.comment = (rec.comment + f"\n[review] {body.note}").strip()
+        out.append(rec)
+    db.commit()
+    for rec in out:
+        db.refresh(rec)
+    return [_record_out(db, r) for r in out]
 
 
 @router.get("/{record_id}", response_model=RecordOut)

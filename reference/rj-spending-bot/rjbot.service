@@ -1,0 +1,30 @@
+# Copy to server: /etc/systemd/system/rjbot.service
+# Replace YOUR_* placeholders, then:
+#   systemctl daemon-reload && systemctl enable rjbot && systemctl restart rjbot
+#
+# Required for full bot:
+#   BOT_TOKEN      — Telegram bot token
+#   GEMINI_API_KEY — receipts, passport OCR, rental AI (Google AI Studio)
+#   OPENAI_API_KEY — voice → text in Book bike (Whisper)
+#
+# Optional: restore old keys from backup on server:
+#   cat /etc/systemd/system/rjbot.service.bak
+
+[Unit]
+Description=RIDE&JOY Finance Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/rjbot
+Environment=BOT_TOKEN=YOUR_BOT_TOKEN_HERE
+Environment=GEMINI_API_KEY=YOUR_GEMINI_API_KEY_HERE
+Environment=OPENAI_API_KEY=YOUR_OPENAI_API_KEY_HERE
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/root/rjbot/venv/bin/python bot.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,32 @@
+# RJ Spending Bot — Rules
+
+## MAIN RULE
+Make only surgical, targeted changes. Never rewrite entire functions or files.
+
+## FORBIDDEN
+- Rewriting existing functions entirely
+- Changing code unrelated to current task
+- Removing existing logic without explicit instruction
+- Changing file structure
+- Adding new imports unless required for the task
+- Changing chat IDs or routing logic unless explicitly asked
+
+## ALLOWED
+- Adding new lines inside existing functions
+- Fixing specific logic surgically
+- Adding new functions at end of file
+- Changing only what is explicitly specified in the task
+
+## CODE STYLE
+- Language: English only everywhere
+- Every step/screen must have Back and Cancel buttons
+- Superadmin sees everything
+- Log errors via print()
+
+## NOTIFICATIONS ROUTING
+- Lesson changes (cancel/reschedule/add): ONLY to LESSON_GROUP_CHAT_ID with instructor tag
+- Lesson reminders for instructors: ONLY to LESSON_GROUP_CHAT_ID
+- GPS alerts: ONLY to SUPERADMIN_GROUP_CHAT_ID
+- Financial alerts: ONLY to MANAGER_GRP_CHAT_ID and SUPERADMIN_GROUP_CHAT_ID
+- SOS: SUPERADMIN_GROUP_CHAT_ID and LESSON_GROUP_CHAT_ID
+- Never mix routing without explicit instruction

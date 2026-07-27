@@ -1,0 +1,22 @@
+name: Deploy to server
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull and restart on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /root/rjbot
+            git pull origin dev
+            /root/rjbot/venv/bin/pip install -r requirements.txt -q
+            systemctl restart rjbot

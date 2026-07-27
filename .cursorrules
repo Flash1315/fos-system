@@ -3,9 +3,11 @@
 ## IDENTITY
 - Product name: **Fos**
 - Repo: `Flash1315/fos-system`
-- Separate sellable product. NOT Ride & Joy branded. NOT part of RJ-Spending-bot.
-- Never couple Fos to Google Sheets, Telegram chat IDs, or RJ bot internals.
-- RJ may become a tenant/customer later via API — not by merging codebases.
+- Separate sellable product. NOT Ride & Joy branded in the app UI.
+- Full RJ bot snapshot for domain knowledge: `reference/rj-spending-bot/` (see `docs/RJ_BOT_REFERENCE.md`).
+- Treat `reference/` as **read-only** unless the user asks to refresh the snapshot.
+- Never wire Fos runtime to Google Sheets, Telegram chat IDs, or RJ bot internals.
+- RJ may become a tenant/customer later via API — do not merge bot runtime into `api/` / `mobile/`.
 
 ## MAIN RULE
 Make only surgical, targeted changes. Never rewrite entire functions or files.
@@ -16,7 +18,8 @@ Make only surgical, targeted changes. Never rewrite entire functions or files.
 - Removing existing logic without explicit instruction
 - Changing monorepo structure (`api/`, `mobile/`) without explicit ask
 - Adding new imports unless required for the task
-- Mixing Fos with RJ-Spending-bot or deploying Fos into `/root/rjbot`
+- Deploying Fos into `/root/rjbot` or running `reference/rj-spending-bot` as production
+- Copying Sheets/Telegram/chat-ID logic from `reference/` into Fos API without an explicit migration task
 - Hardcoding a single-company workflow (always multi-tenant by `organization_id`)
 - Skipping approval flow for money records unless explicitly asked
 - Storing plaintext passwords
@@ -50,7 +53,12 @@ Make only surgical, targeted changes. Never rewrite entire functions or files.
 - v1 in scope: orgs, invite, roles, expense/fuel/income, approvals, cash on hand, Expo shell
 - Out of v1 unless explicitly asked: photo→S3/R2, web admin/billing, Telegram bridge, FX, white-label, GPS, calendar/CRM from RJ
 
+## RJ REFERENCE (required reading for domain)
+- `docs/RJ_BOT_REFERENCE.md` — how to use the snapshot
+- `reference/rj-spending-bot/CONTEXT.md` — full RJ bot context
+- Re-implement features in Fos multi-tenant SQL/API style; do not paste aiogram handlers into Expo/API
+
 ## COMMITS / PRS
 - Branch names: `cursor/<descriptive-name>-e418` when using Cursor cloud agents
 - Prefer small commits; English commit messages
-- Do not invent RJ notification routing rules here — they do not apply
+- RJ Telegram notification routing applies only inside `reference/`; not to Fos app code

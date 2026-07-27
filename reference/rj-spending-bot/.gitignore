@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+credentials.json
+token.json
+token_drive.pickle
+*.pickle
+lesson_snapshot.json
+rental_progress.json
+lesson_alerts.json
+oauth_credentials.json
+rjbot.zip
+rjbot_v2.zip
+rjbot/

@@ -3,15 +3,17 @@
 **Fos** — multi-tenant field expenses for any small team.  
 Mobile (Expo) + API. Built to sell; Ride & Joy can be the first customer later.
 
-> Full product logic & rules: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Agent rules: [`.cursorrules`](.cursorrules) · [`AGENTS.md`](AGENTS.md)
+> Product: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Rules: [`.cursorrules`](.cursorrules) · [`AGENTS.md`](AGENTS.md)  
+> RJ bot knowledge: [`docs/RJ_BOT_REFERENCE.md`](docs/RJ_BOT_REFERENCE.md) · snapshot [`reference/rj-spending-bot/`](reference/rj-spending-bot/)
 
 ## Monorepo
 
 ```
 fos-system/
-  api/       FastAPI + SQLAlchemy (SQLite locally, Postgres ready)
-  mobile/    Expo (React Native) app
-  docs/      Product specification
+  api/                        FastAPI + SQLAlchemy (ship)
+  mobile/                     Expo app (ship)
+  docs/                       Fos + RJ reference guides
+  reference/rj-spending-bot/  Full RJ bot snapshot (read-only knowledge)
 ```
 
 ## Quick start — API

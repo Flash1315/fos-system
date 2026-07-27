@@ -6,6 +6,11 @@ api/.env
 api/uploads/
 *.pyc
 
+# Secrets (never commit)
+credentials.json
+**/credentials.json
+reference/**/.env
+
 # Node / Expo
 mobile/node_modules/
 mobile/.expo/

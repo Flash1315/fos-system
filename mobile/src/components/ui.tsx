@@ -1,6 +1,8 @@
 import React from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -31,7 +33,12 @@ export function Screen({
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
-      {body}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        {body}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

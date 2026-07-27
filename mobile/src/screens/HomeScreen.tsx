@@ -29,6 +29,7 @@ export function HomeScreen({
 }) {
   const [balance, setBalance] = useState("—");
   const [orgName, setOrgName] = useState("");
+  const [pendingCount, setPendingCount] = useState(0);
   const [rows, setRows] = useState<MoneyRecord[]>([]);
   const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected">("");
   const [refreshing, setRefreshing] = useState(false);
@@ -42,6 +43,7 @@ export function HomeScreen({
       ]);
       setBalance(formatMoney(b.cash_on_hand, b.currency));
       setOrgName(org.name);
+      setPendingCount(b.pending_count);
       setRows(list);
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Load failed");
@@ -73,7 +75,13 @@ export function HomeScreen({
       </Card>
       <Row>
         <Btn title="New record" onPress={onCreate} />
-        {isManager && <Btn title="Approvals" onPress={onApprove} variant="secondary" />}
+        {isManager && (
+          <Btn
+            title={pendingCount > 0 ? `Approvals (${pendingCount})` : "Approvals"}
+            onPress={onApprove}
+            variant="secondary"
+          />
+        )}
       </Row>
       {isManager && (
         <Row>

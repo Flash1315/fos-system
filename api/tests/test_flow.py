@@ -558,3 +558,36 @@ def test_batch_pay_all_spendings(client):
     assert len(batch.json()) >= 1
     assert any(x["user_id"] == uid and x["amount"] == 8000 for x in batch.json())
     assert client.get("/records/balance/me", headers=h).json()["spendings"] == 0
+
+
+def test_batch_take_all_cash_and_my_requests(client):
+    owner = _register(client, "flow-batch-cash", "bcash-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rid = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 15000,
+            "category": "Other",
+            "payment_method": "cash",
+            "purpose": "Other",
+        },
+    ).json()["id"]
+    client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
+    assert client.get("/records/balance/me", headers=h).json()["cash_on_hand"] == 15000
+
+    req = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "income_handover", "amount": 15000, "note": "eod"},
+    )
+    assert req.status_code == 200
+    mine = client.get("/payouts/requests/mine", headers=h)
+    assert mine.status_code == 200
+    assert any(x["id"] == req.json()["id"] for x in mine.json())
+
+    batch = client.post("/payouts/batch-cash?payment_method=cash", headers=h)
+    assert batch.status_code == 200, batch.text
+    assert len(batch.json()) >= 1
+    assert client.get("/records/balance/me", headers=h).json()["cash_on_hand"] == 0

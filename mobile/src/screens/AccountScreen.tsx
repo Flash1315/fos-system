@@ -3,6 +3,7 @@ import { Alert, View, StyleSheet } from "react-native";
 import {
   changePassword,
   listSettlementRequests,
+  listMySettlementRequests,
   myBalance,
   requestSettlement,
   approveSettlementRequest,
@@ -10,6 +11,15 @@ import {
   type User,
 } from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
+
+type ReqRow = {
+  id: number;
+  user_name: string;
+  kind: string;
+  amount: number;
+  note: string;
+  status?: string;
+};
 
 export function AccountScreen({
   user,
@@ -28,11 +38,15 @@ export function AccountScreen({
   const [kind, setKind] = useState<"expense_payout" | "income_handover">("income_handover");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [requests, setRequests] = useState<
-    { id: number; user_name: string; kind: string; amount: number; note: string }[]
-  >([]);
+  const [requests, setRequests] = useState<ReqRow[]>([]);
+  const [mine, setMine] = useState<ReqRow[]>([]);
 
   const reloadRequests = async () => {
+    try {
+      setMine(await listMySettlementRequests());
+    } catch {
+      setMine([]);
+    }
     if (!isManager) return;
     try {
       setRequests(await listSettlementRequests());
@@ -82,6 +96,7 @@ export function AccountScreen({
       await requestSettlement({ kind, amount: value, note });
       Alert.alert("Fos", "Settlement request sent to managers");
       setNote("");
+      await reloadRequests();
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
@@ -120,9 +135,41 @@ export function AccountScreen({
       <Field value={note} onChangeText={setNote} placeholder="Optional note" />
       <Btn title={busy ? "…" : "Send request"} onPress={onRequest} disabled={busy} />
 
+      <Label>My requests</Label>
+      {mine.length === 0 ? (
+        <Sub>None yet</Sub>
+      ) : (
+        mine.map((r) => (
+          <View key={r.id} style={styles.card}>
+            <Sub>
+              {r.kind} · {r.amount.toLocaleString()} · {r.status || "pending"}
+              {r.note ? ` · ${r.note}` : ""}
+            </Sub>
+            {r.status === "pending" && (
+              <Btn
+                title="Cancel request"
+                variant="ghost"
+                disabled={busy}
+                onPress={async () => {
+                  setBusy(true);
+                  try {
+                    await cancelSettlementRequest(r.id);
+                    await reloadRequests();
+                  } catch (e) {
+                    Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              />
+            )}
+          </View>
+        ))
+      )}
+
       {isManager && (
         <>
-          <Label>Pending requests</Label>
+          <Label>Team pending requests</Label>
           {requests.length === 0 ? (
             <Sub>None</Sub>
           ) : (

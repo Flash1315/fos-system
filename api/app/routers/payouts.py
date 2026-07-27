@@ -214,6 +214,70 @@ def batch_pay_all_spendings(
     return out
 
 
+@router.post("/batch-cash", response_model=list[PayoutOut])
+def batch_take_all_cash(
+    payment_method: str = "cash",
+    db: Session = Depends(get_db),
+    manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    """Create income_handover for every teammate with cash_on_hand > 0."""
+    members = (
+        db.query(User)
+        .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
+        .all()
+    )
+    out: list[PayoutOut] = []
+    for m in members:
+        bal = user_balance(db, m)
+        held = float(bal.get("cash_on_hand") or 0)
+        if held <= 0:
+            continue
+        out.append(
+            create_payout(
+                PayoutCreate(
+                    user_id=m.id,
+                    kind=PayoutKind.income_handover,
+                    amount=held,
+                    payment_method=payment_method,
+                    note="batch take all cash on hand",
+                ),
+                db=db,
+                manager=manager,
+            )
+        )
+    return out
+
+
+@router.get("/requests/mine", response_model=list[SettlementRequestOut])
+def my_settlement_requests(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    rows = (
+        db.query(SettlementRequest)
+        .filter(
+            SettlementRequest.organization_id == user.organization_id,
+            SettlementRequest.user_id == user.id,
+        )
+        .order_by(SettlementRequest.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return [
+        SettlementRequestOut(
+            id=r.id,
+            user_id=r.user_id,
+            user_name=user.full_name,
+            kind=r.kind,
+            amount=r.amount,
+            note=r.note,
+            status=r.status,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
 @router.post("/requests", response_model=SettlementRequestOut)
 def request_settlement(
     body: SettlementRequestIn,

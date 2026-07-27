@@ -21,6 +21,7 @@ export function ApproveScreen({
   const [rows, setRows] = useState<MoneyRecord[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [rejectId, setRejectId] = useState<number | null>(null);
+  const [rejectAllOpen, setRejectAllOpen] = useState(false);
 
   const reload = async () => {
     try {
@@ -48,7 +49,10 @@ export function ApproveScreen({
     if (!rows.length) return;
     setBusy(true);
     try {
-      await decideBatch(rows.map((r) => r.id), true);
+      await decideBatch(
+        rows.map((r) => r.id),
+        true,
+      );
       await reload();
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -57,11 +61,15 @@ export function ApproveScreen({
     }
   };
 
-  const rejectAll = async () => {
+  const rejectAll = async (note: string) => {
     if (!rows.length) return;
     setBusy(true);
     try {
-      await decideBatch(rows.map((r) => r.id), false, "batch reject");
+      await decideBatch(
+        rows.map((r) => r.id),
+        false,
+        note || "batch reject",
+      );
       await reload();
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -76,8 +84,17 @@ export function ApproveScreen({
       <Text style={styles.title}>Approvals</Text>
       {rows.length > 0 && (
         <Row>
-          <Btn title={busy ? "…" : `Approve all (${rows.length})`} onPress={approveAll} disabled={busy} />
-          <Btn title="Reject all" variant="danger" onPress={rejectAll} disabled={busy} />
+          <Btn
+            title={busy ? "…" : `Approve all (${rows.length})`}
+            onPress={approveAll}
+            disabled={busy}
+          />
+          <Btn
+            title="Reject all"
+            variant="danger"
+            onPress={() => setRejectAllOpen(true)}
+            disabled={busy}
+          />
         </Row>
       )}
       <FlatList
@@ -103,12 +120,21 @@ export function ApproveScreen({
             <Text style={styles.rowMeta}>
               {item.created_by_name || "—"} · {item.category || item.comment || "—"}
               {item.purpose ? ` · ${item.purpose}` : ""}
-              {item.payment_source === "my_pocket" ? " · my pocket" : item.payment_source === "cash_on_hand" ? " · cash" : ""}
+              {item.payment_source === "my_pocket"
+                ? " · my pocket"
+                : item.payment_source === "cash_on_hand"
+                  ? " · cash"
+                  : ""}
             </Text>
             <Text style={styles.rowMeta}>{formatWhen(item.created_at)}</Text>
             <Row>
               <Btn title="Approve" disabled={busy} onPress={() => runDecide(item.id, true)} />
-              <Btn title="Reject" variant="danger" disabled={busy} onPress={() => setRejectId(item.id)} />
+              <Btn
+                title="Reject"
+                variant="danger"
+                disabled={busy}
+                onPress={() => setRejectId(item.id)}
+              />
             </Row>
           </View>
         )}
@@ -121,6 +147,15 @@ export function ApproveScreen({
           const id = rejectId;
           setRejectId(null);
           if (id != null) await runDecide(id, false, note);
+        }}
+      />
+      <NoteModal
+        visible={rejectAllOpen}
+        title="Reject all pending"
+        onCancel={() => setRejectAllOpen(false)}
+        onSubmit={async (note) => {
+          setRejectAllOpen(false);
+          await rejectAll(note);
         }}
       />
     </Screen>

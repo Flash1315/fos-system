@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import {
   batchPaySpendings,
+  batchTakeCash,
   createPayout,
   listMembers,
   teamBalances,
@@ -96,6 +97,20 @@ export function PayoutScreen({
     }
   };
 
+  const takeAllCash = async () => {
+    setBusy(true);
+    try {
+      const rows = (await batchTakeCash(method)) as unknown[];
+      Alert.alert("Fos", `Took cash from ${Array.isArray(rows) ? rows.length : 0} teammate(s)`);
+      await reloadBalances();
+      onDone();
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
@@ -105,6 +120,12 @@ export function PayoutScreen({
         title={busy ? "…" : "Pay all team spendings"}
         variant="secondary"
         onPress={payAllSpendings}
+        disabled={busy}
+      />
+      <Btn
+        title={busy ? "…" : "Take all team cash"}
+        variant="secondary"
+        onPress={takeAllCash}
         disabled={busy}
       />
       <Label>Type</Label>

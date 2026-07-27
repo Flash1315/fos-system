@@ -411,6 +411,27 @@ export function batchPaySpendings(payment_method = "cash") {
   });
 }
 
+export function batchTakeCash(payment_method = "cash") {
+  return request(`/payouts/batch-cash?payment_method=${encodeURIComponent(payment_method)}`, {
+    method: "POST",
+  });
+}
+
+export function listMySettlementRequests() {
+  return request<
+    {
+      id: number;
+      user_id: number;
+      user_name: string;
+      kind: string;
+      amount: number;
+      note: string;
+      status: string;
+      created_at: string;
+    }[]
+  >("/payouts/requests/mine");
+}
+
 export function requestSettlement(body: {
   kind: "expense_payout" | "income_handover";
   amount: number;

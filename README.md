@@ -3,12 +3,15 @@
 **Fos** — multi-tenant field expenses for any small team.  
 Mobile (Expo) + API. Built to sell; Ride & Joy can be the first customer later.
 
+> Full product logic & rules: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Agent rules: [`.cursorrules`](.cursorrules) · [`AGENTS.md`](AGENTS.md)
+
 ## Monorepo
 
 ```
 fos-system/
   api/       FastAPI + SQLAlchemy (SQLite locally, Postgres ready)
   mobile/    Expo (React Native) app
+  docs/      Product specification
 ```
 
 ## Quick start — API
@@ -42,7 +45,6 @@ Open docs: http://127.0.0.1:8000/docs
 ```bash
 cd mobile
 npm install
-# point to your API (phone needs LAN IP, not 127.0.0.1)
 export EXPO_PUBLIC_API_URL=http://YOUR_LAN_IP:8000
 npx expo start
 ```
@@ -62,16 +64,6 @@ npx expo start
 - Telegram bot bridge
 - Multi-currency FX
 - White-label
-
-## GitHub
-
-Create an empty repo `Flash1315/fos-system` on GitHub (this agent cannot create repos), then:
-
-```bash
-cd /path/to/fos-system
-git remote add origin https://github.com/Flash1315/fos-system.git
-git push -u origin main
-```
 
 ## License
 

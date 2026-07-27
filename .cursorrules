@@ -1,0 +1,56 @@
+# Fos (fos-system) — Agent Rules
+
+## IDENTITY
+- Product name: **Fos**
+- Repo: `Flash1315/fos-system`
+- Separate sellable product. NOT Ride & Joy branded. NOT part of RJ-Spending-bot.
+- Never couple Fos to Google Sheets, Telegram chat IDs, or RJ bot internals.
+- RJ may become a tenant/customer later via API — not by merging codebases.
+
+## MAIN RULE
+Make only surgical, targeted changes. Never rewrite entire functions or files.
+
+## FORBIDDEN
+- Rewriting existing functions entirely
+- Changing code unrelated to the current task
+- Removing existing logic without explicit instruction
+- Changing monorepo structure (`api/`, `mobile/`) without explicit ask
+- Adding new imports unless required for the task
+- Mixing Fos with RJ-Spending-bot or deploying Fos into `/root/rjbot`
+- Hardcoding a single-company workflow (always multi-tenant by `organization_id`)
+- Skipping approval flow for money records unless explicitly asked
+- Storing plaintext passwords
+
+## ALLOWED
+- Adding new lines inside existing functions
+- Fixing specific logic surgically
+- Adding new functions at end of file
+- Changing only what the task specifies
+- New API routers/modules when the task requires a new domain
+
+## CODE STYLE
+- Language: **English only** (UI strings, comments, commits, docs in repo)
+- Mobile: every multi-step flow must have **Back** and **Cancel**
+- Log server errors via `print()` (or structured logger if already present)
+- API responses and schema field names: snake_case JSON matching existing patterns
+- Password hashing: `pbkdf2_sha256` via passlib (do not switch back to bcrypt without cause)
+
+## ARCHITECTURE (do not violate)
+- `api/` — FastAPI + SQLAlchemy, JWT auth, multi-tenant
+- `mobile/` — Expo (React Native) TypeScript client
+- Tenant isolation: every business query filters by `user.organization_id`
+- Roles: `owner` | `manager` | `employee`
+- Money kinds: `expense` | `fuel` | `income`
+- Record status: `pending` → `approved` | `rejected` (managers/owners decide)
+- Cash on hand (v1): approved `income` with `payment_method=cash` − approved `expense` − approved `fuel` (per user)
+- Login requires `organization_slug` + email + password
+- Local DB default: SQLite; Postgres via `DATABASE_URL` only
+
+## PRODUCT SCOPE GUARD
+- v1 in scope: orgs, invite, roles, expense/fuel/income, approvals, cash on hand, Expo shell
+- Out of v1 unless explicitly asked: photo→S3/R2, web admin/billing, Telegram bridge, FX, white-label, GPS, calendar/CRM from RJ
+
+## COMMITS / PRS
+- Branch names: `cursor/<descriptive-name>-e418` when using Cursor cloud agents
+- Prefer small commits; English commit messages
+- Do not invent RJ notification routing rules here — they do not apply

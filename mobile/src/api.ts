@@ -37,6 +37,7 @@ export type MoneyRecord = {
   occurred_at?: string | null;
   decided_at?: string | null;
   decided_by?: number | null;
+  decided_by_name?: string;
 };
 
 export type OrgReport = {
@@ -315,8 +316,12 @@ export function updateRecord(
   });
 }
 
-export function pendingRecords() {
-  return request<MoneyRecord[]>("/records/pending");
+export function pendingRecords(params?: { purpose?: string; kind?: string }) {
+  const q = new URLSearchParams();
+  if (params?.purpose) q.set("purpose", params.purpose);
+  if (params?.kind) q.set("kind", params.kind);
+  const suffix = q.toString() ? `?${q}` : "";
+  return request<MoneyRecord[]>(`/records/pending${suffix}`);
 }
 
 export function decideRecord(id: number, approve: boolean, note = "") {

@@ -183,7 +183,10 @@ export function RecordDetailScreen({
             {!!rec.decided_at && (
               <>
                 <Label>Decided</Label>
-                <Text style={styles.line}>{formatWhen(rec.decided_at)}</Text>
+                <Text style={styles.line}>
+                  {formatWhen(rec.decided_at)}
+                  {rec.decided_by_name ? ` · ${rec.decided_by_name}` : ""}
+                </Text>
               </>
             )}
           </Card>

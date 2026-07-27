@@ -121,6 +121,7 @@ class RecordOut(BaseModel):
     occurred_at: Optional[datetime] = None
     decided_at: Optional[datetime]
     decided_by: Optional[int]
+    decided_by_name: str = ""
 
     model_config = {"from_attributes": True}
 

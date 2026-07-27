@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import { decideBatch, decideRecord, pendingRecords, type MoneyRecord } from "../api";
 import { NoteModal } from "../components/NoteModal";
-import { Btn, Row, Screen, Sub, TopBar } from "../components/ui";
+import { Btn, Chip, Row, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
 import { colors } from "../theme";
 
@@ -22,16 +22,26 @@ export function ApproveScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectAllOpen, setRejectAllOpen] = useState(false);
+  const [purpose, setPurpose] = useState("");
+  const [kind, setKind] = useState<"" | "expense" | "fuel" | "income">("");
 
   const reload = async () => {
     try {
-      setRows(await pendingRecords());
+      setRows(
+        await pendingRecords({
+          purpose: purpose || undefined,
+          kind: kind || undefined,
+        }),
+      );
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     }
   };
 
   useFocusEffect(reload);
+  useEffect(() => {
+    void reload();
+  }, [purpose, kind]);
 
   const runDecide = async (id: number, approve: boolean, note = "") => {
     setBusy(true);
@@ -82,6 +92,21 @@ export function ApproveScreen({
     <Screen>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Text style={styles.title}>Approvals</Text>
+      <View style={styles.kinds}>
+        {(["", "expense", "fuel", "income"] as const).map((k) => (
+          <Chip key={k || "any"} label={k || "any"} on={kind === k} onPress={() => setKind(k)} />
+        ))}
+      </View>
+      <View style={styles.kinds}>
+        {(["", "Rental", "Lesson", "Office", "Other"] as const).map((p) => (
+          <Chip
+            key={p || "any-p"}
+            label={p || "any purpose"}
+            on={purpose === p}
+            onPress={() => setPurpose(p)}
+          />
+        ))}
+      </View>
       {rows.length > 0 && (
         <Row>
           <Btn
@@ -164,6 +189,7 @@ export function ApproveScreen({
 
 const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 26, fontWeight: "700", marginVertical: 8 },
+  kinds: { flexDirection: "row", gap: 8, marginBottom: 8, flexWrap: "wrap" },
   row: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 8 },
   rowTitle: { color: colors.text, fontWeight: "600", textTransform: "capitalize" },
   rowMeta: { color: colors.muted, marginTop: 4 },

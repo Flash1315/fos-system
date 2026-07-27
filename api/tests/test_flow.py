@@ -632,3 +632,25 @@ def test_owner_resets_member_password(client):
         },
     )
     assert ok.status_code == 200
+
+
+def test_pending_purpose_filter_and_decider_name(client):
+    owner = _register(client, "flow-pend-f", "pendf-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    a = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 11, "category": "Taxi", "purpose": "Rental"},
+    ).json()["id"]
+    client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 22, "category": "Food", "purpose": "Office"},
+    )
+    pend = client.get("/records/pending?purpose=Rental", headers=h)
+    assert pend.status_code == 200
+    assert len(pend.json()) == 1
+    assert pend.json()[0]["id"] == a
+    decided = client.post(f"/records/{a}/decide", headers=h, json={"approve": True})
+    assert decided.status_code == 200
+    assert decided.json()["decided_by_name"] == "Owner"

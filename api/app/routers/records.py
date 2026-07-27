@@ -29,9 +29,14 @@ def _utcnow() -> datetime:
 
 def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
     creator = db.get(User, rec.created_by)
+    decider = db.get(User, rec.decided_by) if rec.decided_by else None
     data = RecordOut.model_validate(rec)
-    return data.model_copy(update={"created_by_name": creator.full_name if creator else ""})
-
+    return data.model_copy(
+        update={
+            "created_by_name": creator.full_name if creator else "",
+            "decided_by_name": decider.full_name if decider else "",
+        }
+    )
 
 @router.get("/categories", response_model=CategoriesOut)
 def list_categories(
@@ -160,19 +165,20 @@ def org_records(
 
 @router.get("/pending", response_model=list[RecordOut])
 def pending_records(
+    purpose: str | None = None,
+    kind: RecordKind | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
-    rows = (
-        db.query(MoneyRecord)
-        .filter(
-            MoneyRecord.organization_id == user.organization_id,
-            MoneyRecord.status == RecordStatus.pending,
-        )
-        .order_by(MoneyRecord.created_at.asc())
-        .limit(100)
-        .all()
+    q = db.query(MoneyRecord).filter(
+        MoneyRecord.organization_id == user.organization_id,
+        MoneyRecord.status == RecordStatus.pending,
     )
+    if purpose:
+        q = q.filter(MoneyRecord.purpose == purpose)
+    if kind:
+        q = q.filter(MoneyRecord.kind == kind)
+    rows = q.order_by(MoneyRecord.created_at.asc()).limit(100).all()
     return [_record_out(db, r) for r in rows]
 
 

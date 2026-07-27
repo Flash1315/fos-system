@@ -8,6 +8,7 @@ from app.auth import get_current_user, require_roles
 from app.db import get_db
 from app.models import Organization, Payout, PayoutKind, User, UserRole
 from app.routers.records import _utcnow
+from app.services.balances import user_balance
 
 router = APIRouter(prefix="/payouts", tags=["payouts"])
 
@@ -18,6 +19,7 @@ class PayoutCreate(BaseModel):
     amount: float = Field(gt=0)
     payment_method: str = "cash"
     note: str = ""
+    overpayment: float = Field(default=0, ge=0)
 
 
 class PayoutOut(BaseModel):
@@ -29,6 +31,7 @@ class PayoutOut(BaseModel):
     currency: str
     payment_method: str
     note: str
+    overpayment: float = 0.0
     created_by: int
     created_at: datetime
 
@@ -47,6 +50,12 @@ def create_payout(
     if not target.is_active:
         raise HTTPException(400, "User inactive")
     org = db.get(Organization, manager.organization_id)
+    overpayment = float(body.overpayment or 0)
+    if body.kind == PayoutKind.expense_payout and overpayment <= 0:
+        # Auto: paying more than current spendings → carry overpayment into next cycle
+        owed = float(user_balance(db, target).get("spendings") or 0)
+        if body.amount > owed:
+            overpayment = body.amount - owed
     row = Payout(
         organization_id=manager.organization_id,
         user_id=target.id,
@@ -55,13 +64,17 @@ def create_payout(
         currency=org.currency if org else "IDR",
         payment_method=body.payment_method or "cash",
         note=body.note,
+        overpayment=overpayment,
         created_by=manager.id,
         created_at=_utcnow(),
     )
     db.add(row)
     db.commit()
     db.refresh(row)
-    print(f"payout org={manager.organization_id} kind={body.kind.value} user={target.id} amount={body.amount}")
+    print(
+        f"payout org={manager.organization_id} kind={body.kind.value} "
+        f"user={target.id} amount={body.amount} overpay={overpayment}"
+    )
     return PayoutOut(
         id=row.id,
         user_id=row.user_id,
@@ -71,6 +84,7 @@ def create_payout(
         currency=row.currency,
         payment_method=row.payment_method,
         note=row.note,
+        overpayment=row.overpayment,
         created_by=row.created_by,
         created_at=row.created_at,
     )
@@ -98,6 +112,7 @@ def my_payouts(
             currency=r.currency,
             payment_method=r.payment_method,
             note=r.note,
+            overpayment=float(r.overpayment or 0),
             created_by=r.created_by,
             created_at=r.created_at,
         )
@@ -130,6 +145,7 @@ def org_payouts(
                 currency=r.currency,
                 payment_method=r.payment_method,
                 note=r.note,
+                overpayment=float(r.overpayment or 0),
                 created_by=r.created_by,
                 created_at=r.created_at,
             )

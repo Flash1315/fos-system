@@ -257,3 +257,47 @@ def test_purpose_filter_and_period_report(client):
     report = client.get("/reports/org?days=30", headers=h)
     assert report.status_code == 200
     assert report.json()["approved_expense_total"] == 300
+    purposes = {p["purpose"]: p["total"] for p in report.json()["by_purpose"]}
+    assert purposes.get("Rental") == 100
+    assert purposes.get("Office") == 200
+
+
+def test_overpayment_reduces_next_cycle(client):
+    owner = _register(client, "flow-over", "over-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    rid = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 10000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "purpose": "Office",
+        },
+    ).json()["id"]
+    client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
+    pay = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "expense_payout", "amount": 12000, "payment_method": "cash"},
+    )
+    assert pay.status_code == 200, pay.text
+    assert pay.json()["overpayment"] == 2000
+    assert client.get("/records/balance/me", headers=h).json()["spendings"] == 0
+
+    rid2 = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 5000,
+            "category": "Food",
+            "payment_source": "my_pocket",
+            "purpose": "Office",
+        },
+    ).json()["id"]
+    client.post(f"/records/{rid2}/decide", headers=h, json={"approve": True})
+    # 5000 spend - 2000 overpay carry = 3000 owed
+    assert client.get("/records/balance/me", headers=h).json()["spendings"] == 3000

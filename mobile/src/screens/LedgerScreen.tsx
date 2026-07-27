@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { orgRecords, type MoneyRecord } from "../api";
+import { listMembers, orgRecords, type MoneyRecord, type User } from "../api";
 import { Chip, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
@@ -14,10 +14,22 @@ export function LedgerScreen({
   onRecord: (id: number) => void;
 }) {
   const [rows, setRows] = useState<MoneyRecord[]>([]);
+  const [members, setMembers] = useState<User[]>([]);
   const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected">("");
   const [kind, setKind] = useState<"" | "expense" | "fuel" | "income">("");
   const [purpose, setPurpose] = useState("");
+  const [memberId, setMemberId] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setMembers(await listMembers());
+      } catch {
+        /* ignore — ledger still works without member chips */
+      }
+    })();
+  }, []);
 
   const reload = async () => {
     try {
@@ -26,6 +38,7 @@ export function LedgerScreen({
           status: status || undefined,
           kind: kind || undefined,
           purpose: purpose || undefined,
+          created_by: memberId ?? undefined,
         }),
       );
     } catch (e) {
@@ -36,7 +49,7 @@ export function LedgerScreen({
   useFocusEffect(reload);
   useEffect(() => {
     void reload();
-  }, [status, kind, purpose]);
+  }, [status, kind, purpose, memberId]);
 
   return (
     <Screen>
@@ -54,9 +67,27 @@ export function LedgerScreen({
       </View>
       <View style={styles.kinds}>
         {(["", "Rental", "Lesson", "Office", "Other"] as const).map((p) => (
-          <Chip key={p || "any-purpose"} label={p || "any purpose"} on={purpose === p} onPress={() => setPurpose(p)} />
+          <Chip
+            key={p || "any-purpose"}
+            label={p || "any purpose"}
+            on={purpose === p}
+            onPress={() => setPurpose(p)}
+          />
         ))}
       </View>
+      {members.length > 0 && (
+        <View style={styles.kinds}>
+          <Chip label="anyone" on={memberId == null} onPress={() => setMemberId(null)} />
+          {members.map((m) => (
+            <Chip
+              key={m.id}
+              label={m.full_name.split(" ")[0] || m.full_name}
+              on={memberId === m.id}
+              onPress={() => setMemberId(m.id)}
+            />
+          ))}
+        </View>
+      )}
       <FlatList
         data={rows}
         keyExtractor={(item) => String(item.id)}

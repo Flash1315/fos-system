@@ -41,6 +41,7 @@ export function HomeScreen({
   const [pendingCount, setPendingCount] = useState(0);
   const [rows, setRows] = useState<MoneyRecord[]>([]);
   const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected">("");
+  const [purpose, setPurpose] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
   const reload = async () => {
@@ -48,7 +49,7 @@ export function HomeScreen({
       const [b, org, list] = await Promise.all([
         myBalance(),
         myOrg(),
-        myRecords({ status: status || undefined }),
+        myRecords({ status: status || undefined, purpose: purpose || undefined }),
       ]);
       setBalance(formatMoney(b.cash_on_hand, b.currency));
       setSpendings(formatMoney(b.spendings ?? 0, b.currency));
@@ -72,7 +73,7 @@ export function HomeScreen({
   useFocusEffect(reload);
   useEffect(() => {
     void reload();
-  }, [status]);
+  }, [status, purpose]);
 
   const isManager = user?.role === "owner" || user?.role === "manager";
 
@@ -119,6 +120,16 @@ export function HomeScreen({
       <View style={styles.filters}>
         {(["", "pending", "approved", "rejected"] as const).map((s) => (
           <Chip key={s || "all"} label={s || "all"} on={status === s} onPress={() => setStatus(s)} />
+        ))}
+      </View>
+      <View style={styles.filters}>
+        {(["", "Rental", "Lesson", "Office", "Other"] as const).map((p) => (
+          <Chip
+            key={p || "any-p"}
+            label={p || "any purpose"}
+            on={purpose === p}
+            onPress={() => setPurpose(p)}
+          />
         ))}
       </View>
       <FlatList

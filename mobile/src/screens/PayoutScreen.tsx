@@ -75,6 +75,9 @@ export function PayoutScreen({
       </View>
       <Label>Amount</Label>
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
+      <Sub>
+        Paying more than current spendings auto-stores overpayment and reduces the next cycle.
+      </Sub>
       <Label>Method</Label>
       <View style={styles.kinds}>
         <Chip label="cash" on={method === "cash"} onPress={() => setMethod("cash")} />

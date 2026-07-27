@@ -51,7 +51,22 @@ def user_balance(db: Session, user: User) -> dict:
 
     income_cash = sum_income_cash()
     from_cash = sum_out(["cash_on_hand", ""], since_hand)
-    spendings = sum_out(["my_pocket"], since_pay)
+    spendings_raw = sum_out(["my_pocket"], since_pay)
+    overpay = 0.0
+    if since_pay is not None:
+        cut = (
+            db.query(Payout)
+            .filter(
+                Payout.organization_id == org_id,
+                Payout.user_id == user.id,
+                Payout.kind == PayoutKind.expense_payout,
+                Payout.created_at == since_pay,
+            )
+            .first()
+        )
+        if cut is not None:
+            overpay = float(cut.overpayment or 0)
+    spendings = max(0.0, spendings_raw - overpay)
     pending = (
         db.query(func.count(MoneyRecord.id))
         .filter(

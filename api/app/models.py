@@ -116,5 +116,7 @@ class Payout(Base):
     currency: Mapped[str] = mapped_column(String(8), default="IDR")
     payment_method: Mapped[str] = mapped_column(String(40), default="cash")  # cash / transfer
     note: Mapped[str] = mapped_column(Text, default="")
+    # RJ-style: amount paid above current spendings reduces next-cycle owed
+    overpayment: Mapped[float] = mapped_column(Float, default=0.0)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

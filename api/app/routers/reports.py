@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.auth import require_roles
 from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
-from app.schemas import OrgReportOut, CategoryTotal
+from app.schemas import OrgReportOut, CategoryTotal, PurposeTotal
 from app.services.balances import user_balance
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -74,6 +74,21 @@ def org_report(
         for k, c, t in cat_rows
     ]
 
+    purpose_q = db.query(
+        MoneyRecord.purpose,
+        func.coalesce(func.sum(MoneyRecord.amount), 0.0),
+    ).filter(
+        MoneyRecord.organization_id == oid,
+        MoneyRecord.status == RecordStatus.approved,
+        MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
+    )
+    if since is not None:
+        purpose_q = purpose_q.filter(MoneyRecord.created_at >= since)
+    purpose_rows = purpose_q.group_by(MoneyRecord.purpose).all()
+    by_purpose = [
+        PurposeTotal(purpose=p or "—", total=float(t)) for p, t in purpose_rows
+    ]
+
     return OrgReportOut(
         currency=currency,
         approved_expense_total=expense,
@@ -86,4 +101,5 @@ def org_report(
         total_spendings=total_spendings,
         total_cash_held=total_cash_held,
         by_category=by_category,
+        by_purpose=by_purpose,
     )

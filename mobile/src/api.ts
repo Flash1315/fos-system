@@ -50,6 +50,7 @@ export type OrgReport = {
   total_spendings?: number;
   total_cash_held?: number;
   by_category: { kind: string; category: string; total: number }[];
+  by_purpose?: { purpose: string; total: number }[];
 };
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -199,11 +200,17 @@ export function myRecords(params?: { kind?: string; status?: string; purpose?: s
   return request<MoneyRecord[]>(`/records/mine${suffix}`);
 }
 
-export function orgRecords(params?: { kind?: string; status?: string; purpose?: string }) {
+export function orgRecords(params?: {
+  kind?: string;
+  status?: string;
+  purpose?: string;
+  created_by?: number;
+}) {
   const q = new URLSearchParams();
   if (params?.kind) q.set("kind", params.kind);
   if (params?.status) q.set("status", params.status);
   if (params?.purpose) q.set("purpose", params.purpose);
+  if (params?.created_by != null) q.set("created_by", String(params.created_by));
   const suffix = q.toString() ? `?${q}` : "";
   return request<MoneyRecord[]>(`/records/org${suffix}`);
 }
@@ -321,6 +328,7 @@ export function createPayout(body: {
   amount: number;
   payment_method?: string;
   note?: string;
+  overpayment?: number;
 }) {
   return request("/payouts", {
     method: "POST",

@@ -77,6 +77,18 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
               ))
             )}
           </Card>
+          <Card>
+            <Label>By purpose (spend)</Label>
+            {(report.by_purpose ?? []).length === 0 ? (
+              <Sub>No approved spend yet</Sub>
+            ) : (
+              (report.by_purpose ?? []).map((p) => (
+                <Text key={p.purpose} style={styles.line}>
+                  {p.purpose}: {p.total.toLocaleString()}
+                </Text>
+              ))
+            )}
+          </Card>
         </>
       )}
     </Screen>

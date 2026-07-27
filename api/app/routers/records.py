@@ -99,6 +99,7 @@ def org_records(
     kind: RecordKind | None = None,
     status: RecordStatus | None = None,
     purpose: str | None = None,
+    created_by: int | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -109,6 +110,8 @@ def org_records(
         q = q.filter(MoneyRecord.status == status)
     if purpose:
         q = q.filter(MoneyRecord.purpose == purpose)
+    if created_by is not None:
+        q = q.filter(MoneyRecord.created_by == created_by)
     rows = q.order_by(MoneyRecord.created_at.desc()).limit(200).all()
     return [_record_out(db, r) for r in rows]
 

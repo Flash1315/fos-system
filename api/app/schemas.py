@@ -138,6 +138,11 @@ class CategoryTotal(BaseModel):
     total: float
 
 
+class PurposeTotal(BaseModel):
+    purpose: str
+    total: float
+
+
 class OrgReportOut(BaseModel):
     currency: str
     approved_expense_total: float
@@ -150,6 +155,7 @@ class OrgReportOut(BaseModel):
     total_spendings: float = 0.0
     total_cash_held: float = 0.0
     by_category: list[CategoryTotal]
+    by_purpose: list[PurposeTotal] = []
 
 
 class PhotoOut(BaseModel):

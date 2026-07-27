@@ -177,7 +177,7 @@ def decide_record(
     if rec.status != RecordStatus.pending:
         raise HTTPException(400, "Already decided")
     rec.status = RecordStatus.approved if body.approve else RecordStatus.rejected
-    rec.decided_at = datetime.utcnow()
+    rec.decided_at = _utcnow()
     rec.decided_by = user.id
     if body.note:
         rec.comment = (rec.comment + f"\n[review] {body.note}").strip()

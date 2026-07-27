@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -22,8 +22,12 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def create_access_token(user_id: int, org_id: int, role: str) -> str:
-    expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
+    expire = _utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
     payload = {"sub": str(user_id), "org": org_id, "role": role, "exp": expire}
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 

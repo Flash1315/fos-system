@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Alert, FlatList, Pressable, Text, View, StyleSheet } from "react-native";
+import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { myBalance, myRecords, type MoneyRecord, type User } from "../api";
+import { myBalance, myOrg, myRecords, type MoneyRecord, type User } from "../api";
 import { Brand, Btn, Card, Chip, Label, LinkText, Row, Screen, Sub } from "../components/ui";
+import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
 
 export function HomeScreen({
@@ -27,14 +28,21 @@ export function HomeScreen({
   onLogout: () => void;
 }) {
   const [balance, setBalance] = useState("—");
+  const [orgName, setOrgName] = useState("");
   const [rows, setRows] = useState<MoneyRecord[]>([]);
   const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected">("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const reload = async () => {
     try {
-      const b = await myBalance();
-      setBalance(`${b.cash_on_hand.toLocaleString()} ${b.currency}`);
-      setRows(await myRecords({ status: status || undefined }));
+      const [b, org, list] = await Promise.all([
+        myBalance(),
+        myOrg(),
+        myRecords({ status: status || undefined }),
+      ]);
+      setBalance(formatMoney(b.cash_on_hand, b.currency));
+      setOrgName(org.name);
+      setRows(list);
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Load failed");
     }
@@ -52,7 +60,10 @@ export function HomeScreen({
       <View style={styles.topRow}>
         <View>
           <Brand small />
-          <Sub>{user?.full_name} · {user?.role}</Sub>
+          <Sub>
+            {orgName ? `${orgName} · ` : ""}
+            {user?.full_name} · {user?.role}
+          </Sub>
         </View>
         <LinkText onPress={onLogout}>Log out</LinkText>
       </View>
@@ -81,14 +92,28 @@ export function HomeScreen({
         data={rows}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={{ paddingBottom: 40 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={colors.accent}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await reload();
+              setRefreshing(false);
+            }}
+          />
+        }
         ListHeaderComponent={<Text style={styles.section}>My records</Text>}
         ListEmptyComponent={<Sub>No records yet</Sub>}
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => onRecord(item.id)}>
-            <Text style={styles.rowTitle}>{item.kind} · {item.status}</Text>
-            <Text style={styles.rowMeta}>
-              {item.amount.toLocaleString()} {item.currency} · {item.category || "—"}
+            <Text style={styles.rowTitle}>
+              {item.kind} · <Text style={{ color: statusColor(item.status) }}>{item.status}</Text>
             </Text>
+            <Text style={styles.rowMeta}>
+              {formatMoney(item.amount, item.currency)} · {item.category || "—"}
+            </Text>
+            <Text style={styles.rowMeta}>{formatWhen(item.created_at)}</Text>
           </Pressable>
         )}
       />

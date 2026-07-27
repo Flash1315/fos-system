@@ -10,3 +10,4 @@ email-validator>=2.2.0
 psycopg2-binary>=2.9.10
 aiosqlite>=0.20.0
 httpx>=0.28.0
+pytest>=8.0.0

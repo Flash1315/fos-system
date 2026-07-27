@@ -1,8 +1,10 @@
 import React, { useState } from "react";
-import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
+import { Alert, FlatList, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import { decideRecord, pendingRecords, type MoneyRecord } from "../api";
+import { NoteModal } from "../components/NoteModal";
 import { Btn, Row, Screen, Sub, TopBar } from "../components/ui";
+import { formatMoney, formatWhen } from "../format";
 import { colors } from "../theme";
 
 export function ApproveScreen({
@@ -17,6 +19,8 @@ export function ApproveScreen({
   onRecord: (id: number) => void;
 }) {
   const [rows, setRows] = useState<MoneyRecord[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [rejectId, setRejectId] = useState<number | null>(null);
 
   const reload = async () => {
     try {
@@ -28,27 +32,16 @@ export function ApproveScreen({
 
   useFocusEffect(reload);
 
-  const decide = async (id: number, approve: boolean) => {
-    const run = async (note = "") => {
-      setBusy(true);
-      try {
-        await decideRecord(id, approve, note);
-        await reload();
-      } catch (e) {
-        Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-      } finally {
-        setBusy(false);
-      }
-    };
-    if (!approve) {
-      Alert.prompt
-        ? Alert.prompt("Reject note", "Optional reason", async (note) => {
-            await run(note || "");
-          })
-        : await run("rejected");
-      return;
+  const runDecide = async (id: number, approve: boolean, note = "") => {
+    setBusy(true);
+    try {
+      await decideRecord(id, approve, note);
+      await reload();
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
     }
-    await run();
   };
 
   return (
@@ -58,21 +51,43 @@ export function ApproveScreen({
       <FlatList
         data={rows}
         keyExtractor={(item) => String(item.id)}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={colors.accent}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await reload();
+              setRefreshing(false);
+            }}
+          />
+        }
         ListEmptyComponent={<Sub>No pending records</Sub>}
         renderItem={({ item }) => (
           <View style={styles.row}>
             <Text style={styles.rowTitle} onPress={() => onRecord(item.id)}>
-              {item.kind} · {item.amount.toLocaleString()} {item.currency}
+              {item.kind} · {formatMoney(item.amount, item.currency)}
             </Text>
             <Text style={styles.rowMeta}>
               {item.created_by_name || "—"} · {item.category || item.comment || "—"}
             </Text>
+            <Text style={styles.rowMeta}>{formatWhen(item.created_at)}</Text>
             <Row>
-              <Btn title="Approve" disabled={busy} onPress={() => decide(item.id, true)} />
-              <Btn title="Reject" variant="danger" disabled={busy} onPress={() => decide(item.id, false)} />
+              <Btn title="Approve" disabled={busy} onPress={() => runDecide(item.id, true)} />
+              <Btn title="Reject" variant="danger" disabled={busy} onPress={() => setRejectId(item.id)} />
             </Row>
           </View>
         )}
+      />
+      <NoteModal
+        visible={rejectId != null}
+        title="Reject record"
+        onCancel={() => setRejectId(null)}
+        onSubmit={async (note) => {
+          const id = rejectId;
+          setRejectId(null);
+          if (id != null) await runDecide(id, false, note);
+        }}
       />
     </Screen>
   );

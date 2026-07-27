@@ -27,6 +27,16 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Open docs: http://127.0.0.1:8000/docs
 
+### Tests
+
+```bash
+cd api
+source .venv/bin/activate
+pip install -r requirements.txt
+PYTHONPATH=. pytest -q
+# or: bash scripts/smoke.sh
+```
+
 ### Docker (API + Postgres)
 
 ```bash

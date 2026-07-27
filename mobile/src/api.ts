@@ -78,13 +78,31 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     data = { detail: text };
   }
   if (!res.ok) {
-    const detail =
-      typeof data === "object" && data && "detail" in data
-        ? String((data as { detail: unknown }).detail)
-        : res.statusText;
-    throw new Error(detail || `HTTP ${res.status}`);
+    throw new Error(formatApiError(data, res.statusText || `HTTP ${res.status}`));
   }
   return data as T;
+}
+
+function formatApiError(data: unknown, fallback: string): string {
+  if (typeof data !== "object" || !data || !("detail" in data)) return fallback;
+  const detail = (data as { detail: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "object" && item && "msg" in item) {
+          const loc =
+            "loc" in item && Array.isArray((item as { loc: unknown }).loc)
+              ? (item as { loc: unknown[] }).loc.slice(1).join(".")
+              : "";
+          const msg = String((item as { msg: unknown }).msg);
+          return loc ? `${loc}: ${msg}` : msg;
+        }
+        return String(item);
+      })
+      .join("; ");
+  }
+  return fallback;
 }
 
 export function registerOrg(body: {

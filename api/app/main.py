@@ -1,0 +1,28 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.config import settings
+from app.db import Base, engine
+from app.routers import auth as auth_router
+from app.routers import records as records_router
+
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title=settings.app_name, version="0.1.0")
+
+origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins if origins != ["*"] else ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth_router.router)
+app.include_router(records_router.router)
+
+
+@app.get("/health")
+def health():
+    return {"ok": True, "app": settings.app_name}

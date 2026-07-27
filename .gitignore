@@ -1,0 +1,22 @@
+# Python
+api/.venv/
+api/**/__pycache__/
+api/*.db
+api/.env
+*.pyc
+
+# Node / Expo
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.log

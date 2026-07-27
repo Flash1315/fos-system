@@ -106,6 +106,27 @@ def main() -> None:
     with urllib.request.urlopen(req) as res:
         csv_len = len(res.read())
     print("ok income→transfer→csv", csv_len, "bytes")
+
+    org = call("PATCH", "/orgs/me", token, {"name": "Smoke Co Renamed", "currency": "usd"})
+    assert org["name"] == "Smoke Co Renamed"
+    assert org["currency"] == "USD"
+    print("ok org patch")
+
+    auto = call(
+        "POST",
+        "/records",
+        token,
+        {
+            "kind": "expense",
+            "amount": 1000,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert auto["status"] == "approved"
+    print("ok approve_now")
     print("SMOKE_OK")
 
 

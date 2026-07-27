@@ -762,3 +762,57 @@ def test_quick_settle_from_balances(client):
     bal2 = client.get("/records/balance/me", headers=h).json()
     assert bal2["spendings"] == 0
     assert bal2["cash_on_hand"] == bal["cash_on_hand"] - 50000
+
+
+def test_approve_now_on_create(client):
+    owner = _register(client, "flow-approve-now", "apnow-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 333,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert rec.status_code == 200, rec.text
+    assert rec.json()["status"] == "approved"
+    assert rec.json()["decided_by_name"] == "Owner"
+    bal = client.get("/records/balance/me", headers=h).json()
+    assert bal["spendings"] == 333
+
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "apnow-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    assert inv.status_code == 200
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "apnow-emp@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-approve-now",
+        },
+    )
+    eh = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    denied = client.post(
+        "/records",
+        headers=eh,
+        json={
+            "kind": "expense",
+            "amount": 10,
+            "category": "Taxi",
+            "approve_now": True,
+        },
+    )
+    assert denied.status_code == 403

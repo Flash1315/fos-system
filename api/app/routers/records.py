@@ -58,6 +58,8 @@ def create_record(
     user: User = Depends(get_current_user),
 ):
     org = db.get(Organization, user.organization_id)
+    if body.approve_now and user.role not in (UserRole.owner, UserRole.manager):
+        raise HTTPException(403, "Only managers can approve on create")
     source = body.payment_source
     if body.kind in (RecordKind.expense, RecordKind.fuel) and not source:
         source = "cash_on_hand"
@@ -94,6 +96,13 @@ def create_record(
         occurred_at=body.occurred_at,
     )
     db.add(rec)
+    if body.approve_now:
+        rec.status = RecordStatus.approved
+        rec.decided_by = user.id
+        rec.decided_at = _utcnow()
+        stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
+        note = f"[auto-approved on create by {user.full_name} {stamp}]"
+        rec.comment = (rec.comment + "\n" + note).strip() if rec.comment else note
     db.commit()
     db.refresh(rec)
     return _record_out(db, rec)

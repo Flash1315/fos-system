@@ -293,6 +293,7 @@ export function createRecord(body: {
   odometer?: number;
   created_for_user_id?: number;
   occurred_at?: string;
+  approve_now?: boolean;
 }) {
   return request<MoneyRecord>("/records", {
     method: "POST",

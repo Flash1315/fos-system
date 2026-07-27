@@ -15,7 +15,7 @@ from app.routers import transfers as transfers_router
 Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 
-app = FastAPI(title=settings.app_name, version="0.6.0")
+app = FastAPI(title=settings.app_name, version="0.6.1")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
@@ -37,4 +37,4 @@ app.include_router(payouts_router.router)
 
 @app.get("/health")
 def health():
-    return {"ok": True, "app": settings.app_name, "version": "0.6.0"}
+    return {"ok": True, "app": settings.app_name, "version": "0.6.1"}

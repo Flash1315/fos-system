@@ -85,6 +85,8 @@ class RecordCreate(BaseModel):
     created_for_user_id: Optional[int] = None
     # ISO datetime or date when money moved (optional; defaults to created_at)
     occurred_at: Optional[datetime] = None
+    # Managers/owners can create already-approved (skip queue)
+    approve_now: bool = False
 
 
 class RecordUpdate(BaseModel):

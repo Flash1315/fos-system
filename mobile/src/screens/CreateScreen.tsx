@@ -28,6 +28,7 @@ export function CreateScreen({
   const [kind, setKind] = useState<"expense" | "fuel" | "income">("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
+  const [approveNow, setApproveNow] = useState(false);
   const [categories, setCategories] = useState<string[]>([]);
   const [purposes, setPurposes] = useState<string[]>(["Rental", "Lesson", "Office", "Other"]);
   const [purpose, setPurpose] = useState("Other");
@@ -148,6 +149,7 @@ export function CreateScreen({
         odometer: kind === "fuel" && odometer ? Number(odometer.replace(",", ".")) : undefined,
         created_for_user_id: forUserId ?? undefined,
         occurred_at: occurredDate.trim() ? `${occurredDate.trim()}T12:00:00` : undefined,
+        approve_now: isManager && approveNow,
       });
       onCreated();
     } catch (e) {
@@ -203,7 +205,17 @@ export function CreateScreen({
         <Field editable={false} value={comment || "—"} />
         <Label>Photo</Label>
         <Field editable={false} value={photoUrl ? "Attached" : "None"} />
-        <Btn title={busy ? "…" : "Confirm & submit"} onPress={submit} disabled={busy} />
+        {isManager && (
+          <>
+            <Label>Status</Label>
+            <Field editable={false} value={approveNow ? "Approve immediately" : "Send to queue"} />
+          </>
+        )}
+        <Btn
+          title={busy ? "…" : approveNow && isManager ? "Confirm & approve" : "Confirm & submit"}
+          onPress={submit}
+          disabled={busy}
+        />
         <Btn title="Back to edit" variant="ghost" onPress={() => setConfirming(false)} />
       </Screen>
     );
@@ -300,6 +312,15 @@ export function CreateScreen({
       )}
       <Label>Comment</Label>
       <Field value={comment} onChangeText={setComment} />
+      {isManager && (
+        <>
+          <Label>After submit</Label>
+          <View style={styles.kinds}>
+            <Chip label="Send to queue" on={!approveNow} onPress={() => setApproveNow(false)} />
+            <Chip label="Approve now" on={approveNow} onPress={() => setApproveNow(true)} />
+          </View>
+        </>
+      )}
       <Btn
         title={photoUrl ? "Photo attached ✓ (library)" : "Photo from library"}
         onPress={() => pickPhoto(false)}

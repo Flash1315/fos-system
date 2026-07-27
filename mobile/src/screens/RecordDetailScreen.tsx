@@ -2,7 +2,9 @@ import React, { useState } from "react";
 import { Alert, Image, Text, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import { decideRecord, getRecord, mediaUrl, type MoneyRecord, type User } from "../api";
+import { NoteModal } from "../components/NoteModal";
 import { Btn, Card, Label, Row, Screen, Sub, TopBar } from "../components/ui";
+import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
 
 export function RecordDetailScreen({
@@ -19,6 +21,7 @@ export function RecordDetailScreen({
   onBack: () => void;
 }) {
   const [rec, setRec] = useState<MoneyRecord | null>(null);
+  const [rejectOpen, setRejectOpen] = useState(false);
   const isManager = user.role === "owner" || user.role === "manager";
 
   const reload = async () => {
@@ -31,10 +34,10 @@ export function RecordDetailScreen({
 
   useFocusEffect(reload);
 
-  const decide = async (approve: boolean) => {
+  const decide = async (approve: boolean, note = "") => {
     setBusy(true);
     try {
-      setRec(await decideRecord(id, approve));
+      setRec(await decideRecord(id, approve, note));
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
@@ -52,13 +55,15 @@ export function RecordDetailScreen({
         <>
           <Card>
             <Label>Kind / status</Label>
-            <Text style={styles.line}>{rec.kind} · {rec.status}</Text>
+            <Text style={styles.line}>
+              {rec.kind} · <Text style={{ color: statusColor(rec.status) }}>{rec.status}</Text>
+            </Text>
             <Label>Amount</Label>
-            <Text style={styles.big}>{rec.amount.toLocaleString()} {rec.currency}</Text>
+            <Text style={styles.big}>{formatMoney(rec.amount, rec.currency)}</Text>
             <Label>Category</Label>
             <Text style={styles.line}>{rec.category || "—"}</Text>
             <Label>By</Label>
-            <Text style={styles.line}>{rec.created_by_name || rec.created_by}</Text>
+            <Text style={styles.line}>{rec.created_by_name || rec.created_by} · {formatWhen(rec.created_at)}</Text>
             {!!rec.client_name && (
               <>
                 <Label>Client</Label>
@@ -75,6 +80,12 @@ export function RecordDetailScreen({
             )}
             <Label>Comment</Label>
             <Text style={styles.line}>{rec.comment || "—"}</Text>
+            {!!rec.decided_at && (
+              <>
+                <Label>Decided</Label>
+                <Text style={styles.line}>{formatWhen(rec.decided_at)}</Text>
+              </>
+            )}
           </Card>
           {!!rec.photo_url && (
             <Card>
@@ -85,11 +96,20 @@ export function RecordDetailScreen({
           {isManager && rec.status === "pending" && (
             <Row>
               <Btn title="Approve" disabled={busy} onPress={() => decide(true)} />
-              <Btn title="Reject" variant="danger" disabled={busy} onPress={() => decide(false)} />
+              <Btn title="Reject" variant="danger" disabled={busy} onPress={() => setRejectOpen(true)} />
             </Row>
           )}
         </>
       )}
+      <NoteModal
+        visible={rejectOpen}
+        title="Reject record"
+        onCancel={() => setRejectOpen(false)}
+        onSubmit={async (note) => {
+          setRejectOpen(false);
+          await decide(false, note);
+        }}
+      />
     </Screen>
   );
 }

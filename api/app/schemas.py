@@ -188,6 +188,18 @@ class OrgReportOut(BaseModel):
     by_purpose: list[PurposeTotal] = []
 
 
+class MyReportOut(BaseModel):
+    currency: str
+    cash_on_hand: float
+    spendings: float
+    approved_expense_total: float
+    approved_fuel_total: float
+    approved_income_cash: float
+    pending_count: int
+    by_purpose: list[PurposeTotal] = []
+    by_category: list[CategoryTotal] = []
+
+
 class PhotoOut(BaseModel):
     photo_url: str
 

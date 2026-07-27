@@ -518,3 +518,19 @@ def test_record_search(client):
     assert hit.status_code == 200
     assert len(hit.json()) == 1
     assert hit.json()[0]["place"] == "Denpasar shop"
+
+
+def test_my_report(client):
+    owner = _register(client, "flow-myrep", "myrep-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rid = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 400, "category": "Taxi", "purpose": "Rental", "payment_source": "my_pocket"},
+    ).json()["id"]
+    client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
+    rep = client.get("/reports/me?days=30", headers=h)
+    assert rep.status_code == 200
+    body = rep.json()
+    assert body["approved_expense_total"] == 400
+    assert any(p["purpose"] == "Rental" for p in body["by_purpose"])

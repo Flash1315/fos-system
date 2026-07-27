@@ -13,6 +13,7 @@ export function HomeScreen({
   onInvite,
   onTeam,
   onReports,
+  onMyReport,
   onLedger,
   onTransfer,
   onPayout,
@@ -28,6 +29,7 @@ export function HomeScreen({
   onInvite: () => void;
   onTeam: () => void;
   onReports: () => void;
+  onMyReport: () => void;
   onLedger: () => void;
   onTransfer: () => void;
   onPayout: () => void;
@@ -124,6 +126,7 @@ export function HomeScreen({
       <Btn title="Payout history" onPress={onPayoutHistory} variant="ghost" />
       {isManager && <Btn title="Team balances" onPress={onBalances} variant="ghost" />}
       <Btn title="Transfer cash" onPress={onTransfer} variant="ghost" />
+      <Btn title="My stats" onPress={onMyReport} variant="ghost" />
       <Btn title="Account" onPress={onAccount} variant="ghost" />
       <Field
         value={search}

@@ -54,6 +54,18 @@ export type OrgReport = {
   by_purpose?: { purpose: string; total: number }[];
 };
 
+export type MyReport = {
+  currency: string;
+  cash_on_hand: number;
+  spendings: number;
+  approved_expense_total: number;
+  approved_fuel_total: number;
+  approved_income_cash: number;
+  pending_count: number;
+  by_purpose?: { purpose: string; total: number }[];
+  by_category?: { kind: string; category: string; total: number }[];
+};
+
 async function authHeaders(): Promise<Record<string, string>> {
   const token = await storageGet(TOKEN_KEY);
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -317,6 +329,11 @@ export function decideBatch(ids: number[], approve: boolean, note = "") {
 export function orgReport(days?: number) {
   const suffix = days ? `?days=${days}` : "";
   return request<OrgReport>(`/reports/org${suffix}`);
+}
+
+export function myReport(days?: number) {
+  const suffix = days ? `?days=${days}` : "";
+  return request<MyReport>(`/reports/me${suffix}`);
 }
 
 export function exportReportCsv(days?: number) {

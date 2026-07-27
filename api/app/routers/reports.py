@@ -6,13 +6,83 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.auth import require_roles
+from app.auth import get_current_user, require_roles
 from app.db import get_db
 from app.models import MoneyRecord, Organization, Payout, RecordKind, RecordStatus, User, UserRole
-from app.schemas import OrgReportOut, CategoryTotal, PurposeTotal
+from app.schemas import OrgReportOut, CategoryTotal, PurposeTotal, MyReportOut
 from app.services.balances import user_balance
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+@router.get("/me", response_model=MyReportOut)
+def my_report(
+    days: int | None = Query(default=None, ge=1, le=3650),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    org = db.get(Organization, user.organization_id)
+    currency = org.currency if org else "IDR"
+    bal = user_balance(db, user)
+    since = None
+    if days:
+        since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+
+    def sum_kind(kind: RecordKind, payment: str | None = None) -> float:
+        q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
+            MoneyRecord.organization_id == user.organization_id,
+            MoneyRecord.created_by == user.id,
+            MoneyRecord.kind == kind,
+            MoneyRecord.status == RecordStatus.approved,
+        )
+        if payment is not None:
+            q = q.filter(MoneyRecord.payment_method == payment)
+        if since is not None:
+            q = q.filter(MoneyRecord.created_at >= since)
+        return float(q.scalar() or 0)
+
+    purpose_q = db.query(
+        MoneyRecord.purpose,
+        func.coalesce(func.sum(MoneyRecord.amount), 0.0),
+    ).filter(
+        MoneyRecord.organization_id == user.organization_id,
+        MoneyRecord.created_by == user.id,
+        MoneyRecord.status == RecordStatus.approved,
+        MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
+    )
+    if since is not None:
+        purpose_q = purpose_q.filter(MoneyRecord.created_at >= since)
+    by_purpose = [
+        PurposeTotal(purpose=p or "—", total=float(t)) for p, t in purpose_q.group_by(MoneyRecord.purpose).all()
+    ]
+
+    cat_q = db.query(
+        MoneyRecord.kind,
+        MoneyRecord.category,
+        func.coalesce(func.sum(MoneyRecord.amount), 0.0),
+    ).filter(
+        MoneyRecord.organization_id == user.organization_id,
+        MoneyRecord.created_by == user.id,
+        MoneyRecord.status == RecordStatus.approved,
+    )
+    if since is not None:
+        cat_q = cat_q.filter(MoneyRecord.created_at >= since)
+    by_category = [
+        CategoryTotal(kind=k.value if hasattr(k, "value") else str(k), category=c or "—", total=float(t))
+        for k, c, t in cat_q.group_by(MoneyRecord.kind, MoneyRecord.category).all()
+    ]
+
+    return MyReportOut(
+        currency=currency,
+        cash_on_hand=bal["cash_on_hand"],
+        spendings=bal["spendings"],
+        approved_expense_total=sum_kind(RecordKind.expense),
+        approved_fuel_total=sum_kind(RecordKind.fuel),
+        approved_income_cash=sum_kind(RecordKind.income, "cash"),
+        pending_count=bal["pending_count"],
+        by_purpose=by_purpose,
+        by_category=by_category,
+    )
 
 
 @router.get("/org", response_model=OrgReportOut)

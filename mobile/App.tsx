@@ -21,6 +21,7 @@ import { PayoutScreen } from "./src/screens/PayoutScreen";
 import { PayoutHistoryScreen } from "./src/screens/PayoutHistoryScreen";
 import { BalancesScreen } from "./src/screens/BalancesScreen";
 import { AccountScreen } from "./src/screens/AccountScreen";
+import { MyReportScreen } from "./src/screens/MyReportScreen";
 
 type Screen =
   | "boot"
@@ -31,6 +32,7 @@ type Screen =
   | "invite"
   | "team"
   | "reports"
+  | "myReport"
   | "ledger"
   | "transfer"
   | "payout"
@@ -132,6 +134,10 @@ export default function App() {
     return <ReportsScreen onBack={() => setScreen("home")} />;
   }
 
+  if (screen === "myReport" && user) {
+    return <MyReportScreen onBack={() => setScreen("home")} />;
+  }
+
   if (screen === "ledger" && user) {
     return (
       <LedgerScreen
@@ -205,6 +211,7 @@ export default function App() {
       onInvite={() => setScreen("invite")}
       onTeam={() => setScreen("team")}
       onReports={() => setScreen("reports")}
+      onMyReport={() => setScreen("myReport")}
       onLedger={() => setScreen("ledger")}
       onTransfer={() => setScreen("transfer")}
       onPayout={() => setScreen("payout")}

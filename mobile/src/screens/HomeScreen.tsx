@@ -122,6 +122,15 @@ export function HomeScreen({
           />
         )}
       </Row>
+      <Row>
+        <Btn title="Transfer" onPress={onTransfer} variant="ghost" />
+        <Btn title="My stats" onPress={onMyReport} variant="ghost" />
+        <Btn
+          title={settlementCount > 0 ? `Account (${settlementCount})` : "Account"}
+          onPress={onAccount}
+          variant="ghost"
+        />
+      </Row>
       {isManager && (
         <Row>
           <Btn title="Invite" onPress={onInvite} variant="ghost" />
@@ -129,13 +138,14 @@ export function HomeScreen({
           <Btn title="Reports" onPress={onReports} variant="ghost" />
         </Row>
       )}
-      {isManager && <Btn title="Org ledger" onPress={onLedger} variant="ghost" />}
-      {isManager && <Btn title="Settlements" onPress={onPayout} variant="ghost" />}
+      {isManager && (
+        <Row>
+          <Btn title="Ledger" onPress={onLedger} variant="ghost" />
+          <Btn title="Settlements" onPress={onPayout} variant="ghost" />
+          <Btn title="Balances" onPress={onBalances} variant="ghost" />
+        </Row>
+      )}
       <Btn title="Payout history" onPress={onPayoutHistory} variant="ghost" />
-      {isManager && <Btn title="Team balances" onPress={onBalances} variant="ghost" />}
-      <Btn title="Transfer cash" onPress={onTransfer} variant="ghost" />
-      <Btn title="My stats" onPress={onMyReport} variant="ghost" />
-      <Btn title={settlementCount > 0 ? `Account (${settlementCount} requests)` : "Account"} onPress={onAccount} variant="ghost" />
       <Field
         value={search}
         onChangeText={setSearch}

@@ -167,9 +167,10 @@ Interactive docs: `/docs` when API is running.
 
 Screens in `mobile/App.tsx`:
 1. **Auth** — org slug; login or register company; email/password
-2. **Home** — cash on hand, my records, New record, Approvals (if manager/owner), Log out
-3. **Create** — kind + amount + fields → POST `/records`
+2. **Home** — cash on hand, my records, New record, Approvals (if manager/owner), Invite teammate (if manager/owner), Log out
+3. **Create** — kind + amount + fields (fuel: liters/odometer; income: client/payment) → POST `/records`
 4. **Approvals** — pending list → approve/reject
+5. **Invite** — owner/manager adds user via POST `/orgs/invite`
 
 Config: `EXPO_PUBLIC_API_URL` (phone needs LAN IP, not `127.0.0.1`).  
 Brand in UI: **Fos** — “Field money. Clear books.”

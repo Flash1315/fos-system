@@ -38,6 +38,25 @@ def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
         }
     )
 
+
+def _assert_cash_for_approve(db: Session, rec: MoneyRecord) -> None:
+    """Block approving spend from cash_on_hand when the owner lacks held cash."""
+    if rec.kind not in (RecordKind.expense, RecordKind.fuel):
+        return
+    source = rec.payment_source or "cash_on_hand"
+    if source != "cash_on_hand":
+        return
+    owner = db.get(User, rec.created_by)
+    if not owner:
+        return
+    held = float(user_balance(db, owner).get("cash_on_hand") or 0)
+    if float(rec.amount) > held + 1e-6:
+        raise HTTPException(
+            400,
+            f"Insufficient cash on hand ({held}). Cannot approve {rec.amount} from cash.",
+        )
+
+
 @router.get("/categories", response_model=CategoriesOut)
 def list_categories(
     kind: RecordKind | None = None,
@@ -62,7 +81,7 @@ def create_record(
         raise HTTPException(403, "Only managers can approve on create")
     source = body.payment_source
     if body.kind in (RecordKind.expense, RecordKind.fuel) and not source:
-        source = "cash_on_hand"
+        source = "my_pocket"
     owner_id = user.id
     body_comment = body.comment
     if body.created_for_user_id is not None:
@@ -97,6 +116,7 @@ def create_record(
     )
     db.add(rec)
     if body.approve_now:
+        _assert_cash_for_approve(db, rec)
         rec.status = RecordStatus.approved
         rec.decided_by = user.id
         rec.decided_at = _utcnow()
@@ -238,6 +258,8 @@ def decide_batch(
             continue
         if rec.status != RecordStatus.pending:
             continue
+        if body.approve:
+            _assert_cash_for_approve(db, rec)
         rec.status = RecordStatus.approved if body.approve else RecordStatus.rejected
         rec.decided_at = _utcnow()
         rec.decided_by = user.id
@@ -301,6 +323,8 @@ def decide_record(
         raise HTTPException(404, "Record not found")
     if rec.status != RecordStatus.pending:
         raise HTTPException(400, "Already decided")
+    if body.approve:
+        _assert_cash_for_approve(db, rec)
     rec.status = RecordStatus.approved if body.approve else RecordStatus.rejected
     rec.decided_at = _utcnow()
     rec.decided_by = user.id

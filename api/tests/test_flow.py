@@ -77,10 +77,12 @@ def test_register_expense_approve_balance(client):
     )
     assert decided.status_code == 200
     assert decided.json()["status"] == "approved"
+    assert decided.json()["payment_source"] == "my_pocket"
 
     bal = client.get("/records/balance/me", headers=headers)
     assert bal.status_code == 200
-    assert bal.json()["cash_on_hand"] == -50000
+    assert bal.json()["cash_on_hand"] == 0
+    assert bal.json()["spendings"] == 50000
 
     report = client.get("/reports/org", headers=headers)
     assert report.status_code == 200
@@ -859,3 +861,38 @@ def test_report_custom_date_range(client):
     assert mine.json()["approved_expense_total"] == 100
     bad = client.get("/reports/org?date_from=not-a-date", headers=h)
     assert bad.status_code == 400
+
+
+def test_approve_rejects_insufficient_cash_on_hand(client):
+    owner = _register(client, "flow-cashguard", "cashguard-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 99999,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "cash_on_hand",
+        },
+    )
+    assert rec.status_code == 200
+    rid = rec.json()["id"]
+    denied = client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
+    assert denied.status_code == 400
+    assert "Insufficient cash" in denied.json()["detail"]
+    # my_pocket spend still approvable without cash
+    pocket = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 50,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert pocket.status_code == 200
+    assert pocket.json()["status"] == "approved"

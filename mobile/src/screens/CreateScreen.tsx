@@ -23,11 +23,15 @@ export function CreateScreen({
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
+  const [purposes, setPurposes] = useState<string[]>(["Rental", "Lesson", "Office", "Other"]);
+  const [purpose, setPurpose] = useState("Other");
+  const [place, setPlace] = useState("");
   const [comment, setComment] = useState("");
   const [liters, setLiters] = useState("");
   const [odometer, setOdometer] = useState("");
   const [clientName, setClientName] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer">("cash");
+  const [paymentSource, setPaymentSource] = useState<"my_pocket" | "cash_on_hand">("my_pocket");
   const [photoUrl, setPhotoUrl] = useState("");
 
   useEffect(() => {
@@ -37,6 +41,10 @@ export function CreateScreen({
         const list = res.categories[kind] || [];
         setCategories(list);
         setCategory(list[0] || "");
+        if (res.purposes?.length) {
+          setPurposes(res.purposes);
+          setPurpose(res.purposes[0]);
+        }
       } catch {
         setCategories([]);
       }
@@ -88,9 +96,12 @@ export function CreateScreen({
         kind,
         amount: value,
         category,
+        purpose,
+        place,
         comment,
         photo_url: photoUrl,
         payment_method: kind === "income" ? paymentMethod : "",
+        payment_source: kind === "income" ? "" : paymentSource,
         client_name: kind === "income" ? clientName : "",
         liters: kind === "fuel" && liters ? Number(liters.replace(",", ".")) : undefined,
         odometer: kind === "fuel" && odometer ? Number(odometer.replace(",", ".")) : undefined,
@@ -112,6 +123,12 @@ export function CreateScreen({
           <Chip key={k} label={k} on={kind === k} onPress={() => setKind(k)} />
         ))}
       </View>
+      <Label>Purpose</Label>
+      <View style={styles.kinds}>
+        {purposes.map((p) => (
+          <Chip key={p} label={p} on={purpose === p} onPress={() => setPurpose(p)} />
+        ))}
+      </View>
       <Label>Amount</Label>
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
       <Label>Category</Label>
@@ -120,6 +137,17 @@ export function CreateScreen({
           <Chip key={c} label={c} on={category === c} onPress={() => setCategory(c)} />
         ))}
       </View>
+      <Label>Place</Label>
+      <Field value={place} onChangeText={setPlace} placeholder="Optional" />
+      {kind !== "income" && (
+        <>
+          <Label>Payment source</Label>
+          <View style={styles.kinds}>
+            <Chip label="My pocket" on={paymentSource === "my_pocket"} onPress={() => setPaymentSource("my_pocket")} />
+            <Chip label="Cash on hand" on={paymentSource === "cash_on_hand"} onPress={() => setPaymentSource("cash_on_hand")} />
+          </View>
+        </>
+      )}
       {kind === "fuel" && (
         <>
           <Label>Liters</Label>

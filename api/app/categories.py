@@ -1,29 +1,36 @@
-"""Preset categories for field money records (generic; not RJ-specific)."""
+"""Preset categories — multi-tenant presets inspired by RJ field ops (generic names)."""
 
 from app.models import RecordKind
 
+PURPOSES = ["Rental", "Lesson", "Office", "Other"]
+
+PAYMENT_SOURCES = ["my_pocket", "cash_on_hand"]
+
 PRESETS: dict[RecordKind, list[str]] = {
     RecordKind.expense: [
-        "supplies",
-        "tools",
-        "food",
-        "transport",
-        "repair",
-        "rent",
-        "utilities",
-        "other",
+        "Bike service",
+        "Aqua",
+        "Training area renting",
+        "Toll road top up",
+        "Taxi",
+        "Tires pressure / Wheel repair",
+        "Supplies",
+        "Food",
+        "Other",
     ],
     RecordKind.fuel: [
-        "petrol",
-        "diesel",
-        "other",
+        "Bensin",
+        "Petrol",
+        "Diesel",
+        "Other",
     ],
     RecordKind.income: [
-        "service",
-        "sale",
-        "rental",
-        "deposit",
-        "other",
+        "Rental",
+        "Lesson",
+        "Other (sales equipment etc.)",
+        "Service",
+        "Deposit",
+        "Other",
     ],
 }
 

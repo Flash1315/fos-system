@@ -57,12 +57,15 @@ class RecordCreate(BaseModel):
     kind: RecordKind
     amount: float = Field(gt=0)
     category: str = ""
+    purpose: str = ""
+    place: str = ""
     comment: str = ""
     photo_url: str = ""
     liters: Optional[float] = None
     odometer: Optional[float] = None
     client_name: str = ""
     payment_method: str = ""
+    payment_source: str = ""
 
 
 class RecordOut(BaseModel):
@@ -72,12 +75,15 @@ class RecordOut(BaseModel):
     amount: float
     currency: str
     category: str
+    purpose: str = ""
+    place: str = ""
     comment: str
     photo_url: str
     liters: Optional[float]
     odometer: Optional[float]
     client_name: str
     payment_method: str
+    payment_source: str = ""
     created_by: int
     created_by_name: str = ""
     created_at: datetime
@@ -89,6 +95,7 @@ class RecordOut(BaseModel):
 
 class BalanceOut(BaseModel):
     cash_on_hand: float
+    spendings: float = 0.0
     currency: str
     pending_count: int
 
@@ -137,3 +144,5 @@ class PhotoOut(BaseModel):
 
 class CategoriesOut(BaseModel):
     categories: dict[str, list[str]]
+    purposes: list[str] = []
+    payment_sources: list[str] = []

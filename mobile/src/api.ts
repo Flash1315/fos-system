@@ -21,12 +21,15 @@ export type MoneyRecord = {
   amount: number;
   currency: string;
   category: string;
+  purpose?: string;
+  place?: string;
   comment: string;
   photo_url?: string;
   liters?: number | null;
   odometer?: number | null;
   client_name?: string;
   payment_method?: string;
+  payment_source?: string;
   created_by?: number;
   created_by_name?: string;
   created_at: string;
@@ -162,9 +165,12 @@ export function setMemberActive(id: number, is_active: boolean) {
 }
 
 export function myBalance() {
-  return request<{ cash_on_hand: number; currency: string; pending_count: number }>(
-    "/records/balance/me",
-  );
+  return request<{
+    cash_on_hand: number;
+    spendings: number;
+    currency: string;
+    pending_count: number;
+  }>("/records/balance/me");
 }
 
 export function myRecords(params?: { kind?: string; status?: string }) {
@@ -189,16 +195,23 @@ export function getRecord(id: number) {
 
 export function getCategories(kind?: string) {
   const suffix = kind ? `?kind=${kind}` : "";
-  return request<{ categories: Record<string, string[]> }>(`/records/categories${suffix}`);
+  return request<{
+    categories: Record<string, string[]>;
+    purposes: string[];
+    payment_sources: string[];
+  }>(`/records/categories${suffix}`);
 }
 
 export function createRecord(body: {
   kind: "expense" | "fuel" | "income";
   amount: number;
   category?: string;
+  purpose?: string;
+  place?: string;
   comment?: string;
   photo_url?: string;
   payment_method?: string;
+  payment_source?: string;
   client_name?: string;
   liters?: number;
   odometer?: number;

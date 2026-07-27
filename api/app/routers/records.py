@@ -5,7 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles
-from app.categories import categories_for
+from app.categories import PAYMENT_SOURCES, PURPOSES, categories_for
 from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
 from app.schemas import BalanceOut, CategoriesOut, DecideIn, RecordCreate, RecordOut
@@ -29,7 +29,11 @@ def list_categories(
     user: User = Depends(get_current_user),
 ):
     _ = user
-    return CategoriesOut(categories=categories_for(kind))
+    return CategoriesOut(
+        categories=categories_for(kind),
+        purposes=PURPOSES,
+        payment_sources=PAYMENT_SOURCES,
+    )
 
 
 @router.post("", response_model=RecordOut)
@@ -39,6 +43,9 @@ def create_record(
     user: User = Depends(get_current_user),
 ):
     org = db.get(Organization, user.organization_id)
+    source = body.payment_source
+    if body.kind in (RecordKind.expense, RecordKind.fuel) and not source:
+        source = "cash_on_hand"
     rec = MoneyRecord(
         organization_id=user.organization_id,
         created_by=user.id,
@@ -47,12 +54,15 @@ def create_record(
         amount=body.amount,
         currency=org.currency if org else "IDR",
         category=body.category,
+        purpose=body.purpose,
+        place=body.place,
         comment=body.comment,
         photo_url=body.photo_url,
         liters=body.liters,
         odometer=body.odometer,
         client_name=body.client_name,
         payment_method=body.payment_method,
+        payment_source=source,
     )
     db.add(rec)
     db.commit()
@@ -118,24 +128,44 @@ def my_balance(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Simple cash-on-hand: approved income(cash) - approved expenses - approved fuel."""
+    """RJ-inspired dual track (per user, approved only):
+    - cash_on_hand: income(cash) − expense/fuel paid from cash_on_hand (or legacy blank)
+    - spendings: expense/fuel paid from my_pocket (owed to employee)
+    """
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
 
-    def sum_kind(kind: RecordKind, payment: str | None = None) -> float:
-        q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
-            MoneyRecord.organization_id == user.organization_id,
-            MoneyRecord.created_by == user.id,
-            MoneyRecord.kind == kind,
-            MoneyRecord.status == RecordStatus.approved,
+    def sum_income_cash() -> float:
+        return float(
+            db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0))
+            .filter(
+                MoneyRecord.organization_id == user.organization_id,
+                MoneyRecord.created_by == user.id,
+                MoneyRecord.kind == RecordKind.income,
+                MoneyRecord.status == RecordStatus.approved,
+                MoneyRecord.payment_method == "cash",
+            )
+            .scalar()
+            or 0
         )
-        if payment is not None:
-            q = q.filter(MoneyRecord.payment_method == payment)
-        return float(q.scalar() or 0)
 
-    income_cash = sum_kind(RecordKind.income, "cash")
-    expenses = sum_kind(RecordKind.expense)
-    fuel = sum_kind(RecordKind.fuel)
+    def sum_out(sources: list[str]) -> float:
+        return float(
+            db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0))
+            .filter(
+                MoneyRecord.organization_id == user.organization_id,
+                MoneyRecord.created_by == user.id,
+                MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
+                MoneyRecord.status == RecordStatus.approved,
+                MoneyRecord.payment_source.in_(sources),
+            )
+            .scalar()
+            or 0
+        )
+
+    income_cash = sum_income_cash()
+    from_cash = sum_out(["cash_on_hand", ""])
+    spendings = sum_out(["my_pocket"])
     pending = (
         db.query(func.count(MoneyRecord.id))
         .filter(
@@ -147,7 +177,8 @@ def my_balance(
         or 0
     )
     return BalanceOut(
-        cash_on_hand=income_cash - expenses - fuel,
+        cash_on_hand=income_cash - from_cash,
+        spendings=spendings,
         currency=currency,
         pending_count=int(pending),
     )

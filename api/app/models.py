@@ -76,6 +76,8 @@ class MoneyRecord(Base):
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="IDR")
     category: Mapped[str] = mapped_column(String(120), default="")
+    purpose: Mapped[str] = mapped_column(String(80), default="")  # Rental / Lesson / Office / Other
+    place: Mapped[str] = mapped_column(String(200), default="")
     comment: Mapped[str] = mapped_column(Text, default="")
     photo_url: Mapped[str] = mapped_column(String(500), default="")
     # fuel extras
@@ -84,6 +86,8 @@ class MoneyRecord(Base):
     # income extras
     client_name: Mapped[str] = mapped_column(String(200), default="")
     payment_method: Mapped[str] = mapped_column(String(40), default="")  # cash / transfer
+    # expense/fuel: who paid — inspired by RJ My pocket / Cash on hand
+    payment_source: Mapped[str] = mapped_column(String(40), default="")  # my_pocket / cash_on_hand
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)

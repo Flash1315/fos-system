@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db import Base, engine
+from app.migrate import ensure_money_record_columns
 from app.routers import auth as auth_router
 from app.routers import media as media_router
 from app.routers import records as records_router
@@ -10,8 +11,9 @@ from app.routers import reports as reports_router
 from app.routers import team as team_router
 
 Base.metadata.create_all(bind=engine)
+ensure_money_record_columns()
 
-app = FastAPI(title=settings.app_name, version="0.2.0")
+app = FastAPI(title=settings.app_name, version="0.3.0")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
@@ -31,4 +33,4 @@ app.include_router(media_router.router)
 
 @app.get("/health")
 def health():
-    return {"ok": True, "app": settings.app_name, "version": "0.2.0"}
+    return {"ok": True, "app": settings.app_name, "version": "0.3.0"}

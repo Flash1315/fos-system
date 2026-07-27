@@ -28,6 +28,7 @@ export function HomeScreen({
   onLogout: () => void;
 }) {
   const [balance, setBalance] = useState("—");
+  const [spendings, setSpendings] = useState("—");
   const [orgName, setOrgName] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
   const [rows, setRows] = useState<MoneyRecord[]>([]);
@@ -42,6 +43,7 @@ export function HomeScreen({
         myRecords({ status: status || undefined }),
       ]);
       setBalance(formatMoney(b.cash_on_hand, b.currency));
+      setSpendings(formatMoney(b.spendings ?? 0, b.currency));
       setOrgName(org.name);
       setPendingCount(b.pending_count);
       setRows(list);
@@ -72,6 +74,8 @@ export function HomeScreen({
       <Card>
         <Label>Cash on hand</Label>
         <Text style={styles.balance}>{balance}</Text>
+        <Label>Spendings (my pocket)</Label>
+        <Text style={styles.spend}>{spendings}</Text>
       </Card>
       <Row>
         <Btn title="New record" onPress={onCreate} />
@@ -132,6 +136,7 @@ export function HomeScreen({
 const styles = StyleSheet.create({
   topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   balance: { color: colors.text, fontSize: 24, fontWeight: "700" },
+  spend: { color: colors.warning, fontSize: 18, fontWeight: "700", marginTop: 4 },
   section: { color: colors.text, fontWeight: "600", marginBottom: 8, marginTop: 8 },
   filters: { flexDirection: "row", gap: 8, marginBottom: 8, flexWrap: "wrap" },
   row: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 8 },

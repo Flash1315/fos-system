@@ -43,7 +43,7 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
         .filter(User.organization_id == org.id, User.email == body.email.lower())
         .first()
     )
-    if not user or not verify_password(body.password, user.hashed_password):
+    if not user or not user.is_active or not verify_password(body.password, user.hashed_password):
         raise HTTPException(401, "Invalid credentials")
     token = create_access_token(user.id, org.id, user.role.value)
     return TokenOut(access_token=token, user=UserOut.model_validate(user))

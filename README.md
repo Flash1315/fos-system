@@ -27,6 +27,12 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Open docs: http://127.0.0.1:8000/docs
 
+### Docker (API + Postgres)
+
+```bash
+docker compose up --build
+```
+
 ### Main endpoints
 
 | Method | Path | Who |
@@ -34,11 +40,14 @@ Open docs: http://127.0.0.1:8000/docs
 | POST | `/orgs/register` | create company + owner |
 | POST | `/auth/login` | email + password + `organization_slug` |
 | POST | `/orgs/invite` | owner/manager invite user |
+| GET | `/orgs/members` | team list |
 | POST | `/records` | create expense / fuel / income |
 | GET | `/records/mine` | my records |
 | GET | `/records/pending` | manager queue |
 | POST | `/records/{id}/decide` | approve / reject |
 | GET | `/records/balance/me` | cash on hand |
+| GET | `/reports/org` | org totals |
+| POST | `/media/photo` | receipt photo (local storage) |
 
 ## Quick start — Mobile
 
@@ -55,11 +64,12 @@ npx expo start
 - Roles: owner / manager / employee
 - Expense, Fuel, Income + approvals
 - Cash on hand (simple formula)
-- Expo app: register/login, create, list, approvals
+- Team invite, org reports, receipt photo (local)
+- Expo app: auth, home, create, approvals, invite, team, reports, detail
 
 ## Not in v1 (later)
 
-- Photo upload to S3/R2
+- Photo upload to S3/R2 (local upload works now)
 - Web admin / billing
 - Telegram bot bridge
 - Multi-currency FX

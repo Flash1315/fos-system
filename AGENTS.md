@@ -14,9 +14,10 @@ Stack: **FastAPI API** + **Expo mobile**. Built to sell to any small team.
 ## Layout
 ```
 api/app/          FastAPI application
-api/app/routers/  auth + records
-mobile/           Expo app (App.tsx screens + src/api.ts)
+api/app/routers/  auth, records, team, reports, media
+mobile/           Expo app (App.tsx + src/screens)
 docs/PRODUCT.md   Product logic and domain rules
+docker-compose.yml  API + Postgres
 ```
 
 ## How to run (dev)

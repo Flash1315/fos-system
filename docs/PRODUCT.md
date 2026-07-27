@@ -155,25 +155,38 @@ Also returns `pending_count` for that user.
 | GET | `/auth/me` | yes | current user |
 | GET | `/orgs/me` | yes | current org |
 | POST | `/orgs/invite` | owner/manager | add user |
+| GET | `/orgs/members` | owner/manager | team list |
+| POST | `/orgs/members/{id}/active` | owner | activate/deactivate |
 | POST | `/records` | yes | create record |
+| GET | `/records/categories` | yes | category presets |
 | GET | `/records/mine` | yes | my records |
+| GET | `/records/org` | owner/manager | org ledger |
 | GET | `/records/pending` | owner/manager | approval queue |
-| POST | `/records/{id}/decide` | owner/manager | approve/reject |
 | GET | `/records/balance/me` | yes | cash on hand |
+| GET | `/records/{id}` | yes | record detail |
+| POST | `/records/{id}/decide` | owner/manager | approve/reject |
+| GET | `/reports/org` | owner/manager | org totals |
+| POST | `/media/photo` | yes | receipt image upload (local) |
+| GET | `/media/files/{org}/{file}` | yes | fetch uploaded image |
 
 Interactive docs: `/docs` when API is running.
 
 ## 10. Mobile UX (v1)
 
-Screens in `mobile/App.tsx`:
+Screens in `mobile/App.tsx` (+ `mobile/src/screens/`):
 1. **Auth** — org slug; login or register company; email/password
-2. **Home** — cash on hand, my records, New record, Approvals (if manager/owner), Invite teammate (if manager/owner), Log out
-3. **Create** — kind + amount + fields (fuel: liters/odometer; income: client/payment) → POST `/records`
+2. **Home** — cash on hand, my records, New record, Approvals / Invite / Team / Reports (if manager/owner), Log out
+3. **Create** — kind + amount + category presets + fuel/income fields + optional receipt photo → POST `/records`
 4. **Approvals** — pending list → approve/reject
 5. **Invite** — owner/manager adds user via POST `/orgs/invite`
+6. **Team** — member list; owner can deactivate
+7. **Reports** — org cash position and category totals
+8. **Record detail** — full record + photo + decide if pending
 
 Config: `EXPO_PUBLIC_API_URL` (phone needs LAN IP, not `127.0.0.1`).  
 Brand in UI: **Fos** — “Field money. Clear books.”
+
+Local stack: `docker-compose.yml` runs API + Postgres.
 
 ## 11. Security rules
 

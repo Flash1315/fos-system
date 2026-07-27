@@ -1,0 +1,30 @@
+services:
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: Fos
+      SECRET_KEY: change-me-in-production
+      DATABASE_URL: postgresql+psycopg2://fos:fos@db:5432/fos
+      ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
+      CORS_ORIGINS: "*"
+    volumes:
+      - fos_uploads:/app/uploads
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fos
+      POSTGRES_PASSWORD: fos
+      POSTGRES_DB: fos
+    ports:
+      - "5432:5432"
+    volumes:
+      - fos_pg:/var/lib/postgresql/data
+
+volumes:
+  fos_pg:
+  fos_uploads:

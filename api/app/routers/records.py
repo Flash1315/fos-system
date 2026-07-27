@@ -1,15 +1,31 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles
+from app.categories import categories_for
 from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
-from app.schemas import BalanceOut, DecideIn, RecordCreate, RecordOut
+from app.schemas import BalanceOut, CategoriesOut, DecideIn, RecordCreate, RecordOut
 
 router = APIRouter(prefix="/records", tags=["records"])
+
+
+def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
+    creator = db.get(User, rec.created_by)
+    data = RecordOut.model_validate(rec)
+    return data.model_copy(update={"created_by_name": creator.full_name if creator else ""})
+
+
+@router.get("/categories", response_model=CategoriesOut)
+def list_categories(
+    kind: RecordKind | None = None,
+    user: User = Depends(get_current_user),
+):
+    _ = user
+    return CategoriesOut(categories=categories_for(kind))
 
 
 @router.post("", response_model=RecordOut)
@@ -37,12 +53,13 @@ def create_record(
     db.add(rec)
     db.commit()
     db.refresh(rec)
-    return RecordOut.model_validate(rec)
+    return _record_out(db, rec)
 
 
 @router.get("/mine", response_model=list[RecordOut])
 def my_records(
     kind: RecordKind | None = None,
+    status: RecordStatus | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -52,8 +69,26 @@ def my_records(
     )
     if kind:
         q = q.filter(MoneyRecord.kind == kind)
+    if status:
+        q = q.filter(MoneyRecord.status == status)
     rows = q.order_by(MoneyRecord.created_at.desc()).limit(100).all()
-    return [RecordOut.model_validate(r) for r in rows]
+    return [_record_out(db, r) for r in rows]
+
+
+@router.get("/org", response_model=list[RecordOut])
+def org_records(
+    kind: RecordKind | None = None,
+    status: RecordStatus | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    q = db.query(MoneyRecord).filter(MoneyRecord.organization_id == user.organization_id)
+    if kind:
+        q = q.filter(MoneyRecord.kind == kind)
+    if status:
+        q = q.filter(MoneyRecord.status == status)
+    rows = q.order_by(MoneyRecord.created_at.desc()).limit(200).all()
+    return [_record_out(db, r) for r in rows]
 
 
 @router.get("/pending", response_model=list[RecordOut])
@@ -71,29 +106,7 @@ def pending_records(
         .limit(100)
         .all()
     )
-    return [RecordOut.model_validate(r) for r in rows]
-
-
-@router.post("/{record_id}/decide", response_model=RecordOut)
-def decide_record(
-    record_id: int,
-    body: DecideIn,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
-):
-    rec = db.get(MoneyRecord, record_id)
-    if not rec or rec.organization_id != user.organization_id:
-        raise HTTPException(404, "Record not found")
-    if rec.status != RecordStatus.pending:
-        raise HTTPException(400, "Already decided")
-    rec.status = RecordStatus.approved if body.approve else RecordStatus.rejected
-    rec.decided_at = datetime.utcnow()
-    rec.decided_by = user.id
-    if body.note:
-        rec.comment = (rec.comment + f"\n[review] {body.note}").strip()
-    db.commit()
-    db.refresh(rec)
-    return RecordOut.model_validate(rec)
+    return [_record_out(db, r) for r in rows]
 
 
 @router.get("/balance/me", response_model=BalanceOut)
@@ -134,3 +147,40 @@ def my_balance(
         currency=currency,
         pending_count=int(pending),
     )
+
+
+@router.get("/{record_id}", response_model=RecordOut)
+def get_record(
+    record_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    rec = db.get(MoneyRecord, record_id)
+    if not rec or rec.organization_id != user.organization_id:
+        raise HTTPException(404, "Record not found")
+    is_manager = user.role in (UserRole.owner, UserRole.manager)
+    if rec.created_by != user.id and not is_manager:
+        raise HTTPException(403, "Insufficient role")
+    return _record_out(db, rec)
+
+
+@router.post("/{record_id}/decide", response_model=RecordOut)
+def decide_record(
+    record_id: int,
+    body: DecideIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    rec = db.get(MoneyRecord, record_id)
+    if not rec or rec.organization_id != user.organization_id:
+        raise HTTPException(404, "Record not found")
+    if rec.status != RecordStatus.pending:
+        raise HTTPException(400, "Already decided")
+    rec.status = RecordStatus.approved if body.approve else RecordStatus.rejected
+    rec.decided_at = datetime.utcnow()
+    rec.decided_by = user.id
+    if body.note:
+        rec.comment = (rec.comment + f"\n[review] {body.note}").strip()
+    db.commit()
+    db.refresh(rec)
+    return _record_out(db, rec)

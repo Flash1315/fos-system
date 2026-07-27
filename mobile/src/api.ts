@@ -11,6 +11,7 @@ export type User = {
   full_name: string;
   role: "owner" | "manager" | "employee";
   organization_id: number;
+  is_active?: boolean;
 };
 
 export type MoneyRecord = {
@@ -27,9 +28,22 @@ export type MoneyRecord = {
   client_name?: string;
   payment_method?: string;
   created_by?: number;
+  created_by_name?: string;
   created_at: string;
   decided_at?: string | null;
   decided_by?: number | null;
+};
+
+export type OrgReport = {
+  currency: string;
+  approved_expense_total: number;
+  approved_fuel_total: number;
+  approved_income_cash: number;
+  approved_income_transfer: number;
+  pending_count: number;
+  team_count: number;
+  cash_position: number;
+  by_category: { kind: string; category: string; total: number }[];
 };
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -51,7 +65,7 @@ export async function getToken() {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
     ...(await authHeaders()),
     ...((init.headers as Record<string, string>) || {}),
   };
@@ -102,6 +116,10 @@ export function me() {
   return request<User>("/auth/me");
 }
 
+export function myOrg() {
+  return request<{ id: number; name: string; slug: string; currency: string }>("/orgs/me");
+}
+
 export function inviteUser(body: {
   email: string;
   full_name: string;
@@ -114,14 +132,46 @@ export function inviteUser(body: {
   });
 }
 
+export function listMembers() {
+  return request<User[]>("/orgs/members");
+}
+
+export function setMemberActive(id: number, is_active: boolean) {
+  return request<User>(`/orgs/members/${id}/active`, {
+    method: "POST",
+    body: JSON.stringify({ is_active }),
+  });
+}
+
 export function myBalance() {
   return request<{ cash_on_hand: number; currency: string; pending_count: number }>(
     "/records/balance/me",
   );
 }
 
-export function myRecords() {
-  return request<MoneyRecord[]>("/records/mine");
+export function myRecords(params?: { kind?: string; status?: string }) {
+  const q = new URLSearchParams();
+  if (params?.kind) q.set("kind", params.kind);
+  if (params?.status) q.set("status", params.status);
+  const suffix = q.toString() ? `?${q}` : "";
+  return request<MoneyRecord[]>(`/records/mine${suffix}`);
+}
+
+export function orgRecords(params?: { kind?: string; status?: string }) {
+  const q = new URLSearchParams();
+  if (params?.kind) q.set("kind", params.kind);
+  if (params?.status) q.set("status", params.status);
+  const suffix = q.toString() ? `?${q}` : "";
+  return request<MoneyRecord[]>(`/records/org${suffix}`);
+}
+
+export function getRecord(id: number) {
+  return request<MoneyRecord>(`/records/${id}`);
+}
+
+export function getCategories(kind?: string) {
+  const suffix = kind ? `?kind=${kind}` : "";
+  return request<{ categories: Record<string, string[]> }>(`/records/categories${suffix}`);
 }
 
 export function createRecord(body: {
@@ -129,6 +179,7 @@ export function createRecord(body: {
   amount: number;
   category?: string;
   comment?: string;
+  photo_url?: string;
   payment_method?: string;
   client_name?: string;
   liters?: number;
@@ -149,4 +200,27 @@ export function decideRecord(id: number, approve: boolean, note = "") {
     method: "POST",
     body: JSON.stringify({ approve, note }),
   });
+}
+
+export function orgReport() {
+  return request<OrgReport>("/reports/org");
+}
+
+export async function uploadPhoto(uri: string, name = "receipt.jpg") {
+  const form = new FormData();
+  form.append("file", {
+    uri,
+    name,
+    type: "image/jpeg",
+  } as unknown as Blob);
+  return request<{ photo_url: string }>("/media/photo", {
+    method: "POST",
+    body: form,
+  });
+}
+
+export function mediaUrl(path: string) {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+  return `${API_URL}${path}`;
 }

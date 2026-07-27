@@ -79,6 +79,7 @@ class RecordOut(BaseModel):
     client_name: str
     payment_method: str
     created_by: int
+    created_by_name: str = ""
     created_at: datetime
     decided_at: Optional[datetime]
     decided_by: Optional[int]
@@ -95,3 +96,44 @@ class BalanceOut(BaseModel):
 class DecideIn(BaseModel):
     approve: bool
     note: str = ""
+
+
+class MemberOut(BaseModel):
+    id: int
+    email: EmailStr
+    full_name: str
+    role: UserRole
+    is_active: bool
+    organization_id: int
+
+    model_config = {"from_attributes": True}
+
+
+class MemberActiveIn(BaseModel):
+    is_active: bool
+
+
+class CategoryTotal(BaseModel):
+    kind: str
+    category: str
+    total: float
+
+
+class OrgReportOut(BaseModel):
+    currency: str
+    approved_expense_total: float
+    approved_fuel_total: float
+    approved_income_cash: float
+    approved_income_transfer: float
+    pending_count: int
+    team_count: int
+    cash_position: float
+    by_category: list[CategoryTotal]
+
+
+class PhotoOut(BaseModel):
+    photo_url: str
+
+
+class CategoriesOut(BaseModel):
+    categories: dict[str, list[str]]

@@ -1,0 +1,94 @@
+import React, { useCallback, useState } from "react";
+import { Alert, FlatList, Pressable, Text, View, StyleSheet } from "react-native";
+import { useFocusEffect } from "../useFocus";
+import { myBalance, myRecords, type MoneyRecord, type User } from "../api";
+import { Brand, Btn, Card, Label, LinkText, Row, Screen, Sub } from "../components/ui";
+import { colors } from "../theme";
+
+export function HomeScreen({
+  user,
+  onCreate,
+  onApprove,
+  onInvite,
+  onTeam,
+  onReports,
+  onRecord,
+  onLogout,
+}: {
+  user: User | null;
+  onCreate: () => void;
+  onApprove: () => void;
+  onInvite: () => void;
+  onTeam: () => void;
+  onReports: () => void;
+  onRecord: (id: number) => void;
+  onLogout: () => void;
+}) {
+  const [balance, setBalance] = useState("—");
+  const [rows, setRows] = useState<MoneyRecord[]>([]);
+
+  const reload = async () => {
+    try {
+      const b = await myBalance();
+      setBalance(`${b.cash_on_hand.toLocaleString()} ${b.currency}`);
+      setRows(await myRecords());
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Load failed");
+    }
+  };
+
+  useFocusEffect(reload);
+
+  const isManager = user?.role === "owner" || user?.role === "manager";
+
+  return (
+    <Screen>
+      <View style={styles.topRow}>
+        <View>
+          <Brand small />
+          <Sub>{user?.full_name} · {user?.role}</Sub>
+        </View>
+        <LinkText onPress={onLogout}>Log out</LinkText>
+      </View>
+      <Card>
+        <Label>Cash on hand</Label>
+        <Text style={styles.balance}>{balance}</Text>
+      </Card>
+      <Row>
+        <Btn title="New record" onPress={onCreate} />
+        {isManager && <Btn title="Approvals" onPress={onApprove} variant="secondary" />}
+      </Row>
+      {isManager && (
+        <Row>
+          <Btn title="Invite" onPress={onInvite} variant="ghost" />
+          <Btn title="Team" onPress={onTeam} variant="ghost" />
+          <Btn title="Reports" onPress={onReports} variant="ghost" />
+        </Row>
+      )}
+      <FlatList
+        data={rows}
+        keyExtractor={(item) => String(item.id)}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        ListHeaderComponent={<Text style={styles.section}>My records</Text>}
+        ListEmptyComponent={<Sub>No records yet</Sub>}
+        renderItem={({ item }) => (
+          <Pressable style={styles.row} onPress={() => onRecord(item.id)}>
+            <Text style={styles.rowTitle}>{item.kind} · {item.status}</Text>
+            <Text style={styles.rowMeta}>
+              {item.amount.toLocaleString()} {item.currency} · {item.category || "—"}
+            </Text>
+          </Pressable>
+        )}
+      />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  balance: { color: colors.text, fontSize: 24, fontWeight: "700" },
+  section: { color: colors.text, fontWeight: "600", marginBottom: 8, marginTop: 8 },
+  row: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 8 },
+  rowTitle: { color: colors.text, fontWeight: "600", textTransform: "capitalize" },
+  rowMeta: { color: colors.muted, marginTop: 4 },
+});

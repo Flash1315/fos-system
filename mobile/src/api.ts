@@ -174,6 +174,20 @@ export function myBalance() {
   }>("/records/balance/me");
 }
 
+export type TeamBalance = {
+  user_id: number;
+  full_name: string;
+  role: string;
+  cash_on_hand: number;
+  spendings: number;
+  owed_to_employee: number;
+  pending_count: number;
+};
+
+export function teamBalances() {
+  return request<TeamBalance[]>("/records/balance/team");
+}
+
 export function myRecords(params?: { kind?: string; status?: string }) {
   const q = new URLSearchParams();
   if (params?.kind) q.set("kind", params.kind);

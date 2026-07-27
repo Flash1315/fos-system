@@ -7,28 +7,15 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user, require_roles
 from app.categories import PAYMENT_SOURCES, PURPOSES, categories_for
 from app.db import get_db
-from app.models import MoneyRecord, Organization, Payout, PayoutKind, RecordKind, RecordStatus, User, UserRole
+from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
 from app.schemas import BalanceOut, CategoriesOut, DecideIn, RecordCreate, RecordOut
+from app.services.balances import user_balance
 
 router = APIRouter(prefix="/records", tags=["records"])
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
-def _last_payout_at(db: Session, user: User, kind: PayoutKind):
-    row = (
-        db.query(Payout)
-        .filter(
-            Payout.organization_id == user.organization_id,
-            Payout.user_id == user.id,
-            Payout.kind == kind,
-        )
-        .order_by(Payout.created_at.desc())
-        .first()
-    )
-    return row.created_at if row else None
 
 
 def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
@@ -143,58 +130,31 @@ def my_balance(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """RJ-inspired dual track with payout cutoffs (per user, approved only):
-    - cash_on_hand since last income_handover
-    - spendings (my_pocket) since last expense_payout
-    """
+    """RJ-inspired dual track with payout cutoffs (per user, approved only)."""
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
-    since_hand = _last_payout_at(db, user, PayoutKind.income_handover)
-    since_pay = _last_payout_at(db, user, PayoutKind.expense_payout)
-
-    def sum_income_cash() -> float:
-        q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
-            MoneyRecord.organization_id == user.organization_id,
-            MoneyRecord.created_by == user.id,
-            MoneyRecord.kind == RecordKind.income,
-            MoneyRecord.status == RecordStatus.approved,
-            MoneyRecord.payment_method == "cash",
-        )
-        if since_hand is not None:
-            q = q.filter(MoneyRecord.created_at > since_hand)
-        return float(q.scalar() or 0)
-
-    def sum_out(sources: list[str], since) -> float:
-        q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
-            MoneyRecord.organization_id == user.organization_id,
-            MoneyRecord.created_by == user.id,
-            MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
-            MoneyRecord.status == RecordStatus.approved,
-            MoneyRecord.payment_source.in_(sources),
-        )
-        if since is not None:
-            q = q.filter(MoneyRecord.created_at > since)
-        return float(q.scalar() or 0)
-
-    income_cash = sum_income_cash()
-    from_cash = sum_out(["cash_on_hand", ""], since_hand)
-    spendings = sum_out(["my_pocket"], since_pay)
-    pending = (
-        db.query(func.count(MoneyRecord.id))
-        .filter(
-            MoneyRecord.organization_id == user.organization_id,
-            MoneyRecord.created_by == user.id,
-            MoneyRecord.status == RecordStatus.pending,
-        )
-        .scalar()
-        or 0
-    )
+    bal = user_balance(db, user)
     return BalanceOut(
-        cash_on_hand=income_cash - from_cash,
-        spendings=spendings,
+        cash_on_hand=bal["cash_on_hand"],
+        spendings=bal["spendings"],
         currency=currency,
-        pending_count=int(pending),
+        pending_count=bal["pending_count"],
     )
+
+
+@router.get("/balance/team", response_model=list[dict])
+def team_balances(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    """All active teammates' cash/spendings — RJ manager balances view."""
+    members = (
+        db.query(User)
+        .filter(User.organization_id == user.organization_id, User.is_active.is_(True))
+        .order_by(User.full_name.asc())
+        .all()
+    )
+    return [user_balance(db, m) for m in members]
 
 
 @router.get("/{record_id}", response_model=RecordOut)

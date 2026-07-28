@@ -57,8 +57,14 @@ docker compose up --build
 | GET | `/records/mine` | my records |
 | GET | `/records/pending` | manager queue |
 | POST | `/records/{id}/decide` | approve / reject |
-| GET | `/records/balance/me` | cash on hand |
+| GET | `/records/balance/me` | cash on hand + spendings |
+| GET | `/records/balance/team` | manager team balances |
+| GET | `/records/fuel/last-odometer` | last fuel mileage hint |
+| POST | `/payouts` | expense payout / income handover |
+| POST | `/adjustments` | opening / balance corrections |
+| POST | `/transfers` | colleague cash transfer |
 | GET | `/reports/org` | org totals |
+| GET | `/reports/export.csv` | CSV export |
 | POST | `/media/photo` | receipt photo (local storage) |
 
 ## Quick start — Mobile

@@ -34,6 +34,8 @@ export function BalancesScreen({
   const markBusy = setBusy ?? setLocalBusy;
   const [voidId, setVoidId] = useState<number | null>(null);
   const [adjFilter, setAdjFilter] = useState<"active" | "voided" | "all">("active");
+  const [adjUserFilter, setAdjUserFilter] = useState<number | null>(null);
+  const [adjTrackFilter, setAdjTrackFilter] = useState<"" | "cash_on_hand" | "spendings">("");
 
   const [userId, setUserId] = useState<number | null>(null);
   const [track, setTrack] = useState<"cash_on_hand" | "spendings">("spendings");
@@ -47,11 +49,15 @@ export function BalancesScreen({
       const [list, org, adj] = await Promise.all([
         teamBalances(),
         myOrg(),
-        listAdjustments({ voided }),
+        listAdjustments({
+          voided,
+          user_id: adjUserFilter ?? undefined,
+          track: adjTrackFilter || undefined,
+        }),
       ]);
       setRows(list);
       setCurrency(org.currency);
-      setAdjustments(adj.slice(0, 40));
+      setAdjustments(adj);
       if (userId == null && list[0]) setUserId(list[0].user_id);
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -61,7 +67,7 @@ export function BalancesScreen({
   useFocusEffect(reload);
   React.useEffect(() => {
     void reload();
-  }, [adjFilter]);
+  }, [adjFilter, adjUserFilter, adjTrackFilter]);
 
   const settle = async (
     item: TeamBalance,
@@ -127,6 +133,10 @@ export function BalancesScreen({
       : adjFilter === "active"
         ? "No active adjustments"
         : "No adjustments yet";
+  const emptyAdjLabel =
+    adjUserFilter != null || adjTrackFilter
+      ? `${emptyAdj} for this filter`
+      : emptyAdj;
 
   return (
     <Screen>
@@ -192,8 +202,40 @@ export function BalancesScreen({
               <Chip label="Voided" on={adjFilter === "voided"} onPress={() => setAdjFilter("voided")} />
               <Chip label="All" on={adjFilter === "all"} onPress={() => setAdjFilter("all")} />
             </View>
+            <View style={styles.chips}>
+              <Chip
+                label="Anyone"
+                on={adjUserFilter == null}
+                onPress={() => setAdjUserFilter(null)}
+              />
+              {rows.map((m) => (
+                <Chip
+                  key={`adj-${m.user_id}`}
+                  label={m.full_name.split(" ")[0] || m.full_name}
+                  on={adjUserFilter === m.user_id}
+                  onPress={() => setAdjUserFilter(m.user_id)}
+                />
+              ))}
+            </View>
+            <View style={styles.chips}>
+              <Chip
+                label="Any track"
+                on={adjTrackFilter === ""}
+                onPress={() => setAdjTrackFilter("")}
+              />
+              <Chip
+                label="Spendings"
+                on={adjTrackFilter === "spendings"}
+                onPress={() => setAdjTrackFilter("spendings")}
+              />
+              <Chip
+                label="Cash"
+                on={adjTrackFilter === "cash_on_hand"}
+                onPress={() => setAdjTrackFilter("cash_on_hand")}
+              />
+            </View>
             {adjustments.length === 0 ? (
-              <Sub>{emptyAdj}</Sub>
+              <Sub>{emptyAdjLabel}</Sub>
             ) : (
               adjustments.map((a) => (
                 <View key={a.id} style={styles.adjRow}>

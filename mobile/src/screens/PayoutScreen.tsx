@@ -68,10 +68,34 @@ export function PayoutScreen({
       Alert.alert("Fos", "Select teammate and amount");
       return;
     }
+    const total =
+      kind === "expense_payout"
+        ? selectedBal?.spendings ?? 0
+        : selectedBal?.cash_on_hand ?? 0;
     if (value > suggested + 1e-6) {
+      if (kind === "income_handover") {
+        Alert.alert(
+          "Fos",
+          `Only ${suggested.toLocaleString()} available to take` +
+            ` (${total.toLocaleString()} held` +
+            `${reserved > 0 ? `, ${reserved.toLocaleString()} reserved` : ""}).`,
+        );
+        return;
+      }
+      // expense_payout: overpayment only when nothing is reserved
+      if (reserved > 1e-9) {
+        Alert.alert(
+          "Fos",
+          `Only ${suggested.toLocaleString()} available to pay` +
+            ` (${total.toLocaleString()} owed, ${reserved.toLocaleString()} reserved by pending requests).`,
+        );
+        return;
+      }
       Alert.alert(
         "Fos",
-        `Amount exceeds available (${suggested.toLocaleString()}). Extra becomes overpayment / leftover handling. Continue?`,
+        `Amount exceeds spendings owed (${total.toLocaleString()}). Extra ${
+          (value - total).toLocaleString()
+        } will be recorded as overpayment. Continue?`,
         [
           { text: "Cancel", style: "cancel" },
           { text: "Continue", onPress: () => void doSubmit(value) },

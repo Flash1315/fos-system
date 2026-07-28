@@ -7,7 +7,9 @@ import {
   lastFuelOdometer,
   listMembers,
   myBalance,
+  teamBalances,
   uploadPhoto,
+  type TeamBalance,
   type User,
 } from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
@@ -49,6 +51,8 @@ export function CreateScreen({
   const [confirming, setConfirming] = useState(false);
   const [lastOdo, setLastOdo] = useState<number | null>(null);
   const [closedCycleHint, setClosedCycleHint] = useState("");
+  const [teamBals, setTeamBals] = useState<TeamBalance[]>([]);
+  const [myCurrency, setMyCurrency] = useState("IDR");
 
   useEffect(() => {
     (async () => {
@@ -68,6 +72,23 @@ export function CreateScreen({
   }, [kind]);
 
   useEffect(() => {
+    if (!isManager) return;
+    (async () => {
+      try {
+        const rows = await listMembers();
+        setMembers(rows.filter((m) => m.is_active !== false));
+      } catch {
+        /* optional */
+      }
+      try {
+        setTeamBals(await teamBalances());
+      } catch {
+        setTeamBals([]);
+      }
+    })();
+  }, [isManager]);
+
+  useEffect(() => {
     if (!occurredDate.trim()) {
       setClosedCycleHint("");
       return;
@@ -79,18 +100,28 @@ export function CreateScreen({
     }
     (async () => {
       try {
-        const bal = await myBalance();
         const cashTrack =
           kind === "income"
             ? paymentMethod === "cash"
             : paymentSource === "cash_on_hand";
-        const spendTrack =
-          kind !== "income" && paymentSource === "my_pocket";
-        const cutoff = cashTrack
-          ? bal.last_income_handover_at
-          : spendTrack
-            ? bal.last_expense_payout_at
-            : null;
+        const spendTrack = kind !== "income" && paymentSource === "my_pocket";
+        let cutoff: string | null | undefined = null;
+        if (forUserId != null) {
+          const row = teamBals.find((b) => b.user_id === forUserId);
+          cutoff = cashTrack
+            ? row?.last_income_handover_at
+            : spendTrack
+              ? row?.last_expense_payout_at
+              : null;
+        } else {
+          const bal = await myBalance();
+          setMyCurrency(bal.currency);
+          cutoff = cashTrack
+            ? bal.last_income_handover_at
+            : spendTrack
+              ? bal.last_expense_payout_at
+              : null;
+        }
         if (!cutoff) {
           setClosedCycleHint("");
           return;
@@ -107,19 +138,7 @@ export function CreateScreen({
         setClosedCycleHint("");
       }
     })();
-  }, [occurredDate, kind, paymentSource, paymentMethod]);
-
-  useEffect(() => {
-    if (!isManager) return;
-    (async () => {
-      try {
-        const rows = await listMembers();
-        setMembers(rows.filter((m) => m.is_active !== false));
-      } catch {
-        /* optional */
-      }
-    })();
-  }, [isManager]);
+  }, [occurredDate, kind, paymentSource, paymentMethod, forUserId, teamBals]);
 
   useEffect(() => {
     if (kind !== "fuel") {
@@ -209,14 +228,32 @@ export function CreateScreen({
     if (!confirming) {
       if (kind !== "income" && paymentSource === "cash_on_hand") {
         try {
-          const bal = await myBalance();
-          const available = bal.available_cash ?? bal.cash_on_hand;
+          let available = 0;
+          let held = 0;
+          let reserved = 0;
+          let currency = myCurrency;
+          if (forUserId != null) {
+            const row = teamBals.find((b) => b.user_id === forUserId);
+            if (row) {
+              held = row.cash_on_hand;
+              available = row.available_cash ?? row.cash_on_hand;
+              reserved = row.reserved_cash ?? 0;
+            }
+          } else {
+            const bal = await myBalance();
+            held = bal.cash_on_hand;
+            available = bal.available_cash ?? bal.cash_on_hand;
+            reserved = bal.reserved_cash || 0;
+            currency = bal.currency;
+            setMyCurrency(bal.currency);
+          }
           if (value > available) {
+            const who = forUserId != null ? "Teammate available cash" : "Available cash";
             Alert.alert(
               "Fos",
-              `Available cash is ${available.toLocaleString()} ${bal.currency}` +
-                ` (${bal.cash_on_hand.toLocaleString()} held` +
-                `${(bal.reserved_cash || 0) > 0 ? `, ${(bal.reserved_cash || 0).toLocaleString()} reserved` : ""}). ` +
+              `${who} is ${available.toLocaleString()} ${currency}` +
+                ` (${held.toLocaleString()} held` +
+                `${reserved > 0 ? `, ${reserved.toLocaleString()} reserved` : ""}). ` +
                 `Amount exceeds available — continue anyway on confirm if intentional.`,
             );
           }

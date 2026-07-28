@@ -171,6 +171,12 @@ class RecordCreate(BaseModel):
     # Managers/owners can create already-approved (skip queue)
     approve_now: bool = False
 
+    @model_validator(mode="after")
+    def fuel_requires_liters(self):
+        if self.kind == RecordKind.fuel and (self.liters is None or self.liters <= 0):
+            raise ValueError("Fuel records require liters > 0")
+        return self
+
 
 class RecordUpdate(BaseModel):
     amount: Optional[float] = Field(default=None, gt=0)

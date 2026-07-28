@@ -2620,7 +2620,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.12"
+    assert health.json()["version"] == "0.7.13"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -3641,4 +3641,58 @@ def test_decide_batch_soft_retry_and_inactive_invite_message(client):
     )
     assert reinvite.status_code == 400
     assert "inactive" in reinvite.json()["detail"].lower()
+
+
+def test_round_to_zero_rejected_and_csv_settlement_export(client):
+    owner = _register(client, "flow-0712", "v0712-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    tiny = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 0.004,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert tiny.status_code == 400
+    assert "0.01" in tiny.json()["detail"]
+
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 3000,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    req = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 0.004, "note": "tiny"},
+    )
+    assert req.status_code == 400
+
+    ok_req = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 3000, "note": "full"},
+    )
+    assert ok_req.status_code == 200, ok_req.text
+    members = client.get("/orgs/members", headers=h)
+    assert members.status_code == 200
+    me_row = next(m for m in members.json() if m["email"] == "v0712-owner@example.com")
+    assert "must_set_password" in me_row
+
+    csv = client.get("/reports/export.csv", headers=h)
+    assert csv.status_code == 200
+    assert "liters" in csv.text.splitlines()[0]
+    assert "transfer_group_id" in csv.text.splitlines()[0]
+    assert "settlement_request" in csv.text
 

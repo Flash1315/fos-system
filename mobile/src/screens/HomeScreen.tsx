@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
-import { makeIdempotencyKey, myBalance, myOrg, myPendingSettlementCount, myRecords, pendingCount as fetchPendingCount, pendingRecords, pendingSettlementCount, requestSettlement, type MoneyRecord, type User } from "../api";
+import { makeIdempotencyKey, me, myBalance, myOrg, myPendingSettlementCount, myRecords, pendingCount as fetchPendingCount, pendingRecords, pendingSettlementCount, requestSettlement, type MoneyRecord, type User } from "../api";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
 
 export function HomeScreen({
   user,
+  onUser,
   onCreate,
   onApprove,
   onInvite,
@@ -23,6 +24,7 @@ export function HomeScreen({
   onLogout,
 }: {
   user: User | null;
+  onUser?: (u: User) => void;
   onCreate: () => void;
   onApprove: () => void;
   onInvite: () => void;
@@ -81,12 +83,14 @@ export function HomeScreen({
     setLoading(true);
     try {
       setLoadError("");
-      const [b, org, list] = await Promise.all([
+      const [b, org, list, freshUser] = await Promise.all([
         myBalance(),
         myOrg(),
         myRecords({ ...recordParams(), offset: 0 }),
+        me().catch(() => null),
       ]);
       if (gen !== reloadGen.current) return;
+      if (freshUser && onUser) onUser(freshUser);
       setBalance(formatMoney(b.cash_on_hand, b.currency));
       setSpendings(formatMoney(b.spendings ?? 0, b.currency));
       setAvailableSpend(b.available_spendings ?? b.spendings ?? 0);
@@ -115,7 +119,8 @@ export function HomeScreen({
       setCycleHint(hints.join("\n"));
       setOrgName(org.name);
       setOrgSlug(org.slug);
-      if (user?.role === "owner" || user?.role === "manager") {
+      const role = freshUser?.role || user?.role;
+      if (role === "owner" || role === "manager") {
         try {
           const pend = await fetchPendingCount();
           if (gen !== reloadGen.current) return;

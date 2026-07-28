@@ -224,6 +224,7 @@ export default function App() {
   return (
     <HomeScreen
       user={user}
+      onUser={setUser}
       onCreate={() => setScreen("create")}
       onApprove={() => setScreen("approve")}
       onInvite={() => setScreen("invite")}

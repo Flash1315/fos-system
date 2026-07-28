@@ -1,8 +1,12 @@
 """Lightweight additive schema upgrades for SQLite/Postgres (pre-Alembic safety net)."""
 
+import logging
+
 from sqlalchemy import text
 
 from app.db import engine
+
+logger = logging.getLogger(__name__)
 
 
 def _ensure_columns(table: str, ddl: list[tuple[str, str]]) -> None:
@@ -14,7 +18,7 @@ def _ensure_columns(table: str, ddl: list[tuple[str, str]]) -> None:
             for name, typ in ddl:
                 if name not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {typ}"))
-                    print(f"schema: added {table}.{name}")
+                    logger.info("schema: added %s.%s", table, name)
         else:
             for name, typ in ddl:
                 exists = conn.execute(
@@ -26,7 +30,7 @@ def _ensure_columns(table: str, ddl: list[tuple[str, str]]) -> None:
                 ).fetchone()
                 if not exists:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {typ}"))
-                    print(f"schema: added {table}.{name}")
+                    logger.info("schema: added %s.%s", table, name)
 
 
 def ensure_money_record_columns() -> None:

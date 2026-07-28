@@ -453,7 +453,10 @@ export function BalancesScreen({
       <NoteModal
         visible={voidId != null}
         title="Void adjustment"
+        label="Reason (required). Void reverses this opening/correction."
         required
+        confirmTitle="Void"
+        confirmVariant="danger"
         onCancel={() => setVoidId(null)}
         onSubmit={async (voidNote) => {
           const id = voidId;

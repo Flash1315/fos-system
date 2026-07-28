@@ -299,25 +299,25 @@ export function me() {
 export function changePassword(
   current_password: string,
   new_password: string,
-  password_confirm?: string,
+  password_confirm: string,
 ) {
   return request<AuthToken>("/auth/password", {
     method: "POST",
     body: JSON.stringify({
       current_password,
       new_password,
-      password_confirm: password_confirm ?? new_password,
+      password_confirm,
     }),
   });
 }
 
-export function acceptInvite(token: string, password: string, password_confirm?: string) {
+export function acceptInvite(token: string, password: string, password_confirm: string) {
   return request<AuthToken>("/auth/accept-invite", {
     method: "POST",
     body: JSON.stringify({
       token,
       password,
-      password_confirm: password_confirm ?? password,
+      password_confirm,
     }),
   });
 }

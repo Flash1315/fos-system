@@ -189,9 +189,16 @@ def _assert_odometer(
     *,
     exclude_id: int | None = None,
 ) -> None:
-    if odometer is None:
-        return
     last = _last_fuel_odometer(db, org_id, owner_id, bike, exclude_id=exclude_id)
+    if odometer is None:
+        if last is not None:
+            label = (bike or "").strip() or "this rider"
+            raise HTTPException(
+                400,
+                f"Odometer is required after a prior fuel reading for {label} "
+                f"(last {last.odometer}).",
+            )
+        return
     if last is not None and float(odometer) + 1e-6 < float(last.odometer or 0):
         label = (bike or "").strip() or "this rider"
         raise HTTPException(
@@ -728,6 +735,8 @@ def update_pending_record(
         data["purpose"] = pur
     for key, value in data.items():
         setattr(rec, key, value)
+    if rec.kind == RecordKind.fuel and (rec.liters is None or float(rec.liters) <= 0):
+        raise HTTPException(400, "Fuel records require liters > 0")
     # Re-normalize money fields after edit (create path already validates)
     if "payment_source" in data or "payment_method" in data:
         source, method = _normalize_payment_fields(

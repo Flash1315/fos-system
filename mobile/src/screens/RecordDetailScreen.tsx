@@ -262,13 +262,11 @@ export function RecordDetailScreen({
       body.bike = editBike;
       const liters = Number(editLiters.replace(",", "."));
       const odo = Number(editOdometer.replace(",", "."));
-      if (editLiters.trim()) {
-        if (!liters || liters <= 0) {
-          Alert.alert("Fos", "Liters must be a positive number");
-          return;
-        }
-        body.liters = liters;
+      if (!editLiters.trim() || !liters || liters <= 0) {
+        Alert.alert("Fos", "Liters is required for fuel");
+        return;
       }
+      body.liters = liters;
       if (editOdometer.trim()) {
         if (Number.isNaN(odo) || odo < 0) {
           Alert.alert("Fos", "Odometer must be a number");

@@ -177,7 +177,7 @@ def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(
     enforce_rate_limit(f"accept-invite:{client_ip(request)}", limit=15, window_sec=60)
     token = body.token.strip()
     user = find_user_by_invite_token(db, token)
-    if not user or not user.is_active:
+    if not user or not user.is_active or not getattr(user, "must_set_password", False):
         raise HTTPException(400, "Invalid or expired invite token")
     expires = getattr(user, "invite_token_expires_at", None)
     if expires is not None and expires < _utcnow():

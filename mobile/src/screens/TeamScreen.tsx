@@ -197,7 +197,36 @@ export function TeamScreen({
                           onPress: async () => {
                             setBusy(true);
                             try {
-                              const res = await issueMemberResetToken(item.id);
+                              let res;
+                              try {
+                                res = await issueMemberResetToken(item.id);
+                              } catch (first) {
+                                const msg =
+                                  first instanceof Error ? first.message : "Failed";
+                                if (!/already exists|force=true/i.test(msg)) {
+                                  throw first;
+                                }
+                                const rotate = await new Promise<boolean>((resolve) => {
+                                  Alert.alert(
+                                    "Fos",
+                                    "An active token already exists. Rotate and invalidate the previous one?",
+                                    [
+                                      {
+                                        text: "Cancel",
+                                        style: "cancel",
+                                        onPress: () => resolve(false),
+                                      },
+                                      {
+                                        text: "Rotate",
+                                        style: "destructive",
+                                        onPress: () => resolve(true),
+                                      },
+                                    ],
+                                  );
+                                });
+                                if (!rotate) return;
+                                res = await issueMemberResetToken(item.id, { force: true });
+                              }
                               const payload = {
                                 name: item.full_name,
                                 slug: res.organization_slug,

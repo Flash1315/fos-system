@@ -279,6 +279,14 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
               res.headers.get("Retry-After"),
               res.headers.get("X-Request-Id"),
             )
+          : res.status === 413
+            ? formatApiError(
+                null,
+                res.statusText || `HTTP ${res.status}`,
+                413,
+                null,
+                res.headers.get("X-Request-Id"),
+              )
           : formatApiError(
               null,
               res.statusText || `HTTP ${res.status}`,
@@ -310,6 +318,14 @@ function formatApiError(
       retryAfter && /^\d+$/.test(retryAfter.trim()) ? Number(retryAfter.trim()) : null;
     if (sec != null && sec > 0) base = `${base} (retry in ~${sec}s)`;
     return base;
+  }
+  if (status === 413) {
+    let base = "Request too large — try a smaller photo or fewer fields";
+    if (typeof data === "object" && data && "detail" in data) {
+      const d = (data as { detail: unknown }).detail;
+      if (typeof d === "string" && d.trim()) base = d;
+    }
+    return reqId ? `${base} (ref ${reqId})` : base;
   }
   if (status != null && status >= 500) {
     let msg = fallback || "Server error — try again";
@@ -448,12 +464,30 @@ export function inviteUser(body: {
   });
 }
 
-export function listMembers() {
-  return request<User[]>("/orgs/members");
+export async function listMembers() {
+  return fetchAllMemberPages("/orgs/members");
 }
 
-export function orgDirectory() {
-  return request<User[]>("/orgs/directory");
+export async function orgDirectory() {
+  return fetchAllMemberPages("/orgs/directory");
+}
+
+async function fetchAllMemberPages(path: string): Promise<User[]> {
+  const pageSize = 200;
+  const out: User[] = [];
+  let offset = 0;
+  for (;;) {
+    const q = new URLSearchParams({
+      limit: String(pageSize),
+      offset: String(offset),
+    });
+    const page = await request<User[]>(`${path}?${q.toString()}`);
+    out.push(...page);
+    if (page.length < pageSize) break;
+    offset += pageSize;
+    if (offset > 10_000) break;
+  }
+  return out;
 }
 
 export function setMemberActive(id: number, is_active: boolean) {
@@ -481,7 +515,8 @@ export function resetMemberPassword(
   });
 }
 
-export function issueMemberResetToken(id: number) {
+export function issueMemberResetToken(id: number, opts?: { force?: boolean }) {
+  const q = opts?.force ? "?force=true" : "";
   return request<{
     id: number;
     email: string;
@@ -490,7 +525,7 @@ export function issueMemberResetToken(id: number) {
     invite_token: string;
     must_set_password: boolean;
     email_sent?: boolean;
-  }>(`/orgs/members/${id}/reset-token`, { method: "POST" });
+  }>(`/orgs/members/${id}/reset-token${q}`, { method: "POST" });
 }
 
 export type BillingInfo = {

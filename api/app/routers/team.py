@@ -29,6 +29,7 @@ router = APIRouter(prefix="/orgs", tags=["team"])
 RESET_TTL_DAYS = 2
 _LIST_LIMIT_DEFAULT = 200
 _LIST_LIMIT_MAX = 200
+_LIST_OFFSET_MAX = 10_000
 
 
 def _utcnow() -> datetime:
@@ -38,7 +39,7 @@ def _utcnow() -> datetime:
 @router.get("/members", response_model=list[MemberOut])
 def list_members(
     limit: int = Query(default=_LIST_LIMIT_DEFAULT, ge=1, le=_LIST_LIMIT_MAX),
-    offset: int = Query(default=0, ge=0, le=100_000),
+    offset: int = Query(default=0, ge=0, le=_LIST_OFFSET_MAX),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -64,7 +65,7 @@ def list_members(
 @router.get("/directory", response_model=list[MemberOut])
 def org_directory(
     limit: int = Query(default=_LIST_LIMIT_DEFAULT, ge=1, le=_LIST_LIMIT_MAX),
-    offset: int = Query(default=0, ge=0, le=100_000),
+    offset: int = Query(default=0, ge=0, le=_LIST_OFFSET_MAX),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -292,6 +293,7 @@ def reset_member_password(
 def issue_member_reset_token(
     member_id: int,
     request: Request,
+    force: bool = Query(default=False),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
@@ -318,6 +320,18 @@ def issue_member_reset_token(
     # Inactive members may receive a recovery token only when they still must set a password.
     if not member.is_active and not member.must_set_password:
         raise HTTPException(400, "Member is inactive")
+    expires = getattr(member, "invite_token_expires_at", None)
+    if (
+        not force
+        and member.must_set_password
+        and member.invite_token
+        and (expires is None or expires >= _utcnow())
+    ):
+        raise HTTPException(
+            409,
+            "Active reset/invite token already exists — share the previous token "
+            "or pass force=true to rotate",
+        )
     org = db.get(Organization, user.organization_id)
     raw_token = secrets.token_urlsafe(24)
     member.hashed_password = hash_password(secrets.token_urlsafe(24))

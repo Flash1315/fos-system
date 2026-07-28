@@ -189,7 +189,7 @@ def logout(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Revoke this account's access tokens on this device family (bumps token_version)."""
+    """Revoke all access/media JWTs for this account (bumps token_version)."""
     enforce_rate_limit(
         f"logout:{user.id}:{client_ip(request)}",
         limit=30,
@@ -248,8 +248,10 @@ def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(
         .with_for_update()
         .first()
     )
-    if not user or not user.is_active or not getattr(user, "must_set_password", False):
+    if not user or not user.is_active:
         raise HTTPException(400, "Invalid or expired invite token")
+    if not getattr(user, "must_set_password", False):
+        raise HTTPException(400, "Invite already accepted — log in instead")
     stored = user.invite_token or ""
     if stored != digest:
         raise HTTPException(400, "Invalid or expired invite token")
@@ -327,6 +329,7 @@ def invite_user(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    from app.services.locks import lock_organization
     from app.services.org_limits import require_org_can_add_member
 
     enforce_rate_limit(f"invite:{user.organization_id}:{user.id}", limit=30, window_sec=60)
@@ -336,6 +339,7 @@ def invite_user(
         limit=5,
         window_sec=3600,
     )
+    lock_organization(db, user.organization_id)
     require_org_can_add_member(db, user.organization_id)
     exists = (
         db.query(User)

@@ -282,6 +282,16 @@ class RecordCreate(BaseModel):
     # Managers/owners can create already-approved (skip queue)
     approve_now: bool = False
 
+    @field_validator("amount")
+    @classmethod
+    def positive_amount(cls, v: float) -> float:
+        from app.services.money import require_positive_money
+
+        try:
+            return require_positive_money(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+
     @field_validator(
         "category",
         "purpose",
@@ -332,6 +342,18 @@ class RecordUpdate(BaseModel):
     payment_method: Optional[str] = Field(default=None, max_length=40)
     payment_source: Optional[str] = Field(default=None, max_length=40)
     occurred_at: Optional[datetime] = None
+
+    @field_validator("amount")
+    @classmethod
+    def positive_amount(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        from app.services.money import require_positive_money
+
+        try:
+            return require_positive_money(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
 
     @field_validator(
         "category",

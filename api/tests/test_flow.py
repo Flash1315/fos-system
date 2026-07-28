@@ -1053,8 +1053,16 @@ def test_report_custom_date_range(client):
     ranged = client.get("/reports/org?date_from=2026-01-01&date_to=2026-12-31", headers=h)
     assert ranged.status_code == 200, ranged.text
     assert ranged.json()["approved_expense_total"] == 250
-    all_time = client.get("/reports/org", headers=h)
+    # Default window is last 365 days — use an explicit wide range for full history
+    all_time = client.get(
+        "/reports/org?date_from=2024-01-01&date_to=2026-12-31",
+        headers=h,
+    )
+    assert all_time.status_code == 200, all_time.text
     assert all_time.json()["approved_expense_total"] == 350
+    defaulted = client.get("/reports/org", headers=h)
+    assert defaulted.status_code == 200
+    assert defaulted.json()["approved_expense_total"] == 250
     mine = client.get("/reports/me?date_from=2024-01-01&date_to=2024-12-31", headers=h)
     assert mine.status_code == 200
     assert mine.json()["approved_expense_total"] == 100
@@ -2761,7 +2769,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -3825,8 +3833,8 @@ def test_round_to_zero_rejected_and_csv_settlement_export(client):
             "payment_source": "my_pocket",
         },
     )
-    assert tiny.status_code == 400
-    assert "0.01" in tiny.json()["detail"]
+    assert tiny.status_code in (400, 422)
+    assert "0.01" in str(tiny.json()).lower()
 
     client.post(
         "/records",
@@ -3948,7 +3956,7 @@ def test_fuel_liters_required_and_accept_requires_must_set(client):
         json={"token": raw, "password": "freshpass1", "password_confirm": "freshpass1"},
     )
     assert blocked.status_code == 400
-    assert "invalid" in blocked.json()["detail"].lower()
+    assert "already accepted" in blocked.json()["detail"].lower()
 
 
 def test_register_confirm_nonfinite_billing_stub_and_void_reapprove(client, monkeypatch):
@@ -4289,8 +4297,8 @@ def test_money_limit_odometer_chronology_and_payout_idem_fingerprint(client):
             "payment_source": "my_pocket",
         },
     )
-    assert too_big.status_code == 400
-    assert "large" in too_big.json()["detail"].lower()
+    assert too_big.status_code in (400, 422)
+    assert "large" in str(too_big.json()).lower()
 
     pending = client.post(
         "/records",
@@ -5160,7 +5168,7 @@ def test_login_slug_norm_telegram_and_security_headers(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
     assert health.headers.get("x-content-type-options") == "nosniff"
     assert health.headers.get("x-frame-options") == "DENY"
     assert health.headers.get("referrer-policy") == "no-referrer"
@@ -5227,7 +5235,7 @@ def test_login_bounds_password_same_and_transfer_email(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
     assert health.headers.get("cache-control") == "no-store"
 
     # Seed cash via income then transfer with mixed-case email
@@ -5330,7 +5338,7 @@ def test_idem_charset_invite_email_and_org_patch(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
 
 
 def test_logout_bike_normalize_and_register_slug(client):
@@ -5340,7 +5348,7 @@ def test_logout_bike_normalize_and_register_slug(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
     assert health.json()["db"] == "ok"
     assert health.json()["ok"] is True
 
@@ -5407,7 +5415,7 @@ def test_place_client_normalize_and_coop_header(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
     assert health.headers.get("cross-origin-opener-policy") == "same-origin"
 
     rec = client.post(
@@ -5462,7 +5470,7 @@ def test_slug_shape_category_collapse(client):
     owner = _register(client, "flow-0731", "v0731-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
 
     rec = client.post(
         "/records",
@@ -5493,7 +5501,7 @@ def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
     """v0.7.32: X-Request-Id, note whitespace collapse, team mutation rate limit."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
     assert "X-Request-Id" in health.headers
     rid = health.headers["X-Request-Id"]
     assert len(rid) >= 8
@@ -5617,7 +5625,7 @@ def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
 def test_list_rate_limits_comment_collapse_batch_method(client, monkeypatch):
     """v0.7.33: list GET rate limits, decide/comment collapse, batch payment_method."""
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
     assert "X-Request-Id" in health.headers
 
     owner = _register(client, "flow-0733", "v0733-owner@example.com")
@@ -5681,7 +5689,7 @@ def test_list_rate_limits_comment_collapse_batch_method(client, monkeypatch):
 def test_control_chars_read_limits_and_request_id_header(client, monkeypatch):
     """v0.7.34: reject control chars, rate-limit remaining reads."""
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
     assert health.headers.get("X-Request-Id")
 
     owner = _register(client, "flow-0734", "v0734-owner@example.com")
@@ -5754,7 +5762,7 @@ def test_health_controls_before_collapse_and_export_names(client, monkeypatch):
     """v0.7.35: health readiness, control-char order, CSV export still works."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
     assert health.json()["ok"] is True
     assert health.json()["db"] == "ok"
 
@@ -5816,7 +5824,7 @@ def test_login_timing_media_token_bound_and_export_cap(client):
     """v0.7.36: dummy-hash login path, media token bound, health version."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
 
     # Missing account still 401 (dummy hash path)
     missing = client.post(
@@ -5845,7 +5853,7 @@ def test_preauth_429_body_limit_purpose_and_settings(client, monkeypatch, tmp_pa
     """v0.7.37: middleware 429 JSON, body size, purpose reject, settings guard."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
 
     from app.config import settings
     from app.services.rate_limit import reset_limiter_for_tests
@@ -5905,7 +5913,7 @@ def test_org_cap_jwt_bind_pagination_csv_and_plaintext_invite(client, monkeypatc
     """v0.7.38: invite ceiling, JWT org bind, pagination, CSV defaults, hashed-only invites."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.38"
+    assert health.json()["version"] == "0.7.39"
 
     from app.config import settings
     from app.db import SessionLocal
@@ -6023,3 +6031,83 @@ def test_org_cap_jwt_bind_pagination_csv_and_plaintext_invite(client, monkeypatc
         monkeypatch.setattr(settings, "secret_key", "test-secret")
         monkeypatch.setattr(settings, "media_backend", "local")
         monkeypatch.setattr(settings, "s3_bucket", "")
+
+
+def test_reset_force_accept_message_reports_default_and_amount(client):
+    """v0.7.39: reset 409/force, accept message, reports default window, amount schema."""
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["version"] == "0.7.39"
+
+    owner = _register(client, "flow-0739", "v0739-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0739-emp@example.com",
+            "full_name": "Emp 739",
+            "role": "employee",
+        },
+    )
+    assert inv.status_code == 200, inv.text
+    emp_id = inv.json()["id"]
+    raw = inv.json()["invite_token"]
+
+    # Invite already has an active token — reset without force → 409
+    conflict = client.post(f"/orgs/members/{emp_id}/reset-token", headers=h)
+    assert conflict.status_code == 409
+    forced = client.post(f"/orgs/members/{emp_id}/reset-token?force=true", headers=h)
+    assert forced.status_code == 200, forced.text
+    raw2 = forced.json()["invite_token"]
+    assert raw2 and raw2 != raw
+
+    ok = client.post(
+        "/auth/accept-invite",
+        json={"token": raw2, "password": "chosen99", "password_confirm": "chosen99"},
+    )
+    assert ok.status_code == 200, ok.text
+
+    # Simulate race: token still present but password already set
+    from app.db import SessionLocal
+    from app.models import User
+    from app.services.invite_tokens import store_invite_token
+
+    leftover = "leftover-token-0739-abcdefgh"
+    db = SessionLocal()
+    try:
+        u = db.query(User).filter(User.email == "v0739-emp@example.com").one()
+        u.must_set_password = False
+        u.invite_token = store_invite_token(leftover)
+        db.commit()
+    finally:
+        db.close()
+    again = client.post(
+        "/auth/accept-invite",
+        json={"token": leftover, "password": "chosen99", "password_confirm": "chosen99"},
+    )
+    assert again.status_code == 400
+    assert "already accepted" in again.json()["detail"].lower()
+
+    report = client.get("/reports/me", headers=h)
+    assert report.status_code == 200
+    org = client.get("/reports/org", headers=h)
+    assert org.status_code == 200
+
+    inf = client.post(
+        "/records",
+        headers={**h, "Content-Type": "application/json"},
+        content='{"kind":"expense","amount":"Infinity","category":"Taxi","payment_source":"my_pocket"}',
+    )
+    assert inf.status_code == 422
+    tiny = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 0.004,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert tiny.status_code == 422

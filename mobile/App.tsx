@@ -240,7 +240,7 @@ export default function App() {
       onAccount={() => setScreen("account")}
       onRecord={(id) => openRecord(id, "home")}
       onLogout={() => {
-        Alert.alert("Fos", "Log out of this device?", [
+        Alert.alert("Fos", "Log out on all devices? Your sessions everywhere will end.", [
           { text: "Cancel", style: "cancel" },
           {
             text: "Log out",

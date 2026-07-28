@@ -21,7 +21,7 @@ from app.models import (
 )
 from app.schemas import OrgReportOut, CategoryTotal, PurposeTotal, MyReportOut
 from app.services.balances import user_balance
-from app.services.org_limits import require_org_member_capacity
+from app.services.org_limits import org_member_limit, require_org_member_capacity
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -103,7 +103,7 @@ def my_report(
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
     bal = user_balance(db, user)
-    since, until = _window(days, date_from, date_to)
+    since, until = _window(days, date_from, date_to, default_days=365)
     eff = _effective_at()
 
     def sum_kind(kind: RecordKind, payment: str | None = None) -> float:
@@ -194,7 +194,7 @@ def org_report(
     currency = org.currency if org else "IDR"
     oid = user.organization_id
     require_org_member_capacity(db, oid, active_only=True)
-    since, until = _window(days, date_from, date_to)
+    since, until = _window(days, date_from, date_to, default_days=365)
     eff = _effective_at()
 
     def sum_approved(kind: RecordKind, payment: str | None = None) -> float:
@@ -263,6 +263,8 @@ def org_report(
     members = (
         db.query(User)
         .filter(User.organization_id == oid, User.is_active.is_(True))
+        .order_by(User.id.asc())
+        .limit(org_member_limit())
         .all()
     )
     team_bals = [user_balance(db, m) for m in members]

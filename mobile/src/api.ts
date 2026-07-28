@@ -32,9 +32,10 @@ function isFormDataBody(body: BodyInit | null | undefined): boolean {
 
 async function notifyUnauthorized(requestToken: string | null) {
   // Only clear session if the failing request still matches the active token
-  // (a delayed 401 from an old JWT must not wipe a freshly logged-in session).
+  // (a delayed 401 — including one started with no token — must not wipe a
+  // freshly logged-in session).
   const active = await getToken();
-  if (requestToken && active && requestToken !== active) {
+  if (requestToken !== active) {
     return;
   }
   try {

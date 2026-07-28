@@ -58,14 +58,26 @@ def _normalize_spaced(value: str | None, *, field: str, max_len: int) -> str:
 
 
 def _append_text(existing: str | None, addition: str, *, label: str = "Comment") -> str:
+    """Append an audit line, truncating older text so lifecycle actions never block."""
     base = (existing or "").rstrip()
     add = (addition or "").strip()
     if not add:
         return base
-    combined = f"{base}\n{add}".strip() if base else add
-    if len(combined) > _COMMENT_MAX:
-        raise HTTPException(400, f"{label} would exceed {_COMMENT_MAX} characters")
-    return combined
+    if len(add) > _COMMENT_MAX:
+        add = add[: _COMMENT_MAX - 1] + "…"
+    if not base:
+        return add
+    sep = "\n"
+    combined = f"{base}{sep}{add}"
+    if len(combined) <= _COMMENT_MAX:
+        return combined
+    head_budget = _COMMENT_MAX - len(sep) - len(add)
+    if head_budget <= 0:
+        return add
+    head = base[:head_budget]
+    if len(base) > head_budget and head_budget > 1:
+        head = head[:-1] + "…"
+    return f"{head}{sep}{add}"
 
 
 def _bound_purpose(purpose: str | None) -> str | None:
@@ -1596,7 +1608,10 @@ def cancel_pending_record(
     user: User = Depends(get_current_user),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    """Creator (or manager) can cancel a still-pending record by rejecting it."""
+    """Creator can cancel a still-pending record by rejecting it.
+
+    Managers must use decide/reject with a note instead of silent DELETE cancel.
+    """
     from app.services.idempotency import (
         fingerprint,
         lookup_idem,
@@ -1639,9 +1654,11 @@ def cancel_pending_record(
     )
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
-    is_manager = user.role in (UserRole.owner, UserRole.manager)
-    if rec.created_by != user.id and not is_manager:
-        raise HTTPException(403, "Insufficient role")
+    if rec.created_by != user.id:
+        raise HTTPException(
+            403,
+            "Only the creator can cancel — managers should reject with a note",
+        )
     if rec.status != RecordStatus.pending:
         if rec.status == RecordStatus.rejected and "[cancelled]" in (rec.comment or ""):
             return _record_out(db, rec)

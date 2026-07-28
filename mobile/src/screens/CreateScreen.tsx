@@ -5,10 +5,10 @@ import {
   createRecord,
   getCategories,
   lastFuelOdometer,
-  listMembers,
   makeIdempotencyKey,
   myBalance,
   myOrg,
+  orgDirectory,
   teamBalances,
   uploadPhoto,
   type TeamBalance,
@@ -63,6 +63,8 @@ export function CreateScreen({
   const [myCurrency, setMyCurrency] = useState("IDR");
   const [categoriesError, setCategoriesError] = useState("");
   const [teamLoadError, setTeamLoadError] = useState("");
+  const closedCycleGen = useRef(0);
+  const odoGen = useRef(0);
 
   useEffect(() => {
     idemKeyRef.current = null;
@@ -115,8 +117,10 @@ export function CreateScreen({
     if (!isManager) return;
     try {
       setTeamLoadError("");
-      const rows = await listMembers();
-      setMembers(rows.filter((m) => m.is_active !== false));
+      const rows = await orgDirectory();
+      const ready = rows.filter((m) => m.is_active !== false && !m.must_set_password);
+      setMembers(ready);
+      setForUserId((prev) => (prev != null && ready.some((m) => m.id === prev) ? prev : null));
       try {
         setTeamBals(await teamBalances());
       } catch {
@@ -149,6 +153,7 @@ export function CreateScreen({
       setClosedCycleHint("");
       return;
     }
+    const gen = ++closedCycleGen.current;
     (async () => {
       try {
         const cashTrack =
@@ -166,6 +171,7 @@ export function CreateScreen({
               : null;
         } else {
           const bal = await myBalance();
+          if (gen !== closedCycleGen.current) return;
           setMyCurrency(bal.currency);
           cutoff = cashTrack
             ? bal.last_income_handover_at
@@ -173,6 +179,7 @@ export function CreateScreen({
               ? bal.last_expense_payout_at
               : null;
         }
+        if (gen !== closedCycleGen.current) return;
         if (!cutoff) {
           setClosedCycleHint("");
           return;
@@ -186,6 +193,7 @@ export function CreateScreen({
           setClosedCycleHint("");
         }
       } catch {
+        if (gen !== closedCycleGen.current) return;
         setClosedCycleHint("");
       }
     })();
@@ -200,6 +208,7 @@ export function CreateScreen({
       return;
     }
     const handle = setTimeout(() => {
+      const gen = ++odoGen.current;
       void (async () => {
         try {
           const at = occurredDate.trim() || undefined;
@@ -208,11 +217,13 @@ export function CreateScreen({
             user_id: forUserId ?? undefined,
             at,
           });
+          if (gen !== odoGen.current) return;
           setLastOdo(res.odometer);
           setMinOdo(res.min_odometer);
           setMaxOdo(res.max_odometer);
           setHasFuelHistory(Boolean(res.has_history));
         } catch {
+          if (gen !== odoGen.current) return;
           setLastOdo(null);
           setMinOdo(null);
           setMaxOdo(null);

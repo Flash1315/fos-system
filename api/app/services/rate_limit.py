@@ -79,6 +79,16 @@ def parse_proxy_cidrs(raw: str) -> list[ipaddress._BaseNetwork]:
     """Public helper for startup validation of TRUSTED_PROXY_CIDRS."""
     return _parse_networks(raw)
 
+_MAX_XFF_HOPS = 8
+
+
+def _parse_ip(value: str):
+    try:
+        return ipaddress.ip_address((value or "").strip())
+    except ValueError:
+        return None
+
+
 def _ip_trusted(remote: str, cidrs: str) -> bool:
     try:
         addr = ipaddress.ip_address(remote)
@@ -96,11 +106,29 @@ def client_ip(request: Request | None) -> str:
     remote = request.client.host if request.client and request.client.host else None
     if settings.trust_x_forwarded_for:
         cidrs = (settings.trusted_proxy_cidrs or "").strip()
-        # Empty CIDRs keep legacy behavior for local/tests; production warns at startup.
+        # Empty CIDRs keep legacy leftmost-XFF behavior for local/tests.
         if not cidrs or (remote and _ip_trusted(remote, cidrs)):
             forwarded = request.headers.get("x-forwarded-for")
             if forwarded:
-                return forwarded.split(",")[0].strip() or "unknown"
+                raw_parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+                if len(raw_parts) > _MAX_XFF_HOPS:
+                    raw_parts = raw_parts[-_MAX_XFF_HOPS:]
+                parsed: list[str] = []
+                for part in raw_parts:
+                    addr = _parse_ip(part)
+                    if addr is None:
+                        return remote or "unknown"
+                    parsed.append(str(addr))
+                if not parsed:
+                    return remote or "unknown"
+                if not cidrs:
+                    return parsed[0]
+                # Walk right→left; skip trusted proxy hops; first untrusted is client.
+                for hop in reversed(parsed):
+                    if _ip_trusted(hop, cidrs):
+                        continue
+                    return hop
+                return parsed[0]
     if remote:
         return remote
     return "unknown"

@@ -4,8 +4,8 @@ import {
   batchPaySpendings,
   batchTakeCash,
   createPayout,
-  listMembers,
   makeIdempotencyKey,
+  orgDirectory,
   teamBalances,
   type TeamBalance,
   type User,
@@ -45,8 +45,8 @@ export function PayoutScreen({
     const selected = userId;
     try {
       setBootError("");
-      const rows = await listMembers();
-      const active = rows.filter((m) => m.is_active !== false);
+      const rows = await orgDirectory();
+      const active = rows.filter((m) => m.is_active !== false && !m.must_set_password);
       setMembers(active);
       if (opts?.preserveSelection && selected != null && active.some((m) => m.id === selected)) {
         setUserId(selected);

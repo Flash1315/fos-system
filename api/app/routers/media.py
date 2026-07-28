@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.auth import get_current_user, user_from_token
 from app.db import get_db
@@ -40,7 +41,13 @@ async def upload_photo(
     suffix, content_type = detect_image(data)
     name = f"{uuid.uuid4().hex}{suffix}"
     try:
-        url = storage.store_photo(user.organization_id, name, data, content_type)
+        url = await run_in_threadpool(
+            storage.store_photo,
+            user.organization_id,
+            name,
+            data,
+            content_type,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.exception(
             "photo upload failed org=%s err=%s",

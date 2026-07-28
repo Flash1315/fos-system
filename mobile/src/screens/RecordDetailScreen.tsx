@@ -422,7 +422,7 @@ export function RecordDetailScreen({
   const canCancel =
     !!rec &&
     rec.status === "pending" &&
-    (rec.created_by === user.id || isManager);
+    rec.created_by === user.id;
   const canEdit =
     !!rec &&
     rec.status === "pending" &&

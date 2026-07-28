@@ -219,7 +219,9 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Production refuses padded/blank `SECRET_KEY` and `TRUST_X_FORWARDED_FOR` without valid `TRUSTED_PROXY_CIDRS`
 - Reactivating an inactive member uses the active-seat ceiling (does not treat existing rows as new invites)
 - SMTP/Telegram outbound I/O capped (~5s); Telegram event alerts run after the response when possible
-- Payout create rejects client-supplied `overpayment` (server computes it)
+- Only the creator can DELETE-cancel a pending record; managers reject with a note
+- Audit comment append truncates older text so cancel/reject/void never block on length
+- Trusted XFF parses IPs, caps hops, and walks right→left past trusted proxies
 - Unsettled invitees (`must_set_password`) excluded from directory, balances, and money targets
 - Idempotency keys pruned after `IDEMPOTENCY_TTL_HOURS` (default 72)
 - CSV / report exports default to the last 365 days when no window is given; free-text cells truncated

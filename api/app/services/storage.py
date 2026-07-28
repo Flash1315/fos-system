@@ -25,11 +25,17 @@ def media_backend() -> str:
 def _s3_client():
     try:
         import boto3  # type: ignore
+        from botocore.config import Config  # type: ignore
     except ImportError as exc:
         raise RuntimeError("boto3 is required for MEDIA_BACKEND=s3") from exc
     kwargs: dict = {
         "service_name": "s3",
         "region_name": settings.s3_region or "us-east-1",
+        "config": Config(
+            connect_timeout=5,
+            read_timeout=20,
+            retries={"max_attempts": 2, "mode": "standard"},
+        ),
     }
     if settings.s3_access_key:
         kwargs["aws_access_key_id"] = settings.s3_access_key

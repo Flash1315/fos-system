@@ -151,6 +151,20 @@ class _LimiterFacade:
 _limiter = _LimiterFacade()
 
 
+def limiter_health() -> str:
+    """Effective limiter backend: memory | redis | redis_error (never raises)."""
+    url = (settings.rate_limit_redis_url or "").strip()
+    if not url:
+        return "memory"
+    if _limiter._redis is None or _limiter._redis_failed:
+        return "redis_error"
+    try:
+        _limiter._redis._r.ping()
+        return "redis"
+    except Exception:  # noqa: BLE001
+        return "redis_error"
+
+
 def _parse_networks(raw: str) -> list[ipaddress._BaseNetwork]:
     nets: list[ipaddress._BaseNetwork] = []
     for part in (raw or "").split(","):

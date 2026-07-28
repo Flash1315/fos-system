@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Alert, Share, View, StyleSheet } from "react-native";
-import { BILLING_READONLY_MSG, billingMe, inviteUser, isBillingReadOnly, myOrg, type InviteResult, type User } from "../api";
+import { BILLING_READONLY_MSG, billingMe, inviteUser, isBillingReadOnly, myOrg, onResumeRefresh, type InviteResult, type User } from "../api";
 import { Btn, Chip, Field, Label, LinkText, Screen, Sub, TopBar } from "../components/ui";
 import { passwordStrengthError } from "../format";
 
@@ -58,6 +58,12 @@ export function InviteScreen({
       .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
       .catch(() => {});
   }, []);
+
+  useEffect(() => onResumeRefresh(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }), []);
 
   const shareText = (payload: {
     res: InviteResult;
@@ -143,7 +149,25 @@ export function InviteScreen({
       };
       setLastInvite(payload);
       const mailNote = res.email_sent ? " Invite email was sent." : "";
-      Alert.alert("Fos", `Teammate invited.${mailNote} Keep the details below to share.`);
+      Alert.alert(
+        "Fos",
+        `Teammate invited.${mailNote} Share the invite details now?`,
+        [
+          { text: "Later", style: "cancel" },
+          {
+            text: "Share",
+            onPress: () => {
+              void (async () => {
+                try {
+                  await Share.share({ message: shareText(payload) });
+                } catch (e) {
+                  Alert.alert("Fos", e instanceof Error ? e.message : "Share failed");
+                }
+              })();
+            },
+          },
+        ],
+      );
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {

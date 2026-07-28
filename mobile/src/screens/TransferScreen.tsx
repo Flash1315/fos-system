@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
-import { BILLING_READONLY_MSG, billingMe, isBillingReadOnly, makeIdempotencyKey, me, myBalance, orgDirectory, transferCash, type User } from "../api";
+import { BILLING_READONLY_MSG, billingMe, isBillingReadOnly, makeIdempotencyKey, me, myBalance, onResumeRefresh, orgDirectory, transferCash, type User } from "../api";
 import { formatMoney, parseFiniteMoney } from "../format";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
@@ -61,6 +61,12 @@ export function TransferScreen({
       .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
       .catch(() => {});
   }, []);
+
+  useEffect(() => onResumeRefresh(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }), []);
 
   const submit = async () => {
     if (busy || billingReadonly || submitLock.current || bootError || booting) {

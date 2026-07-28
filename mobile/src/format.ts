@@ -67,6 +67,23 @@ export function passwordStrengthError(password: string): string | null {
   return null;
 }
 
+/** Simple email shape check (API still validates EmailStr). */
+export function emailFormatError(email: string): string | null {
+  const v = email.trim();
+  if (!v) return "Email is required";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return "Enter a valid email address";
+  if (v.length > 254) return "Email is too long";
+  return null;
+}
+
+/** ISO-ish 3-letter currency code. */
+export function currencyCodeError(code: string): string | null {
+  const v = code.trim().toUpperCase();
+  if (!v) return "Currency is required";
+  if (!/^[A-Z]{3}$/.test(v)) return "Currency must be a 3-letter code (e.g. IDR)";
+  return null;
+}
+
 export function statusColor(status: string, isVoided = false) {
   if (isVoided) return "#6B7280";
   if (status === "approved") return "#1DB954";

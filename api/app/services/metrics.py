@@ -16,6 +16,24 @@ _duration_bucket_counts: dict[int, int] = {b: 0 for b in _duration_buckets}
 _duration_bucket_inf = 0
 
 
+def _normalize_path(path: str) -> str:
+    parts = [p for p in (path or "/").split("/") if p != ""]
+    out = []
+    for p in parts:
+        if p.isdigit():
+            out.append(":id")
+        elif len(p) == 32 and all(c in "0123456789abcdef" for c in p.lower()):
+            out.append(":file")
+        else:
+            out.append(p)
+    return "/" + "/".join(out) if out else "/"
+
+
+def normalize_path(path: str) -> str:
+    """Public alias for request-log cardinality collapse."""
+    return _normalize_path(path)
+
+
 def observe_request(*, method: str, path: str, status: int, duration_ms: float) -> None:
     # Collapse /records/123 → /records/:id for cardinality
     norm = _normalize_path(path)
@@ -35,21 +53,14 @@ def observe_request(*, method: str, path: str, status: int, duration_ms: float) 
             _duration_bucket_inf += 1
 
 
-def _normalize_path(path: str) -> str:
-    parts = [p for p in (path or "/").split("/") if p != ""]
-    out = []
-    for p in parts:
-        if p.isdigit():
-            out.append(":id")
-        elif len(p) == 32 and all(c in "0123456789abcdef" for c in p.lower()):
-            out.append(":file")
-        else:
-            out.append(p)
-    return "/" + "/".join(out) if out else "/"
-
-
 def render_prometheus(
-    *, app: str, version: str, db_ok: bool, limiter: str, media_ok: bool = True
+    *,
+    app: str,
+    version: str,
+    db_ok: bool,
+    limiter: str,
+    media_ok: bool = True,
+    limiter_redis_up: bool | None = None,
 ) -> str:
     lines = [
         f"# HELP fos_up 1 if process is up",
@@ -67,6 +78,14 @@ def render_prometheus(
         f"# HELP fos_media_up 1 if media backend probe succeeded (best-effort at scrape)",
         f"# TYPE fos_media_up gauge",
         f"fos_media_up {1 if media_ok else 0}",
+    ]
+    if limiter_redis_up is not None:
+        lines += [
+            f"# HELP fos_limiter_redis_up 1 if Redis limiter is configured and reachable",
+            f"# TYPE fos_limiter_redis_up gauge",
+            f"fos_limiter_redis_up {1 if limiter_redis_up else 0}",
+        ]
+    lines += [
         f"# HELP fos_http_requests_total HTTP requests",
         f"# TYPE fos_http_requests_total counter",
     ]

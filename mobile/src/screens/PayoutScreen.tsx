@@ -7,6 +7,7 @@ import {
   batchTakeCash,
   createPayout,
   isBillingReadOnly,
+  onResumeRefresh,
   makeIdempotencyKey,
   orgDirectory,
   teamBalances,
@@ -77,6 +78,12 @@ export function PayoutScreen({
       .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
       .catch(() => {});
   }, []);
+
+  useEffect(() => onResumeRefresh(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }), []);
 
   const onPullRefresh = async () => {
     setBooting(true);

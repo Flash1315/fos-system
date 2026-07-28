@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Share, Text, StyleSheet, View } from "react-native";
-import { downloadReportCsv, orgReport, type OrgReport, type ReportPeriod } from "../api";
+import { downloadReportCsv, onResumeRefresh, orgReport, type OrgReport, type ReportPeriod } from "../api";
 import { Btn, Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { isValidYmd } from "../dates";
 import { colors } from "../theme";
@@ -90,6 +90,10 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     void reload();
   }, [days, custom, dateFromDebounced, dateToDebounced]);
+
+  useEffect(() => onResumeRefresh(() => {
+    void reload();
+  }), []);
 
   const onExport = async () => {
     if (custom) {

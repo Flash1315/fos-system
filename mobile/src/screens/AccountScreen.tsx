@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import {
+  BILLING_READONLY_MSG,
   billingMe,
   isBillingReadOnly,
   onResumeRefresh,
@@ -72,6 +73,7 @@ export function AccountScreen({
   );
   const [reqLoadError, setReqLoadError] = useState("");
   const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [billingReadonly, setBillingReadonly] = useState(false);
   const [tgChat, setTgChat] = useState("");
   const [mineHasMore, setMineHasMore] = useState(false);
   const [teamHasMore, setTeamHasMore] = useState(false);
@@ -99,14 +101,13 @@ export function AccountScreen({
       setCurrency(org.currency || "IDR");
       setCurrencyLocked(!!org.currency_locked);
       setOrgLoaded(true);
-      if (isOwner) {
-        try {
-          const b = await billingMe();
-          setBilling(b);
-          setTgChat(b.telegram_chat_id || "");
-        } catch {
-          setBilling(null);
-        }
+      try {
+        const b = await billingMe();
+        setBilling(b);
+        setBillingReadonly(isBillingReadOnly(b.billing_status));
+        if (isOwner) setTgChat(b.telegram_chat_id || "");
+      } catch {
+        /* keep previous billingReadonly */
       }
     } catch (e) {
       setOrgLoaded(false);
@@ -272,7 +273,7 @@ export function AccountScreen({
   };
 
   const onSaveOrg = async () => {
-    if (busy) return;
+    if (busy || billingReadonly) return;
     if (!orgName.trim() || orgName.trim().length < 2) {
       Alert.alert("Fos", "Company name must be at least 2 characters");
       return;
@@ -307,7 +308,7 @@ export function AccountScreen({
   };
 
   const onRequest = async () => {
-    if (busy) return;
+    if (busy || billingReadonly) return;
     const value = parseFiniteMoney(amount);
     if (value == null) {
       Alert.alert("Fos", "Enter amount");
@@ -358,7 +359,7 @@ export function AccountScreen({
   };
 
   const doApproveRequest = async (id: number, paymentMethod: "cash" | "transfer") => {
-    if (busy) return;
+    if (busy || billingReadonly) return;
     if (approveSlotRef.current !== id) {
       approveSlotRef.current = id;
       approveIdemRef.current = null;
@@ -388,6 +389,7 @@ export function AccountScreen({
       <Sub>
         {user.full_name} · {user.email} · {user.role}
       </Sub>
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
       <Sub>
         {orgName || "…"}
         {orgSlug ? ` · /${orgSlug}` : ""}
@@ -418,7 +420,7 @@ export function AccountScreen({
           {currencyLocked ? (
             <Sub>Currency locked after money activity — rename only.</Sub>
           ) : null}
-          <Btn title={busy ? "…" : "Save company"} onPress={onSaveOrg} disabled={busy} />
+          <Btn title={busy ? "…" : "Save company"} onPress={onSaveOrg} disabled={busy || billingReadonly} />
 
           <Label>Plan & integrations</Label>
           <Sub>
@@ -442,7 +444,7 @@ export function AccountScreen({
           <Btn
             title={busy ? "…" : "Save Telegram chat"}
             variant="ghost"
-            disabled={busy}
+            disabled={busy || billingReadonly}
             onPress={async () => {
               setBusy(true);
               try {
@@ -459,7 +461,7 @@ export function AccountScreen({
           <Btn
             title="Send Telegram test"
             variant="ghost"
-            disabled={busy}
+            disabled={busy || billingReadonly}
             onPress={async () => {
               setBusy(true);
               try {
@@ -518,7 +520,7 @@ export function AccountScreen({
       </View>
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} maxLength={24} />
       <Field value={note} onChangeText={setNote} placeholder="Optional note" maxLength={2000} />
-      <Btn title={busy ? "…" : "Send request"} onPress={onRequest} disabled={busy} />
+      <Btn title={busy ? "…" : "Send request"} onPress={onRequest} disabled={busy || billingReadonly} />
 
       <Label>My requests</Label>
       {!!reqLoadError && <Sub>Could not load — {reqLoadError}</Sub>}
@@ -622,7 +624,7 @@ export function AccountScreen({
                   <View style={styles.kinds}>
                     <Btn
                       title="Approve"
-                      disabled={busy}
+                      disabled={busy || billingReadonly}
                       onPress={() => {
                         const label =
                           r.kind === "expense_payout"

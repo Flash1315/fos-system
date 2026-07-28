@@ -23,7 +23,7 @@ DB_POOL_RECYCLE=1800
 ## 2. Secrets & HTTP
 
 - `SECRET_KEY` ≥ 32 chars (not a known default)
-- Explicit `CORS_ORIGINS` (never `*`)
+- Explicit `CORS_ORIGINS` (never `*` or empty — at least one origin)
 - Terminate TLS at a reverse proxy; `ENABLE_HSTS=true` only behind HTTPS
 - If the proxy sets client IPs: `TRUST_X_FORWARDED_FOR=true` and `TRUSTED_PROXY_CIDRS=…`
 - Keep `RATE_LIMIT_ENABLED=true` (required in production)
@@ -38,6 +38,7 @@ DB_POOL_RECYCLE=1800
 - Probe `GET /health/live` (liveness; use for container healthchecks) and `GET /health/ready` (DB; also reports `media` status without failing ready on media blips)
 - Persist `/app/uploads` or S3; content-addressed keys; cancels may remove unused receipt objects
 - Idempotency rows are pruned on API startup (and on store)
+- Ready reports `limiter` (`memory` / `redis` / `redis_error`) without failing on Redis blips; multi-worker should set `RATE_LIMIT_REDIS_URL`
 - `METRICS_TOKEN` is **required** in production; scrapers call `GET /metrics` with `Authorization: Bearer <token>`
 - Production refuses `CORS_ORIGINS=*`; schema via Alembic only (no create_all)
 - OpenAPI/docs are hidden when `ENVIRONMENT=production`

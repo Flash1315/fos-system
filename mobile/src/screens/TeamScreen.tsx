@@ -252,9 +252,30 @@ export function TeamScreen({
                                 emailSent: res.email_sent,
                               };
                               setLastReset(payload);
+                              const shareMsg =
+                                `Fos password reset\nSlug: ${payload.slug}\nEmail: ${payload.email}\n` +
+                                `Reset token: ${payload.token}\n\nOpen Accept invite and set a new password.`;
                               Alert.alert(
                                 "Fos",
-                                `Reset token issued${res.email_sent ? " (email sent)" : ""}. Keep the details below to share.`,
+                                `Reset token issued${res.email_sent ? " (email sent)" : ""}. Share now?`,
+                                [
+                                  { text: "Later", style: "cancel" },
+                                  {
+                                    text: "Share",
+                                    onPress: () => {
+                                      void (async () => {
+                                        try {
+                                          await Share.share({ message: shareMsg });
+                                        } catch (e) {
+                                          Alert.alert(
+                                            "Fos",
+                                            e instanceof Error ? e.message : "Share failed",
+                                          );
+                                        }
+                                      })();
+                                    },
+                                  },
+                                ],
                               );
                               await reload();
                             } catch (e) {

@@ -7,6 +7,7 @@ import {
   createRecord,
   getCategories,
   isBillingReadOnly,
+  onResumeRefresh,
   lastFuelOdometer,
   makeIdempotencyKey,
   myBalance,
@@ -76,6 +77,12 @@ export function CreateScreen({
       .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
       .catch(() => {});
   }, []);
+
+  useEffect(() => onResumeRefresh(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }), []);
 
   useEffect(() => {
     idemKeyRef.current = null;

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Text, StyleSheet, View } from "react-native";
-import { myReport, type MyReport, type ReportPeriod } from "../api";
+import { myReport, onResumeRefresh, type MyReport, type ReportPeriod } from "../api";
 import { Btn, Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { isValidYmd } from "../dates";
 import { colors } from "../theme";
@@ -89,6 +89,10 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     void reload();
   }, [days, custom, dateFromDebounced, dateToDebounced]);
+
+  useEffect(() => onResumeRefresh(() => {
+    void reload();
+  }), []);
 
   let body: React.ReactNode = null;
   if (!report && !loadError) {

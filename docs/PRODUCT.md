@@ -240,7 +240,11 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Photo filenames are content-addressed (sha256 prefix); cancel deletes unreferenced receipt objects; S3 skips rewrite on existing key
 - SecureStore uses device-only accessibility; media JWT cached ~14m; resume refresh bus after live probe
 - Billing freeze banner on write screens; JWT retained on billing 403; cancel pending still allowed
-- `/health/ready` reports media probe (non-blocking); idempotency rows pruned at API startup; `fos_media_up` metric
+- `/health/ready` reports media + limiter probes (non-blocking); idempotency rows pruned at API startup; `fos_media_up` / `fos_limiter_redis_up`
+- Account freeze UX covers settlement request/approve; Reports/MyReport resume-refresh; write screens re-check billing on resume
+- Auth client validates email/currency + submit lock; invite/reset offer Share after success
+- Validation errors return string `detail` + X-Request-Id; request logs use cardinality-safe paths; empty prod CORS refused
+- CI version sync + `/health/ready` docker smoke
 - Production refuses SQLite `DATABASE_URL`; Alembic upgrade fails hard in production
 - Postgres pool/SSL knobs: `DB_POOL_*`, `DB_SSLMODE`; see `docs/DEPLOY.md`
 - Accept-invite allowed during billing freeze; money idempotency replays before writable gate

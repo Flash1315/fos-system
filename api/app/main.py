@@ -57,6 +57,13 @@ def _validate_runtime_settings() -> str:
             raise RuntimeError(
                 "CORS_ORIGINS=* is not allowed in production — set explicit origins"
             )
+        cors_list = [
+            o.strip() for o in (settings.cors_origins or "").split(",") if o.strip()
+        ]
+        if not cors_list:
+            raise RuntimeError(
+                "CORS_ORIGINS must list at least one origin in production"
+            )
         if settings.trust_x_forwarded_for:
             cidrs = (settings.trusted_proxy_cidrs or "").strip()
             if not cidrs:
@@ -245,11 +252,14 @@ class RequestLogMetricsMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             duration_ms = (time.perf_counter() - started) * 1000.0
-            path = request.url.path
+            from app.services.metrics import normalize_path
+
+            raw_path = request.url.path
+            path = normalize_path(raw_path)
             method = request.method
             try:
                 observe_request(
-                    method=method, path=path, status=status, duration_ms=duration_ms
+                    method=method, path=raw_path, status=status, duration_ms=duration_ms
                 )
             except Exception:  # noqa: BLE001
                 pass
@@ -400,6 +410,24 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
+from fastapi.exceptions import RequestValidationError  # noqa: E402
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Flatten Pydantic errors to a single detail string (mobile-friendly)."""
+    parts: list[str] = []
+    for err in exc.errors():
+        loc = err.get("loc") or ()
+        # Skip leading "body" / "query" / "path"
+        fields = [str(x) for x in loc if x not in ("body", "query", "path", "header")]
+        where = ".".join(fields)
+        msg = str(err.get("msg") or "invalid")
+        parts.append(f"{where}: {msg}" if where else msg)
+    detail = "; ".join(parts) if parts else "Validation error"
+    return _json_error(422, detail, request=request)
+
+
 def _db_ping() -> str:
     from sqlalchemy import text
 
@@ -422,11 +450,13 @@ def health_live():
 
 @app.get("/health/ready")
 def health_ready(request: Request):
-    """Readiness — requires DB. Media status is reported but does not fail ready."""
+    """Readiness — requires DB. Media/limiter status reported but do not fail ready."""
+    from app.services.rate_limit import limiter_health
     from app.services.storage import media_backend, media_health
 
     db_status = _db_ping()
     media_status = media_health()
+    limiter_status = limiter_health()
     body = {
         "ok": db_status == "ok",
         "app": settings.app_name,
@@ -434,6 +464,7 @@ def health_ready(request: Request):
         "db": db_status,
         "media_backend": media_backend(),
         "media": media_status,
+        "limiter": limiter_status,
     }
     if db_status != "ok":
         return JSONResponse(status_code=503, content=body)
@@ -453,6 +484,7 @@ def metrics(request: Request):
     from fastapi.responses import PlainTextResponse
 
     from app.services.metrics import render_prometheus
+    from app.services.rate_limit import limiter_health
     from app.services.storage import media_health
 
     expected = (settings.metrics_token or "").strip()
@@ -464,12 +496,14 @@ def metrics(request: Request):
             bearer = auth[7:].strip()
         if got != expected and bearer != expected:
             raise HTTPException(401, "Metrics token required")
-    limiter = "redis" if (settings.rate_limit_redis_url or "").strip() else "memory"
+    limiter_status = limiter_health()
+    redis_configured = bool((settings.rate_limit_redis_url or "").strip())
     body = render_prometheus(
         app=settings.app_name,
         version=APP_VERSION,
         db_ok=_db_ping() == "ok",
         media_ok=media_health() == "ok",
-        limiter=limiter,
+        limiter=limiter_status,
+        limiter_redis_up=(limiter_status == "redis") if redis_configured else None,
     )
     return PlainTextResponse(body, media_type="text/plain; version=0.0.4")

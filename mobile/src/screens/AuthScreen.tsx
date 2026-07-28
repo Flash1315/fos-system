@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { acceptInvite, login, registerOrg, type User } from "../api";
 import { storageGet, storageSet } from "../storage";
 import { Brand, Btn, Card, Field, Label, LinkText, Screen, Sub } from "../components/ui";
-import { passwordStrengthError } from "../format";
+import { currencyCodeError, emailFormatError, passwordStrengthError } from "../format";
 
 const LAST_SLUG_KEY = "fos_last_org_slug";
 const LAST_EMAIL_KEY = "fos_last_email";
@@ -38,6 +38,7 @@ export function AuthScreen({
   const [inviteToken, setInviteToken] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberedSlug, setRememberedSlug] = useState<string | null>(null);
+  const submitLock = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -65,6 +66,7 @@ export function AuthScreen({
   };
 
   const submit = async () => {
+    if (busy || submitLock.current) return;
     if (mode === "invite") {
       if (!inviteToken.trim() || inviteToken.trim().length < 16) {
         Alert.alert("Fos", "Paste the invite token from your manager");
@@ -79,6 +81,7 @@ export function AuthScreen({
         Alert.alert("Fos", "Passwords do not match");
         return;
       }
+      submitLock.current = true;
       setBusy(true);
       try {
         const res = await acceptInvite(inviteToken.trim(), password, passwordConfirm);
@@ -94,6 +97,7 @@ export function AuthScreen({
       } catch (e) {
         Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
       } finally {
+        submitLock.current = false;
         setBusy(false);
       }
       return;
@@ -104,6 +108,11 @@ export function AuthScreen({
     }
     if (!email.trim() || !password) {
       Alert.alert("Fos", "Email and password are required");
+      return;
+    }
+    const mailErr = emailFormatError(email);
+    if (mailErr) {
+      Alert.alert("Fos", mailErr);
       return;
     }
     if (mode === "register") {
@@ -124,6 +133,11 @@ export function AuthScreen({
         Alert.alert("Fos", "Slug: lowercase letters, numbers, hyphens only (no -- or leading/trailing -)");
         return;
       }
+      const curErr = currencyCodeError(currency);
+      if (curErr) {
+        Alert.alert("Fos", curErr);
+        return;
+      }
       if (password !== passwordConfirm) {
         Alert.alert("Fos", "Passwords do not match");
         return;
@@ -134,6 +148,7 @@ export function AuthScreen({
     }
     const slug = orgSlug.toLowerCase().trim();
     const mail = email.trim().toLowerCase();
+    submitLock.current = true;
     setBusy(true);
     try {
       if (mode === "register") {
@@ -171,6 +186,7 @@ export function AuthScreen({
           : msg;
       Alert.alert("Fos", friendly);
     } finally {
+      submitLock.current = false;
       setBusy(false);
     }
   };

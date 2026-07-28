@@ -59,6 +59,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Version sync
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, re
+          api = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', pathlib.Path("api/app/version.py").read_text()).group(1)
+          pkg = json.loads(pathlib.Path("mobile/package.json").read_text())["version"]
+          app = json.loads(pathlib.Path("mobile/app.json").read_text())["expo"]["version"]
+          print(f"versions api={api} package={pkg} app={app}")
+          assert api == pkg == app, (api, pkg, app)
+          PY
       - name: Build API image
         run: docker build -t fos-api ./api
       - name: Health smoke
@@ -74,6 +85,10 @@ jobs:
           for _ in $(seq 1 40); do
             if curl -fsS http://127.0.0.1:8000/health/live | grep -q '"ok"'; then
               curl -fsS http://127.0.0.1:8000/health/live
+              ready=$(curl -fsS http://127.0.0.1:8000/health/ready)
+              echo "$ready"
+              echo "$ready" | grep -q '"db":"ok"'
+              echo "$ready" | grep -q '"limiter"'
               ok=1
               break
             fi

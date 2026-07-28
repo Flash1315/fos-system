@@ -154,6 +154,7 @@ export function TeamScreen({
         visible={resetId != null}
         title="New password (min 6)"
         required
+        secureTextEntry
         label="New password"
         placeholder="min 6 characters"
         onCancel={() => setResetId(null)}

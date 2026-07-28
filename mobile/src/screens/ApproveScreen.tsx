@@ -68,6 +68,11 @@ export function ApproveScreen({
         );
         return;
       }
+      Alert.alert("Fos", "Approve this record?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Approve", onPress: () => void doDecide(id, true, note) },
+      ]);
+      return;
     }
     await doDecide(id, approve, note);
   };
@@ -112,7 +117,10 @@ export function ApproveScreen({
       );
       return;
     }
-    await go();
+    Alert.alert("Fos", `Approve all ${rows.length} pending record(s)?`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Approve all", onPress: () => void go() },
+    ]);
   };
 
   const rejectAll = async (note: string) => {

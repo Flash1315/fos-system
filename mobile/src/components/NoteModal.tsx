@@ -12,6 +12,7 @@ export function NoteModal({
   required = false,
   label,
   placeholder = "Reason",
+  secureTextEntry = false,
 }: {
   visible: boolean;
   title: string;
@@ -20,6 +21,7 @@ export function NoteModal({
   required?: boolean;
   label?: string;
   placeholder?: string;
+  secureTextEntry?: boolean;
 }) {
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -29,7 +31,17 @@ export function NoteModal({
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>{title}</Text>
           <Label>{label || (required ? "Note (required)" : "Note (optional)")}</Label>
-          <Field value={note} onChangeText={(t) => { setNote(t); setError(""); }} placeholder={placeholder} />
+          <Field
+            value={note}
+            onChangeText={(t) => {
+              setNote(t);
+              setError("");
+            }}
+            placeholder={placeholder}
+            secureTextEntry={secureTextEntry}
+            autoCapitalize={secureTextEntry ? "none" : undefined}
+            autoCorrect={!secureTextEntry}
+          />
           {!!error && <Text style={styles.error}>{error}</Text>}
           <View style={styles.row}>
             <Btn title="Cancel" variant="ghost" onPress={onCancel} />

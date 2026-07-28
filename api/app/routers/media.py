@@ -1,10 +1,15 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
+from app.config import settings
+from app.db import get_db
 from app.models import User
 from app.schemas import PhotoOut
 
@@ -13,6 +18,19 @@ router = APIRouter(tags=["media"])
 UPLOAD_ROOT = Path(__file__).resolve().parents[2] / "uploads"
 UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
 ALLOWED = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
+_optional_bearer = HTTPBearer(auto_error=False)
+
+
+def _user_from_token(token: str, db: Session) -> User:
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        user_id = int(payload.get("sub", 0))
+    except (JWTError, ValueError, TypeError) as exc:
+        raise HTTPException(401, "Could not validate credentials") from exc
+    user = db.get(User, user_id)
+    if not user or not user.is_active:
+        raise HTTPException(401, "Could not validate credentials")
+    return user
 
 
 @router.post("/media/photo", response_model=PhotoOut)
@@ -30,6 +48,8 @@ async def upload_photo(
     data = await file.read()
     if len(data) > 8 * 1024 * 1024:
         raise HTTPException(400, "File too large (max 8MB)")
+    if len(data) < 24:
+        raise HTTPException(400, "File too small or empty")
     dest.write_bytes(data)
     print(f"photo uploaded org={user.organization_id} user={user.id} path={dest}")
     url = f"/media/files/{user.organization_id}/{name}"
@@ -37,7 +57,22 @@ async def upload_photo(
 
 
 @router.get("/media/files/{org_id}/{filename}")
-def get_photo(org_id: int, filename: str, user: User = Depends(get_current_user)):
+def get_photo(
+    org_id: int,
+    filename: str,
+    token: str | None = Query(default=None),
+    creds: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    db: Session = Depends(get_db),
+):
+    """Auth via Bearer header or ?token= for <Image> tags that cannot set headers."""
+    raw = None
+    if creds and creds.credentials:
+        raw = creds.credentials
+    elif token:
+        raw = token
+    if not raw:
+        raise HTTPException(401, "Could not validate credentials")
+    user = _user_from_token(raw, db)
     if org_id != user.organization_id:
         raise HTTPException(403, "Forbidden")
     if "/" in filename or ".." in filename:

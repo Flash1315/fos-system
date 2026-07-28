@@ -42,7 +42,11 @@ def _window(
     date_to: str | None,
 ) -> tuple[datetime | None, datetime | None]:
     if date_from or date_to:
-        return _parse_day(date_from), _parse_day(date_to, end=True)
+        since = _parse_day(date_from)
+        until = _parse_day(date_to, end=True)
+        if since and until and since > until:
+            raise HTTPException(400, "date_from must be on or before date_to")
+        return since, until
     if days:
         since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
         return since, None

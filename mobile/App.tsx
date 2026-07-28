@@ -46,6 +46,13 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [busy, setBusy] = useState(false);
   const [recordId, setRecordId] = useState<number | null>(null);
+  const [recordReturnTo, setRecordReturnTo] = useState<"home" | "approve" | "ledger">("home");
+
+  const openRecord = (id: number, from: "home" | "approve" | "ledger" = "home") => {
+    setRecordId(id);
+    setRecordReturnTo(from);
+    setScreen("record");
+  };
 
   useEffect(() => {
     (async () => {
@@ -99,10 +106,7 @@ export default function App() {
         busy={busy}
         setBusy={setBusy}
         onBack={() => setScreen("home")}
-        onRecord={(id) => {
-          setRecordId(id);
-          setScreen("record");
-        }}
+        onRecord={(id) => openRecord(id, "approve")}
       />
     );
   }
@@ -142,10 +146,7 @@ export default function App() {
     return (
       <LedgerScreen
         onBack={() => setScreen("home")}
-        onRecord={(id) => {
-          setRecordId(id);
-          setScreen("record");
-        }}
+        onRecord={(id) => openRecord(id, "ledger")}
       />
     );
   }
@@ -198,7 +199,7 @@ export default function App() {
         user={user}
         busy={busy}
         setBusy={setBusy}
-        onBack={() => setScreen("home")}
+        onBack={() => setScreen(recordReturnTo)}
       />
     );
   }
@@ -218,10 +219,7 @@ export default function App() {
       onPayoutHistory={() => setScreen("payoutHistory")}
       onBalances={() => setScreen("balances")}
       onAccount={() => setScreen("account")}
-      onRecord={(id) => {
-        setRecordId(id);
-        setScreen("record");
-      }}
+      onRecord={(id) => openRecord(id, "home")}
       onLogout={async () => {
         await clearToken();
         setUser(null);

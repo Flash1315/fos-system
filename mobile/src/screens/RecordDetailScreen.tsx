@@ -6,6 +6,7 @@ import {
   commentRecord,
   decideRecord,
   getRecord,
+  getToken,
   mediaUrl,
   updateRecord,
   voidRecord,
@@ -40,12 +41,14 @@ export function RecordDetailScreen({
   const [editComment, setEditComment] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [token, setToken] = useState<string | null>(null);
   const isManager = user.role === "owner" || user.role === "manager";
 
   const reload = async () => {
     try {
       setLoadError("");
-      const row = await getRecord(id);
+      const [row, t] = await Promise.all([getRecord(id), getToken()]);
+      setToken(t);
       setRec(row);
       setEditAmount(String(row.amount));
       setEditPlace(row.place || "");
@@ -92,15 +95,24 @@ export function RecordDetailScreen({
   };
 
   const onCancel = async () => {
-    setBusy(true);
-    try {
-      setRec(await cancelRecord(id));
-      Alert.alert("Fos", "Record cancelled");
-    } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
+    Alert.alert("Fos", "Cancel this pending record? It will be removed from approvals.", [
+      { text: "Keep", style: "cancel" },
+      {
+        text: "Cancel record",
+        style: "destructive",
+        onPress: async () => {
+          setBusy(true);
+          try {
+            setRec(await cancelRecord(id));
+            Alert.alert("Fos", "Record cancelled");
+          } catch (e) {
+            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
   };
 
   const onVoid = async (note: string) => {
@@ -270,7 +282,7 @@ export function RecordDetailScreen({
           {!!rec.photo_url && (
             <Card>
               <Label>Receipt</Label>
-              <Image source={{ uri: mediaUrl(rec.photo_url) }} style={styles.photo} />
+              <Image source={{ uri: mediaUrl(rec.photo_url, token) }} style={styles.photo} />
             </Card>
           )}
           {isManager && rec.status === "pending" && (

@@ -38,8 +38,9 @@ export function PayoutScreen({
     (async () => {
       try {
         const rows = await listMembers();
-        setMembers(rows.filter((m) => m.is_active !== false));
-        if (rows[0]) setUserId(rows[0].id);
+        const active = rows.filter((m) => m.is_active !== false);
+        setMembers(active);
+        if (active[0]) setUserId(active[0].id);
         await reloadBalances();
       } catch (e) {
         Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -103,7 +104,15 @@ export function PayoutScreen({
       );
       return;
     }
-    await doSubmit(value);
+    const who = members.find((m) => m.id === userId)?.full_name || "teammate";
+    const label =
+      kind === "expense_payout"
+        ? `Pay ${who} expense reimbursement ${value.toLocaleString()} via ${method}?`
+        : `Take cash handover ${value.toLocaleString()} from ${who} via ${method}?`;
+    Alert.alert("Fos", label, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Confirm", onPress: () => void doSubmit(value) },
+    ]);
   };
 
   const doSubmit = async (value: number) => {

@@ -15,7 +15,7 @@ const DEMO_EMAIL =
 const DEMO_PASSWORD =
   (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_PASSWORD) || "secret12";
 const DEMO_ENABLED =
-  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_LOGIN) !== "0";
+  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_LOGIN) === "1";
 
 export function AuthScreen({
   busy,

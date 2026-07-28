@@ -66,7 +66,7 @@ export function CreateScreen({
         setCategory(list[0] || "");
         if (res.purposes?.length) {
           setPurposes(res.purposes);
-          setPurpose(res.purposes[0]);
+          setPurpose(res.purposes.includes("Other") ? "Other" : res.purposes[0]);
         }
       } catch (e) {
         setCategories([]);

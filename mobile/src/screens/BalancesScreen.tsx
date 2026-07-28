@@ -130,22 +130,35 @@ export function BalancesScreen({
       Alert.alert("Fos", "Pick teammate, signed amount, and note");
       return;
     }
-    markBusy(true);
-    try {
-      await createAdjustment({
-        user_id: userId,
-        track,
-        amount: value,
-        note: note.trim(),
-      });
-      setAmount("");
-      setNote("");
-      await reload();
-    } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-    } finally {
-      markBusy(false);
-    }
+    const who = rows.find((r) => r.user_id === userId)?.full_name || "teammate";
+    Alert.alert(
+      "Fos",
+      `Post ${track} adjustment ${formatMoney(value, currency)} for ${who}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Post",
+          onPress: async () => {
+            markBusy(true);
+            try {
+              await createAdjustment({
+                user_id: userId,
+                track,
+                amount: value,
+                note: note.trim(),
+              });
+              setAmount("");
+              setNote("");
+              await reload();
+            } catch (e) {
+              Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            } finally {
+              markBusy(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const emptyAdj =

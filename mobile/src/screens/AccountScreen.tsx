@@ -48,7 +48,7 @@ export function AccountScreen({
   const [mine, setMine] = useState<ReqRow[]>([]);
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
-  const [currency, setCurrency] = useState("RUB");
+  const [currency, setCurrency] = useState("IDR");
   const [cancelId, setCancelId] = useState<number | null>(null);
   const [teamReqFilter, setTeamReqFilter] = useState<"pending" | "approved" | "cancelled" | "all">(
     "pending",
@@ -56,33 +56,37 @@ export function AccountScreen({
   const [mineReqFilter, setMineReqFilter] = useState<"all" | "pending" | "approved" | "cancelled">(
     "all",
   );
+  const [reqLoadError, setReqLoadError] = useState("");
 
   const reloadOrg = async () => {
     try {
       const org = await myOrg();
       setOrgName(org.name);
       setOrgSlug(org.slug);
-      setCurrency(org.currency || "RUB");
+      setCurrency(org.currency || "IDR");
     } catch {
       /* ignore */
     }
   };
 
   const reloadRequests = async () => {
+    setReqLoadError("");
     try {
       setMine(
         await listMySettlementRequests(
           mineReqFilter === "all" ? undefined : { status: mineReqFilter },
         ),
       );
-    } catch {
+    } catch (e) {
       setMine([]);
+      setReqLoadError(e instanceof Error ? e.message : "Failed to load requests");
     }
     if (!isManager) return;
     try {
       setRequests(await listSettlementRequests({ status: teamReqFilter }));
-    } catch {
-      /* ignore */
+    } catch (e) {
+      setRequests([]);
+      setReqLoadError(e instanceof Error ? e.message : "Failed to load team requests");
     }
   };
 
@@ -132,7 +136,7 @@ export function AccountScreen({
     }
     setBusy(true);
     try {
-      const org = await updateOrg({ name: orgName.trim(), currency: currency.trim() || "RUB" });
+      const org = await updateOrg({ name: orgName.trim(), currency: currency.trim() || "IDR" });
       setOrgName(org.name);
       setCurrency(org.currency);
       Alert.alert("Fos", "Company updated");
@@ -149,12 +153,36 @@ export function AccountScreen({
       Alert.alert("Fos", "Enter amount");
       return;
     }
+    const label =
+      kind === "expense_payout"
+        ? `Request expense reimbursement ${value.toLocaleString()} ${currency}?`
+        : `Request cash handover ${value.toLocaleString()} ${currency}?`;
+    Alert.alert("Fos", label, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Send",
+        onPress: async () => {
+          setBusy(true);
+          try {
+            await requestSettlement({ kind, amount: value, note });
+            Alert.alert("Fos", "Settlement request sent to managers");
+            setNote("");
+            await refreshSuggestedAmount();
+            await reloadRequests();
+          } catch (e) {
+            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const doApproveRequest = async (id: number, paymentMethod: "cash" | "transfer") => {
     setBusy(true);
     try {
-      await requestSettlement({ kind, amount: value, note });
-      Alert.alert("Fos", "Settlement request sent to managers");
-      setNote("");
-      await refreshSuggestedAmount();
+      await approveSettlementRequest(id, paymentMethod);
       await reloadRequests();
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -186,7 +214,7 @@ export function AccountScreen({
           <Field
             value={currency}
             onChangeText={setCurrency}
-            placeholder="Currency (RUB)"
+            placeholder="Currency (IDR)"
             autoCapitalize="characters"
           />
           <Btn title={busy ? "…" : "Save company"} onPress={onSaveOrg} disabled={busy} />
@@ -220,6 +248,7 @@ export function AccountScreen({
       <Btn title={busy ? "…" : "Send request"} onPress={onRequest} disabled={busy} />
 
       <Label>My requests</Label>
+      {!!reqLoadError && <Sub>Could not load — {reqLoadError}</Sub>}
       <View style={styles.kinds}>
         {(["all", "pending", "approved", "cancelled"] as const).map((s) => (
           <Chip
@@ -300,25 +329,16 @@ export function AccountScreen({
                             : "cash handover";
                         Alert.alert(
                           "Fos",
-                          `Approve ${label} ${r.amount.toLocaleString()} ${currency} for ${r.user_name}?`,
+                          `Approve ${label} ${r.amount.toLocaleString()} ${currency} for ${r.user_name}? Choose payment method:`,
                           [
                             { text: "Cancel", style: "cancel" },
                             {
-                              text: "Approve",
-                              onPress: async () => {
-                                setBusy(true);
-                                try {
-                                  await approveSettlementRequest(r.id);
-                                  await reloadRequests();
-                                } catch (e) {
-                                  Alert.alert(
-                                    "Fos",
-                                    e instanceof Error ? e.message : "Failed",
-                                  );
-                                } finally {
-                                  setBusy(false);
-                                }
-                              },
+                              text: "Cash",
+                              onPress: () => void doApproveRequest(r.id, "cash"),
+                            },
+                            {
+                              text: "Transfer",
+                              onPress: () => void doApproveRequest(r.id, "transfer"),
                             },
                           ],
                         );

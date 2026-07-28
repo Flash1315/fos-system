@@ -1872,3 +1872,65 @@ def test_settlement_request_status_filter(client):
     assert any(x["id"] == rid for x in all_rows)
     mine = client.get("/payouts/requests/mine?status=cancelled", headers=h).json()
     assert any(x["id"] == rid for x in mine)
+
+def test_report_rejects_reversed_dates(client):
+    owner = _register(client, "flow-dates", "dates-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    bad = client.get("/reports/org?date_from=2026-12-31&date_to=2026-01-01", headers=h)
+    assert bad.status_code == 400
+    assert "date_from" in bad.json()["detail"]
+    mine = client.get("/reports/me?date_from=2026-06-01&date_to=2026-01-01", headers=h)
+    assert mine.status_code == 400
+
+
+def test_media_auth_bearer_and_query_token(client):
+    owner = _register(client, "flow-media", "media-owner@example.com")
+    token = owner["access_token"]
+    h = {"Authorization": f"Bearer {token}"}
+    files = {"file": ("receipt.jpg", b"\xff\xd8\xff" + b"0" * 64, "image/jpeg")}
+    up = client.post("/media/photo", headers=h, files=files)
+    assert up.status_code == 200, up.text
+    url = up.json()["photo_url"]
+    assert url.startswith("/media/files/")
+    denied = client.get(url)
+    assert denied.status_code == 401
+    ok_bearer = client.get(url, headers=h)
+    assert ok_bearer.status_code == 200
+    ok_q = client.get(f"{url}?token={token}")
+    assert ok_q.status_code == 200
+    other = _register(client, "flow-media2", "media2-owner@example.com")
+    other_h = {"Authorization": f"Bearer {other['access_token']}"}
+    forbidden = client.get(url, headers=other_h)
+    assert forbidden.status_code == 403
+
+
+def test_settlement_approve_payment_method(client):
+    owner = _register(client, "flow-paymethod", "paymethod-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    income = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 50000,
+            "category": "Cash",
+            "payment_method": "cash",
+            "approve_now": True,
+        },
+    )
+    assert income.status_code == 200, income.text
+    req = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "income_handover", "amount": 10000, "note": "take"},
+    )
+    assert req.status_code == 200, req.text
+    rid = req.json()["id"]
+    approved = client.post(
+        f"/payouts/requests/{rid}/approve",
+        headers=h,
+        json={"payment_method": "transfer"},
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["payment_method"] == "transfer"
+

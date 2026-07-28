@@ -76,8 +76,8 @@ class RecordCreate(BaseModel):
     bike: str = ""
     comment: str = ""
     photo_url: str = ""
-    liters: Optional[float] = None
-    odometer: Optional[float] = None
+    liters: Optional[float] = Field(default=None, gt=0)
+    odometer: Optional[float] = Field(default=None, ge=0)
     client_name: str = ""
     payment_method: str = ""
     payment_source: str = ""
@@ -97,8 +97,8 @@ class RecordUpdate(BaseModel):
     bike: Optional[str] = None
     comment: Optional[str] = None
     photo_url: Optional[str] = None
-    liters: Optional[float] = None
-    odometer: Optional[float] = None
+    liters: Optional[float] = Field(default=None, gt=0)
+    odometer: Optional[float] = Field(default=None, ge=0)
     client_name: Optional[str] = None
     payment_method: Optional[str] = None
     payment_source: Optional[str] = None

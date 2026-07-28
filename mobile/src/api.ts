@@ -4,6 +4,7 @@ import { storageDelete, storageGet, storageSet } from "./storage";
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 const TOKEN_KEY = "fos_token";
+let cachedToken: string | null = null;
 
 export type User = {
   id: number;
@@ -79,20 +80,24 @@ export type MyReport = {
 };
 
 async function authHeaders(): Promise<Record<string, string>> {
-  const token = await storageGet(TOKEN_KEY);
+  const token = await getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export async function saveToken(token: string) {
+  cachedToken = token;
   await storageSet(TOKEN_KEY, token);
 }
 
 export async function clearToken() {
+  cachedToken = null;
   await storageDelete(TOKEN_KEY);
 }
 
 export async function getToken() {
-  return storageGet(TOKEN_KEY);
+  if (cachedToken) return cachedToken;
+  cachedToken = await storageGet(TOKEN_KEY);
+  return cachedToken;
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -110,6 +115,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     data = { detail: text };
   }
   if (!res.ok) {
+    if (res.status === 401) {
+      try {
+        await clearToken();
+      } catch {
+        /* ignore */
+      }
+    }
     throw new Error(formatApiError(data, res.statusText || `HTTP ${res.status}`));
   }
   return data as T;
@@ -597,8 +609,14 @@ export function listSettlementRequests(params?: {
   >(`/payouts/requests${qs ? `?${qs}` : ""}`);
 }
 
-export function approveSettlementRequest(id: number) {
-  return request(`/payouts/requests/${id}/approve`, { method: "POST" });
+export function approveSettlementRequest(
+  id: number,
+  paymentMethod: "cash" | "transfer" = "cash",
+) {
+  return request(`/payouts/requests/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ payment_method: paymentMethod }),
+  });
 }
 
 export function cancelSettlementRequest(id: number, note = "") {
@@ -669,8 +687,11 @@ export async function uploadPhoto(uri: string, name = "receipt.jpg") {
   });
 }
 
-export function mediaUrl(path: string) {
+export function mediaUrl(path: string, token?: string | null): string {
   if (!path) return "";
-  if (path.startsWith("http")) return path;
-  return `${API_URL}${path}`;
+  const base = path.startsWith("http") ? path : `${API_URL}${path}`;
+  const auth = token ?? cachedToken;
+  if (!auth) return base;
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}token=${encodeURIComponent(auth)}`;
 }

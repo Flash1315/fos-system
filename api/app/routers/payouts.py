@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -483,9 +483,14 @@ def list_settlement_requests(
     return out
 
 
+class ApproveRequestIn(BaseModel):
+    payment_method: str = "cash"
+
+
 @router.post("/requests/{request_id}/approve", response_model=PayoutOut)
 def approve_settlement_request(
     request_id: int,
+    body: ApproveRequestIn | None = Body(default=None),
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -497,6 +502,9 @@ def approve_settlement_request(
     target = db.get(User, req.user_id)
     if not target:
         raise HTTPException(404, "User not found")
+    method = ((body.payment_method if body else None) or "cash").strip().lower()
+    if method not in PAYMENT_METHODS:
+        raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
     bal = user_balance(db, target)
     track = (
         float(bal.get("spendings") or 0)
@@ -520,7 +528,7 @@ def approve_settlement_request(
             user_id=req.user_id,
             kind=req.kind,
             amount=amount,
-            payment_method="cash",
+            payment_method=method,
             note=req.note or f"From request #{req.id}",
         ),
         db=db,

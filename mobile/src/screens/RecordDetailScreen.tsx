@@ -70,6 +70,7 @@ export function RecordDetailScreen({
   const voidIdemRef = useRef<string | null>(null);
   const voidSlotRef = useRef<string | null>(null);
   const editIdemRef = useRef<string | null>(null);
+  const reloadGen = useRef(0);
   const isManager = user.role === "owner" || user.role === "manager";
 
   useEffect(() => {
@@ -109,23 +110,28 @@ export function RecordDetailScreen({
   };
 
   const reload = async (opts?: { preserveEdits?: boolean }) => {
+    const gen = ++reloadGen.current;
     try {
       setLoadError("");
       const row = await getRecord(id);
+      if (gen !== reloadGen.current) return;
       setRec(row);
       if (!opts?.preserveEdits) {
         applyEditFields(row);
       }
       if (row.photo_url) {
-        setPhotoUri(await mediaUrlWithMediaToken(row.photo_url));
+        const uri = await mediaUrlWithMediaToken(row.photo_url);
+        if (gen !== reloadGen.current) return;
+        setPhotoUri(uri);
       } else {
         setPhotoUri("");
       }
     } catch (e) {
+      if (gen !== reloadGen.current) return;
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
-      setLoading(false);
+      if (gen === reloadGen.current) setLoading(false);
     }
   };
 
@@ -184,6 +190,7 @@ export function RecordDetailScreen({
     );
     setBusy(true);
     try {
+      reloadGen.current += 1;
       setRec(await decideRecord(id, approve, note, { idempotencyKey: key }));
       decideIdemRef.current = null;
       decideSlotRef.current = null;
@@ -212,6 +219,7 @@ export function RecordDetailScreen({
               return;
             }
             if (!cancelIdemRef.current) cancelIdemRef.current = makeIdempotencyKey("cancel");
+            reloadGen.current += 1;
             setRec(await cancelRecord(id, { idempotencyKey: cancelIdemRef.current }));
             cancelIdemRef.current = null;
             Alert.alert("Fos", "Record cancelled");
@@ -242,6 +250,7 @@ export function RecordDetailScreen({
       }
       const noteKey = note.replace(/\s+/g, " ").trim();
       const key = idemKeyFor(voidIdemRef, voidSlotRef, "void", `${id}:${noteKey}`);
+      reloadGen.current += 1;
       setRec(await voidRecord(id, note, { idempotencyKey: key }));
       voidIdemRef.current = null;
       voidSlotRef.current = null;
@@ -258,6 +267,7 @@ export function RecordDetailScreen({
     try {
       const noteKey = note.replace(/\s+/g, " ").trim();
       const key = idemKeyFor(commentIdemRef, commentSlotRef, "cmt", `${id}:${noteKey}`);
+      reloadGen.current += 1;
       setRec(await commentRecord(id, note, { idempotencyKey: key }));
       commentIdemRef.current = null;
       commentSlotRef.current = null;
@@ -370,6 +380,7 @@ export function RecordDetailScreen({
     try {
       const updated = await updateRecord(id, body, { idempotencyKey: editIdemRef.current });
       editIdemRef.current = null;
+      reloadGen.current += 1;
       setRec(updated);
       applyEditFields(updated);
       setEditing(false);

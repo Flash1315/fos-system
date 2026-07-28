@@ -82,6 +82,7 @@ export function AccountScreen({
   const approveSlotRef = useRef<number | null>(null);
   const cancelIdemRef = useRef<string | null>(null);
   const cancelSlotRef = useRef<number | null>(null);
+  const reqReloadGen = useRef(0);
 
   useEffect(() => {
     requestIdemRef.current = null;
@@ -112,6 +113,7 @@ export function AccountScreen({
   };
 
   const reloadRequests = async () => {
+    const gen = ++reqReloadGen.current;
     setReqLoadError("");
     try {
       const mineRows = await listMySettlementRequests({
@@ -119,9 +121,11 @@ export function AccountScreen({
         limit: PAGE,
         offset: 0,
       });
+      if (gen !== reqReloadGen.current) return;
       setMine(mineRows);
       setMineHasMore(mineRows.length >= PAGE);
     } catch (e) {
+      if (gen !== reqReloadGen.current) return;
       setMine([]);
       setMineHasMore(false);
       setReqLoadError(e instanceof Error ? e.message : "Failed to load requests");
@@ -133,9 +137,11 @@ export function AccountScreen({
         limit: PAGE,
         offset: 0,
       });
+      if (gen !== reqReloadGen.current) return;
       setRequests(teamRows);
       setTeamHasMore(teamRows.length >= PAGE);
     } catch (e) {
+      if (gen !== reqReloadGen.current) return;
       setRequests([]);
       setTeamHasMore(false);
       setReqLoadError(e instanceof Error ? e.message : "Failed to load team requests");
@@ -144,37 +150,45 @@ export function AccountScreen({
 
   const loadMoreMine = async () => {
     if (loadingMoreMine || !mineHasMore) return;
+    const gen = reqReloadGen.current;
+    const offset = mine.length;
     setLoadingMoreMine(true);
     try {
       const more = await listMySettlementRequests({
         ...(mineReqFilter === "all" ? {} : { status: mineReqFilter }),
         limit: PAGE,
-        offset: mine.length,
+        offset,
       });
+      if (gen !== reqReloadGen.current) return;
       setMine((prev) => [...prev, ...more]);
       setMineHasMore(more.length >= PAGE);
     } catch (e) {
+      if (gen !== reqReloadGen.current) return;
       Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
     } finally {
-      setLoadingMoreMine(false);
+      if (gen === reqReloadGen.current) setLoadingMoreMine(false);
     }
   };
 
   const loadMoreTeam = async () => {
     if (loadingMoreTeam || !teamHasMore || !isManager) return;
+    const gen = reqReloadGen.current;
+    const offset = requests.length;
     setLoadingMoreTeam(true);
     try {
       const more = await listSettlementRequests({
         status: teamReqFilter,
         limit: PAGE,
-        offset: requests.length,
+        offset,
       });
+      if (gen !== reqReloadGen.current) return;
       setRequests((prev) => [...prev, ...more]);
       setTeamHasMore(more.length >= PAGE);
     } catch (e) {
+      if (gen !== reqReloadGen.current) return;
       Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
     } finally {
-      setLoadingMoreTeam(false);
+      if (gen === reqReloadGen.current) setLoadingMoreTeam(false);
     }
   };
 

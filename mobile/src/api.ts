@@ -1,7 +1,10 @@
 import { storageDelete, storageGet, storageSet } from "./storage";
 
 /** Change to your machine LAN IP when testing on a phone. */
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+export const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(
+  /\/+$/,
+  "",
+);
 
 const TOKEN_KEY = "fos_token";
 let cachedToken: string | null = null;

@@ -353,6 +353,8 @@ def export_csv(
     )
 
     oid = user.organization_id
+    org = db.get(Organization, oid)
+    org_currency = org.currency if org else "IDR"
     # Unbounded export is expensive — default to last 365 days when no window given.
     since, until = _window(days, date_from, date_to, default_days=365)
     eff = _effective_at()
@@ -396,6 +398,7 @@ def export_csv(
             "created_at",
             "occurred_at",
             "overpayment",
+            "settled_amount",
             "balance_after",
             "is_voided",
             "comment",
@@ -426,6 +429,7 @@ def export_csv(
                 _csv_text(name),
                 r.created_at.isoformat() if r.created_at else "",
                 r.occurred_at.isoformat() if r.occurred_at else "",
+                "",
                 "",
                 "",
                 1 if r.is_voided else 0,
@@ -479,6 +483,7 @@ def export_csv(
                 p.created_at.isoformat() if p.created_at else "",
                 "",
                 float(p.overpayment or 0),
+                "",
                 float(p.balance_after or 0),
                 1 if p.is_voided else 0,
                 _csv_text(p.void_note or p.note or ""),
@@ -520,7 +525,7 @@ def export_csv(
                 track,
                 "voided" if a.is_voided else "posted",
                 a.amount,
-                "",
+                org_currency,
                 "",
                 "",
                 "",
@@ -530,6 +535,7 @@ def export_csv(
                 _csv_text(name),
                 a.created_at.isoformat() if a.created_at else "",
                 a.occurred_at.isoformat() if a.occurred_at else "",
+                "",
                 "",
                 "",
                 1 if a.is_voided else 0,
@@ -573,7 +579,7 @@ def export_csv(
                 rkind,
                 rstatus,
                 req.amount,
-                "",
+                org_currency,
                 "",
                 "",
                 "",
@@ -583,6 +589,7 @@ def export_csv(
                 _csv_text(name),
                 req.created_at.isoformat() if req.created_at else "",
                 req.decided_at.isoformat() if req.decided_at else "",
+                "",
                 float(req.settled_amount or 0) if req.settled_amount is not None else "",
                 "",
                 0,

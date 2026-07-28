@@ -91,7 +91,9 @@ def get_photo(
         if not path.is_file():
             raise HTTPException(404, "Not found")
         return FileResponse(path, media_type=storage.content_type_for(filename))
-    data, _meta = storage.load_photo(org_id, filename)
+    data, _meta, err = storage.load_photo(org_id, filename)
+    if err == "unavailable":
+        raise HTTPException(503, "Media storage unavailable")
     if data is None:
         raise HTTPException(404, "Not found")
     return Response(content=data, media_type=storage.content_type_for(filename))

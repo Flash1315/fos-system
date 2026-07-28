@@ -65,7 +65,7 @@ docker compose up --build
 | POST | `/transfers` | colleague cash transfer |
 | GET | `/reports/org` | org totals |
 | GET | `/reports/export.csv` | CSV export |
-| POST | `/media/photo` | receipt photo (local storage) |
+| POST | `/media/photo` | receipt photo (local or S3 via authenticated API) |
 
 ## Quick start — Mobile
 
@@ -82,14 +82,13 @@ npx expo start
 - Roles: owner / manager / employee
 - Expense, Fuel, Income + approvals
 - Cash on hand (simple formula)
-- Team invite, org reports, receipt photo (local)
+- Team invite, org reports, receipt photo (local or S3)
 - Expo app: auth, home, create, approvals, invite, team, reports, detail
 
 ## Not in v1 (later)
 
-- Photo upload to S3/R2 (local upload works now)
-- Web admin / billing
-- Telegram bot bridge
+- Web admin / billing checkout
+- Telegram thin client (outbound alerts already exist)
 - Multi-currency FX
 - White-label
 

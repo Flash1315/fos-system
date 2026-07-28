@@ -51,7 +51,7 @@ def store_photo(org_id: int, filename: str, data: bytes, content_type: str = "im
         key = f"{org_id}/{filename}"
         client = _s3_client()
         client.put_object(
-            Bucket=settings.s3_bucket,
+            Bucket=settings.s3_bucket.strip(),
             Key=key,
             Body=data,
             ContentType=content_type,
@@ -85,28 +85,43 @@ def local_path(org_id: int, filename: str) -> Path:
     return path
 
 
-def load_photo(org_id: int, filename: str) -> tuple[bytes | None, str | None]:
-    """Return (bytes, content_type) or (None, None). Always stream S3 via API (auth + type)."""
+def load_photo(org_id: int, filename: str) -> tuple[bytes | None, str | None, str | None]:
+    """Return (bytes, content_type, error) where error is None | not_found | unavailable."""
     if media_backend() == "s3":
         key = f"{org_id}/{filename}"
         # Never redirect to a naked public CDN URL — keep auth on the media endpoint.
         client = _s3_client()
         try:
-            obj = client.get_object(Bucket=settings.s3_bucket, Key=key)
-            # Cap read to upload-sized objects; MIME from validated filename, not object meta.
-            max_bytes = 9 * 1024 * 1024
-            body = obj["Body"].read(max_bytes + 1)
+            obj = client.get_object(Bucket=settings.s3_bucket.strip(), Key=key)
+            stream = obj["Body"]
+            try:
+                # Cap read to upload-sized objects; MIME from validated filename, not object meta.
+                max_bytes = 9 * 1024 * 1024
+                body = stream.read(max_bytes + 1)
+            finally:
+                try:
+                    stream.close()
+                except Exception:  # noqa: BLE001
+                    pass
             if len(body) > max_bytes:
                 logger.warning("s3 object too large org=%s", org_id)
-                return None, None
-            return body, content_type_for(filename)
+                return None, None, "unavailable"
+            return body, content_type_for(filename), None
         except Exception as exc:  # noqa: BLE001
-            logger.warning("s3 get failed org=%s err=%s", org_id, type(exc).__name__)
-            return None, None
+            code = ""
+            try:
+                code = str(getattr(exc, "response", {}).get("Error", {}).get("Code", "") or "")
+            except Exception:  # noqa: BLE001
+                code = ""
+            name = type(exc).__name__
+            if code in ("404", "NoSuchKey", "NotFound") or "NoSuchKey" in name:
+                return None, None, "not_found"
+            logger.warning("s3 get failed org=%s err=%s code=%s", org_id, name, code or "-")
+            return None, None, "unavailable"
     try:
         path = local_path(org_id, filename)
     except ValueError:
-        return None, None
+        return None, None, "not_found"
     if not path.is_file():
-        return None, None
-    return path.read_bytes(), content_type_for(filename)
+        return None, None, "not_found"
+    return path.read_bytes(), content_type_for(filename), None

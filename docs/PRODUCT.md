@@ -181,7 +181,7 @@ Related: `/payouts`, `/payouts/requests`, `/transfers`, `/adjustments`, `/report
 | POST | `/transfers` | yes | colleague cash transfer |
 | GET | `/reports/org` | owner/manager | org totals |
 | GET | `/reports/export.csv` | owner/manager | CSV export |
-| POST | `/media/photo` | yes | receipt image upload (local) |
+| POST | `/media/photo` | yes | receipt image upload (local or S3 via authenticated API) |
 | GET | `/media/files/{org}/{file}` | yes | fetch uploaded image |
 
 Interactive docs: `/docs` when API is running.
@@ -224,7 +224,8 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Trusted XFF parses IPs, caps hops, and walks right→left past trusted proxies
 - Unsettled invitees (`must_set_password`) excluded from directory, balances, and money targets
 - Idempotency keys pruned after `IDEMPOTENCY_TTL_HOURS` (default 72)
-- CSV / report exports default to the last 365 days when no window is given; free-text cells truncated
+- CSV / report exports default to the last 365 days when no window is given; free-text cells truncated; settlement `settled_amount` is its own column (not under `overpayment`)
+- `ALGORITHM` must be HS256; S3 access/secret keys must be paired; DB pool uses `pool_pre_ping` (Postgres `connect_timeout=10`)
 - Rate limits are process-local (not shared across workers)
 - All record mutations scoped to caller’s `organization_id`
 - Do not leak other orgs’ data in list/balance endpoints

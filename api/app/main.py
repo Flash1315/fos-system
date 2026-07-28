@@ -39,11 +39,15 @@ def _validate_runtime_settings() -> str:
     if hsts < 0 or hsts > 63_072_000:
         raise RuntimeError("HSTS_MAX_AGE must be between 0 and 63072000")
     algo = (settings.algorithm or "").strip()
-    if algo and algo != "HS256":
-        raise RuntimeError(f"ALGORITHM must be HS256 (got {algo!r})")
+    if algo != "HS256":
+        raise RuntimeError(f"ALGORITHM must be HS256 (got {settings.algorithm!r})")
     media = (settings.media_backend or "local").strip().lower()
     if media not in ("local", "s3"):
         raise RuntimeError(f"MEDIA_BACKEND must be local or s3 (got {settings.media_backend!r})")
+    s3_key = (settings.s3_access_key or "").strip()
+    s3_secret = (settings.s3_secret_key or "").strip()
+    if bool(s3_key) != bool(s3_secret):
+        raise RuntimeError("S3_ACCESS_KEY and S3_SECRET_KEY must both be set or both empty")
     if env in ("prod", "production"):
         if not secret or secret in _INSECURE_SECRETS or len(secret) < 32:
             raise RuntimeError(

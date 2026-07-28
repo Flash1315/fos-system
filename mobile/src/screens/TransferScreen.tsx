@@ -63,6 +63,7 @@ export function TransferScreen({
   }, []);
 
   useEffect(() => onResumeRefresh(() => {
+    void bootstrap();
     void billingMe()
       .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
       .catch(() => {});
@@ -113,6 +114,17 @@ export function TransferScreen({
           text: "Transfer",
           onPress: async () => {
             try {
+              try {
+                const b = await billingMe();
+                const frozen = isBillingReadOnly(b.billing_status);
+                setBillingReadonly(frozen);
+                if (frozen) {
+                  Alert.alert("Fos", BILLING_READONLY_MSG);
+                  return;
+                }
+              } catch {
+                /* API will 403 if frozen */
+              }
               const bal = await myBalance();
               const freshAvailable = bal.available_cash ?? bal.cash_on_hand;
               if (value > freshAvailable + 1e-6) {

@@ -318,3 +318,4 @@ Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`
 - [x] API pytest + CI workflow
 - [ ] Production Postgres deploy (compose file ready — verify in target env)
 - [ ] Store builds (EAS config stub in `mobile/eas.json`)
+- Soft-fail report reloads; Create teammate/categories retry; Transfer/RecordDetail resume freeze; `transfer-org:` rate limit; CSV export `Cache-Control: no-store`

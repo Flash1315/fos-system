@@ -78,12 +78,6 @@ export function CreateScreen({
       .catch(() => {});
   }, []);
 
-  useEffect(() => onResumeRefresh(() => {
-    void billingMe()
-      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
-      .catch(() => {});
-  }), []);
-
   useEffect(() => {
     idemKeyRef.current = null;
   }, [
@@ -105,30 +99,32 @@ export function CreateScreen({
     approveNow,
   ]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setCategoriesError("");
-        const res = await getCategories(kind);
-        if (cancelled) return;
-        const list = res.categories[kind] || [];
-        setCategories(list);
-        setCategory(list[0] || "");
-        if (res.purposes?.length) {
-          setPurposes(res.purposes);
-          setPurpose(res.purposes.includes("Other") ? "Other" : res.purposes[0]);
-        }
-      } catch (e) {
-        if (cancelled) return;
-        setCategories([]);
-        setCategory("");
-        setCategoriesError(e instanceof Error ? e.message : "Categories failed to load");
+  const loadCategories = async () => {
+    try {
+      setCategoriesError("");
+      const res = await getCategories(kind);
+      const list = res.categories[kind] || [];
+      setCategories(list);
+      setCategory((prev) => (list.includes(prev) ? prev : list[0] || ""));
+      if (res.purposes?.length) {
+        setPurposes(res.purposes);
+        setPurpose((prev) =>
+          res.purposes.includes(prev)
+            ? prev
+            : res.purposes.includes("Other")
+              ? "Other"
+              : res.purposes[0],
+        );
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    } catch (e) {
+      setCategories([]);
+      setCategory("");
+      setCategoriesError(e instanceof Error ? e.message : "Categories failed to load");
+    }
+  };
+
+  useEffect(() => {
+    void loadCategories();
   }, [kind]);
 
   const loadTeamContext = async () => {
@@ -160,6 +156,13 @@ export function CreateScreen({
   useEffect(() => {
     void loadTeamContext();
   }, [isManager]);
+
+  useEffect(() => onResumeRefresh(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+    void loadTeamContext();
+  }), []);
 
   useEffect(() => {
     if (!occurredDate.trim()) {
@@ -434,6 +437,17 @@ export function CreateScreen({
       return;
     }
     if (busy || billingReadonly || submitLock.current) return;
+    try {
+      const b = await billingMe();
+      const frozen = isBillingReadOnly(b.billing_status);
+      setBillingReadonly(frozen);
+      if (frozen) {
+        Alert.alert("Fos", BILLING_READONLY_MSG);
+        return;
+      }
+    } catch {
+      /* API will 403 if frozen */
+    }
     // Re-check cash right before submit (approve_now must not use stale Review numbers)
     if (kind !== "income" && paymentSource === "cash_on_hand" && isManager && approveNow) {
       try {
@@ -621,7 +635,7 @@ export function CreateScreen({
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>New record</Label>
       {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
-      {isManager && members.length > 0 && (
+      {isManager && (
         <>
           <Label>File for</Label>
           <Sub>Balances attribute to the selected teammate.</Sub>
@@ -664,7 +678,10 @@ export function CreateScreen({
       {!!closedCycleHint && <Sub>{closedCycleHint}</Sub>}
       <Label>Category</Label>
       {!!categoriesError && (
-        <Sub>Could not load categories — {categoriesError}. You can still type a category below if needed.</Sub>
+        <>
+          <Sub>Could not load categories — {categoriesError}. You can still type a category below if needed.</Sub>
+          <Btn title="Retry categories" variant="ghost" onPress={loadCategories} />
+        </>
       )}
       <View style={styles.kinds}>
         {categories.map((c) => (

@@ -626,5 +626,8 @@ def export_csv(
     return PlainTextResponse(
         "\ufeff" + buf.getvalue(),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": disposition},
+        headers={
+            "Content-Disposition": disposition,
+            "Cache-Control": "no-store",
+        },
     )

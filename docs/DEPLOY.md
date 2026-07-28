@@ -39,6 +39,8 @@ DB_POOL_RECYCLE=1800
 - Live/ready responses send `Cache-Control: no-store`
 - Authenticated media file responses send `Cache-Control: no-store`
 - Invite endpoints enforce per-org `invite-org:` rate limits
+- Transfer endpoints enforce per-org `transfer-org:` rate limits
+- CSV export responses send `Cache-Control: no-store`
 - Persist `/app/uploads` or S3; content-addressed keys; cancels may remove unused receipt objects
 - Idempotency rows are pruned on API startup (and on store)
 - Ready reports `limiter` (`memory` / `redis` / `redis_error`) without failing on Redis blips; multi-worker should set `RATE_LIMIT_REDIS_URL`

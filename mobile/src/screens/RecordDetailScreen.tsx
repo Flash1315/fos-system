@@ -144,7 +144,6 @@ export function RecordDetailScreen({
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setLoadError(e instanceof Error ? e.message : "Failed");
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
       if (gen === reloadGen.current) setLoading(false);
     }
@@ -162,6 +161,9 @@ export function RecordDetailScreen({
 
   useEffect(() => onResumeRefresh(() => {
     void reload({ preserveEdits: editing });
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
   }), [editing]);
 
   const onPullRefresh = async () => {
@@ -209,7 +211,10 @@ export function RecordDetailScreen({
   };
 
   const doDecide = async (approve: boolean, note = "", allowClosedCycle = false) => {
-    if (busy) return;
+    if (busy || billingReadonly) {
+      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     const noteKey = note.replace(/\s+/g, " ").trim();
     const key = idemKeyFor(
       decideIdemRef,
@@ -219,6 +224,17 @@ export function RecordDetailScreen({
     );
     setBusy(true);
     try {
+      try {
+        const b = await billingMe();
+        const frozen = isBillingReadOnly(b.billing_status);
+        setBillingReadonly(frozen);
+        if (frozen) {
+          Alert.alert("Fos", BILLING_READONLY_MSG);
+          return;
+        }
+      } catch {
+        /* API will 403 if frozen */
+      }
       reloadGen.current += 1;
       setRec(
         await decideRecord(id, approve, note, {
@@ -268,9 +284,23 @@ export function RecordDetailScreen({
   };
 
   const onVoid = async (note: string) => {
-    if (busy || billingReadonly) return;
+    if (busy || billingReadonly) {
+      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     setBusy(true);
     try {
+      try {
+        const b = await billingMe();
+        const frozen = isBillingReadOnly(b.billing_status);
+        setBillingReadonly(frozen);
+        if (frozen) {
+          Alert.alert("Fos", BILLING_READONLY_MSG);
+          return;
+        }
+      } catch {
+        /* API will 403 if frozen */
+      }
       const fresh = await getRecord(id);
       setRec(fresh);
       applyEditFields(fresh);
@@ -303,6 +333,17 @@ export function RecordDetailScreen({
     }
     setBusy(true);
     try {
+      try {
+        const b = await billingMe();
+        const frozen = isBillingReadOnly(b.billing_status);
+        setBillingReadonly(frozen);
+        if (frozen) {
+          Alert.alert("Fos", BILLING_READONLY_MSG);
+          return;
+        }
+      } catch {
+        /* API will 403 if frozen */
+      }
       const noteKey = note.replace(/\s+/g, " ").trim();
       const key = idemKeyFor(commentIdemRef, commentSlotRef, "cmt", `${id}:${noteKey}`);
       reloadGen.current += 1;
@@ -317,6 +358,21 @@ export function RecordDetailScreen({
   };
 
   const onSaveEdit = async () => {
+    if (busy || billingReadonly) {
+      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
+    try {
+      const b = await billingMe();
+      const frozen = isBillingReadOnly(b.billing_status);
+      setBillingReadonly(frozen);
+      if (frozen) {
+        Alert.alert("Fos", BILLING_READONLY_MSG);
+        return;
+      }
+    } catch {
+      /* API will 403 if frozen */
+    }
     const value = parseFiniteMoney(editAmount);
     if (value == null) {
       Alert.alert("Fos", "Enter a valid amount");

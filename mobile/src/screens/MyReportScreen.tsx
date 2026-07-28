@@ -80,7 +80,6 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setLoadError(e instanceof Error ? e.message : "Failed");
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
       if (gen === reloadGen.current) setRefreshingPeriod(false);
     }

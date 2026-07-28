@@ -74,6 +74,11 @@ def create_transfer(
         limit=30,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"transfer-org:{user.organization_id}",
+        limit=60,
+        window_sec=60,
+    )
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None
     if key:

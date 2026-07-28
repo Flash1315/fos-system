@@ -74,13 +74,17 @@ export function HomeScreen({
       setAvailableCash(b.available_cash ?? b.cash_on_hand ?? 0);
       setCurrencyCode(b.currency);
       const hints: string[] = [];
-      if ((b.reserved_spendings || 0) > 0 || (b.reserved_cash || 0) > 0) {
-        hints.push(
-          `Reserved spendings ${formatMoney(b.reserved_spendings || 0, b.currency)} · available ${formatMoney(b.available_spendings ?? b.spendings, b.currency)}`,
-        );
-        if ((b.reserved_cash || 0) > 0) {
+      const reservedSpend = b.reserved_spendings || 0;
+      const reservedCash = b.reserved_cash || 0;
+      if (reservedSpend > 0 || reservedCash > 0) {
+        if (reservedSpend > 0) {
           hints.push(
-            `Reserved cash ${formatMoney(b.reserved_cash || 0, b.currency)} · available ${formatMoney(b.available_cash ?? b.cash_on_hand, b.currency)}`,
+            `Available spendings ${formatMoney(b.available_spendings ?? b.spendings, b.currency)} (reserved ${formatMoney(reservedSpend, b.currency)})`,
+          );
+        }
+        if (reservedCash > 0) {
+          hints.push(
+            `Available cash ${formatMoney(b.available_cash ?? b.cash_on_hand, b.currency)} (reserved ${formatMoney(reservedCash, b.currency)})`,
           );
         }
       }
@@ -133,20 +137,35 @@ export function HomeScreen({
       Alert.alert("Fos", "Nothing available to request");
       return;
     }
-    setRequestBusy(true);
-    try {
-      await requestSettlement({
-        kind,
-        amount,
-        note: kind === "expense_payout" ? "quick request from home" : "quick cash handover request",
-      });
-      Alert.alert("Fos", "Settlement request sent");
-      await reload();
-    } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-    } finally {
-      setRequestBusy(false);
-    }
+    const label =
+      kind === "expense_payout"
+        ? `Request expense reimbursement ${formatMoney(amount, currencyCode)}?`
+        : `Request cash handover ${formatMoney(amount, currencyCode)}?`;
+    Alert.alert("Fos", label, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Send",
+        onPress: async () => {
+          setRequestBusy(true);
+          try {
+            await requestSettlement({
+              kind,
+              amount,
+              note:
+                kind === "expense_payout"
+                  ? "quick request from home"
+                  : "quick cash handover request",
+            });
+            Alert.alert("Fos", "Settlement request sent");
+            await reload();
+          } catch (e) {
+            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+          } finally {
+            setRequestBusy(false);
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -173,7 +192,7 @@ export function HomeScreen({
           <Row>
             {availableSpend > 0 && (
               <Btn
-                title={requestBusy ? "…" : `Request pay ${formatMoney(availableSpend, currencyCode)}`}
+                title={requestBusy ? "…" : `Request reimbursement ${formatMoney(availableSpend, currencyCode)}`}
                 variant="ghost"
                 disabled={requestBusy}
                 onPress={() => quickRequest("expense_payout")}
@@ -181,7 +200,7 @@ export function HomeScreen({
             )}
             {availableCash > 0 && (
               <Btn
-                title={requestBusy ? "…" : `Request take ${formatMoney(availableCash, currencyCode)}`}
+                title={requestBusy ? "…" : `Request handover ${formatMoney(availableCash, currencyCode)}`}
                 variant="ghost"
                 disabled={requestBusy}
                 onPress={() => quickRequest("income_handover")}

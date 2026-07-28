@@ -33,6 +33,7 @@ export function BalancesScreen({
   const isBusy = busy ?? localBusy;
   const markBusy = setBusy ?? setLocalBusy;
   const [voidId, setVoidId] = useState<number | null>(null);
+  const [adjFilter, setAdjFilter] = useState<"active" | "voided" | "all">("active");
 
   const [userId, setUserId] = useState<number | null>(null);
   const [track, setTrack] = useState<"cash_on_hand" | "spendings">("spendings");
@@ -41,10 +42,16 @@ export function BalancesScreen({
 
   const reload = async () => {
     try {
-      const [list, org, adj] = await Promise.all([teamBalances(), myOrg(), listAdjustments()]);
+      const voided =
+        adjFilter === "voided" ? true : adjFilter === "active" ? false : undefined;
+      const [list, org, adj] = await Promise.all([
+        teamBalances(),
+        myOrg(),
+        listAdjustments({ voided }),
+      ]);
       setRows(list);
       setCurrency(org.currency);
-      setAdjustments(adj.filter((a) => !a.is_voided).slice(0, 8));
+      setAdjustments(adj.slice(0, 40));
       if (userId == null && list[0]) setUserId(list[0].user_id);
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -52,6 +59,9 @@ export function BalancesScreen({
   };
 
   useFocusEffect(reload);
+  React.useEffect(() => {
+    void reload();
+  }, [adjFilter]);
 
   const settle = async (
     item: TeamBalance,
@@ -111,6 +121,13 @@ export function BalancesScreen({
     }
   };
 
+  const emptyAdj =
+    adjFilter === "voided"
+      ? "No voided adjustments"
+      : adjFilter === "active"
+        ? "No active adjustments"
+        : "No adjustments yet";
+
   return (
     <Screen>
       <TopBar onBack={onBack} onCancel={onBack} />
@@ -169,29 +186,37 @@ export function BalancesScreen({
             <Label>Note</Label>
             <Field value={note} onChangeText={setNote} placeholder="Opening balance / correction" />
             <Btn title={isBusy ? "…" : "Post adjustment"} onPress={postAdjustment} disabled={isBusy} />
-            {adjustments.length > 0 && (
-              <>
-                <Label>Recent adjustments</Label>
-                {adjustments.map((a) => (
-                  <View key={a.id} style={styles.adjRow}>
-                    <Text style={styles.adj}>
-                      {a.user_name} · {a.track} · {formatMoney(a.amount, currency)} — {a.note}
-                      {!a.can_void ? ` · ${a.void_blocked_reason || "locked"}` : ""}
-                    </Text>
-                    {!!a.can_void && (
-                      <Btn
-                        title="Void"
-                        variant="ghost"
-                        disabled={isBusy}
-                        onPress={() => setVoidId(a.id)}
-                      />
-                    )}
-                  </View>
-                ))}
-              </>
+            <Label>Adjustments</Label>
+            <View style={styles.chips}>
+              <Chip label="Active" on={adjFilter === "active"} onPress={() => setAdjFilter("active")} />
+              <Chip label="Voided" on={adjFilter === "voided"} onPress={() => setAdjFilter("voided")} />
+              <Chip label="All" on={adjFilter === "all"} onPress={() => setAdjFilter("all")} />
+            </View>
+            {adjustments.length === 0 ? (
+              <Sub>{emptyAdj}</Sub>
+            ) : (
+              adjustments.map((a) => (
+                <View key={a.id} style={styles.adjRow}>
+                  <Text style={styles.adj}>
+                    {a.user_name} · {a.track} · {formatMoney(a.amount, currency)}
+                    {a.is_voided ? " · voided" : ""} — {a.note}
+                    {!a.is_voided && !a.can_void
+                      ? ` · ${a.void_blocked_reason || "locked"}`
+                      : ""}
+                  </Text>
+                  {!!a.can_void && (
+                    <Btn
+                      title="Void"
+                      variant="ghost"
+                      disabled={isBusy}
+                      onPress={() => setVoidId(a.id)}
+                    />
+                  )}
+                </View>
+              ))
             )}
             <Label>Settle</Label>
-            <Sub>Tap to settle one teammate.</Sub>
+            <Sub>Tap to settle one teammate (uses available, not reserved).</Sub>
           </View>
         }
         ListEmptyComponent={<Sub>No teammates</Sub>}
@@ -214,10 +239,15 @@ export function BalancesScreen({
             </Text>
             {((item.reserved_spendings || 0) > 0 || (item.reserved_cash || 0) > 0) && (
               <Text style={styles.meta}>
-                Reserved spendings {formatMoney(item.reserved_spendings || 0, currency)} · available{" "}
+                Available spendings{" "}
                 {formatMoney(item.available_spendings ?? item.spendings, currency)}
+                {(item.reserved_spendings || 0) > 0
+                  ? ` (reserved ${formatMoney(item.reserved_spendings || 0, currency)})`
+                  : ""}
+                {" · "}
+                available cash {formatMoney(item.available_cash ?? item.cash_on_hand, currency)}
                 {(item.reserved_cash || 0) > 0
-                  ? ` · reserved cash ${formatMoney(item.reserved_cash || 0, currency)}`
+                  ? ` (reserved ${formatMoney(item.reserved_cash || 0, currency)})`
                   : ""}
               </Text>
             )}
@@ -241,6 +271,7 @@ export function BalancesScreen({
       <NoteModal
         visible={voidId != null}
         title="Void adjustment"
+        required
         onCancel={() => setVoidId(null)}
         onSubmit={async (voidNote) => {
           const id = voidId;
@@ -248,7 +279,7 @@ export function BalancesScreen({
           if (id == null) return;
           markBusy(true);
           try {
-            await voidAdjustment(id, voidNote || "voided");
+            await voidAdjustment(id, voidNote);
             await reload();
           } catch (e) {
             Alert.alert("Fos", e instanceof Error ? e.message : "Failed");

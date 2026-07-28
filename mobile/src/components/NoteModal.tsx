@@ -9,27 +9,41 @@ export function NoteModal({
   title,
   onCancel,
   onSubmit,
+  required = false,
+  label,
+  placeholder = "Reason",
 }: {
   visible: boolean;
   title: string;
   onCancel: () => void;
   onSubmit: (note: string) => void;
+  required?: boolean;
+  label?: string;
+  placeholder?: string;
 }) {
   const [note, setNote] = useState("");
+  const [error, setError] = useState("");
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>{title}</Text>
-          <Label>Note (optional)</Label>
-          <Field value={note} onChangeText={setNote} placeholder="Reason" />
+          <Label>{label || (required ? "Note (required)" : "Note (optional)")}</Label>
+          <Field value={note} onChangeText={(t) => { setNote(t); setError(""); }} placeholder={placeholder} />
+          {!!error && <Text style={styles.error}>{error}</Text>}
           <View style={styles.row}>
             <Btn title="Cancel" variant="ghost" onPress={onCancel} />
             <Btn
               title="Confirm"
               onPress={() => {
-                onSubmit(note);
+                const trimmed = note.trim();
+                if (required && trimmed.length < 2) {
+                  setError("Add a short reason (min 2 characters)");
+                  return;
+                }
+                onSubmit(trimmed);
                 setNote("");
+                setError("");
               }}
             />
           </View>
@@ -52,5 +66,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   title: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 8 },
+  error: { color: colors.danger || "#e57373", marginBottom: 8, fontSize: 13 },
   row: { flexDirection: "row", gap: 10 },
 });

@@ -2,11 +2,11 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_roles
+from app.auth import require_roles
 from app.db import get_db
 from app.models import AdjustmentTrack, BalanceAdjustment, User, UserRole
 from app.routers.records import _utcnow
@@ -15,12 +15,24 @@ from app.services.balances import adjustment_void_blocked_reason, can_void_adjus
 router = APIRouter(prefix="/adjustments", tags=["adjustments"])
 
 
+def _require_note(value: str) -> str:
+    note = (value or "").strip()
+    if len(note) < 2:
+        raise ValueError("Note is required (min 2 characters)")
+    return note
+
+
 class AdjustmentIn(BaseModel):
     user_id: int
     track: AdjustmentTrack
     amount: float = Field(..., description="Signed: + increases track, - decreases")
     note: str = Field(min_length=1, max_length=2000)
     occurred_at: datetime | None = None
+
+    @field_validator("note")
+    @classmethod
+    def note_trimmed(cls, v: str) -> str:
+        return _require_note(v)
 
 
 class AdjustmentOut(BaseModel):
@@ -43,6 +55,11 @@ class AdjustmentOut(BaseModel):
 class VoidIn(BaseModel):
     note: str = Field(min_length=1, max_length=2000)
 
+    @field_validator("note")
+    @classmethod
+    def note_trimmed(cls, v: str) -> str:
+        return _require_note(v)
+
 
 def _out(row: BalanceAdjustment, user_name: str, db: Session | None = None) -> AdjustmentOut:
     return AdjustmentOut(
@@ -63,16 +80,25 @@ def _out(row: BalanceAdjustment, user_name: str, db: Session | None = None) -> A
 
 @router.get("", response_model=list[AdjustmentOut])
 def list_adjustments(
+    voided: bool | None = None,
+    user_id: int | None = None,
+    track: AdjustmentTrack | None = None,
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
-    rows = (
-        db.query(BalanceAdjustment)
-        .filter(BalanceAdjustment.organization_id == user.organization_id)
-        .order_by(BalanceAdjustment.created_at.desc())
-        .limit(100)
-        .all()
+    q = db.query(BalanceAdjustment).filter(
+        BalanceAdjustment.organization_id == user.organization_id
     )
+    if voided is True:
+        q = q.filter(BalanceAdjustment.is_voided.is_(True))
+    elif voided is False:
+        q = q.filter(BalanceAdjustment.is_voided.is_(False))
+    if user_id is not None:
+        q = q.filter(BalanceAdjustment.user_id == user_id)
+    if track is not None:
+        q = q.filter(BalanceAdjustment.track == track)
+    rows = q.order_by(BalanceAdjustment.created_at.desc()).limit(limit).all()
     out = []
     for r in rows:
         u = db.get(User, r.user_id)

@@ -1136,7 +1136,7 @@ def test_void_record_and_payout(client):
     assert voided.status_code == 200, voided.text
     assert voided.json()["is_voided"] is True
     assert client.get("/records/balance/me", headers=h).json()["spendings"] == 0
-    again = client.post(f"/records/{rid}/void", headers=h, json={"note": "x"})
+    again = client.post(f"/records/{rid}/void", headers=h, json={"note": "again"})
     assert again.status_code == 400
 
     client.post(
@@ -1770,3 +1770,34 @@ def test_balance_adjustments_and_atomic_approve(client):
     # Adjustments do not inflate operating expense totals
     report = client.get("/reports/org", headers=h).json()
     assert report["approved_expense_total"] == 0
+
+
+def test_adjustment_voided_filter(client):
+    owner = _register(client, "flow-adjvoid", "adjvoid-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    adj = client.post(
+        "/adjustments",
+        headers=h,
+        json={
+            "user_id": uid,
+            "track": "spendings",
+            "amount": 1500,
+            "note": "opening spendings",
+        },
+    )
+    assert adj.status_code == 200
+    aid = adj.json()["id"]
+    assert (
+        client.post(f"/adjustments/{aid}/void", headers=h, json={"note": " "}).status_code
+        == 422
+    )
+    voided = client.post(f"/adjustments/{aid}/void", headers=h, json={"note": "undo"})
+    assert voided.status_code == 200
+    active = client.get("/adjustments?voided=false", headers=h).json()
+    assert all(not x.get("is_voided") for x in active)
+    assert all(x["id"] != aid for x in active)
+    only_void = client.get("/adjustments?voided=true", headers=h).json()
+    assert any(x["id"] == aid and x["is_voided"] for x in only_void)
+    by_track = client.get("/adjustments?track=spendings&voided=true", headers=h).json()
+    assert any(x["id"] == aid for x in by_track)

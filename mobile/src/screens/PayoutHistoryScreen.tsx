@@ -100,8 +100,12 @@ export function PayoutHistoryScreen({
             </Text>
             <Text style={styles.rowMeta}>
               {item.user_name} · {item.payment_method} · {formatWhen(item.created_at)}
-              {item.balance_after ? ` · left ${formatMoney(item.balance_after, item.currency)}` : ""}
-              {item.overpayment ? ` · overpay ${formatMoney(item.overpayment, item.currency)}` : ""}
+              {item.balance_after != null
+                ? ` · left ${formatMoney(item.balance_after, item.currency)}`
+                : ""}
+              {item.overpayment != null && item.overpayment > 0
+                ? ` · overpay ${formatMoney(item.overpayment, item.currency)}`
+                : ""}
               {item.note ? ` · ${item.note}` : ""}
               {item.void_note ? ` · void: ${item.void_note}` : ""}
             </Text>
@@ -125,6 +129,7 @@ export function PayoutHistoryScreen({
       <NoteModal
         visible={voidId != null}
         title="Void settlement"
+        required
         onCancel={() => setVoidId(null)}
         onSubmit={async (note) => {
           const id = voidId;
@@ -132,7 +137,7 @@ export function PayoutHistoryScreen({
           if (id == null) return;
           setBusy(true);
           try {
-            await voidPayout(id, note || "voided");
+            await voidPayout(id, note);
             await reload();
           } catch (e) {
             Alert.alert("Fos", e instanceof Error ? e.message : "Failed");

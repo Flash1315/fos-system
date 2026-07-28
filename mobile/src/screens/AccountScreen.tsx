@@ -76,19 +76,23 @@ export function AccountScreen({
     }
   };
 
+  const refreshSuggestedAmount = async () => {
+    try {
+      const b = await myBalance();
+      const available =
+        kind === "expense_payout"
+          ? (b.available_spendings ?? b.spendings)
+          : (b.available_cash ?? b.cash_on_hand);
+      setAmount(available > 0 ? String(available) : "");
+    } catch {
+      setAmount("");
+    }
+  };
+
   useEffect(() => {
     (async () => {
       await reloadOrg();
-      try {
-        const b = await myBalance();
-        const available =
-          kind === "expense_payout"
-            ? (b.available_spendings ?? b.spendings)
-            : (b.available_cash ?? b.cash_on_hand);
-        setAmount(available > 0 ? String(available) : "");
-      } catch {
-        /* ignore */
-      }
+      await refreshSuggestedAmount();
       await reloadRequests();
     })();
   }, [kind]);
@@ -140,6 +144,7 @@ export function AccountScreen({
       await requestSettlement({ kind, amount: value, note });
       Alert.alert("Fos", "Settlement request sent to managers");
       setNote("");
+      await refreshSuggestedAmount();
       await reloadRequests();
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -211,8 +216,10 @@ export function AccountScreen({
         mine.map((r) => (
           <View key={r.id} style={styles.card}>
             <Sub>
-              {r.kind} · {r.amount.toLocaleString()} · {r.status || "pending"}
-              {r.settled_amount != null ? ` · settled ${r.settled_amount.toLocaleString()}` : ""}
+              {r.kind} · {r.amount.toLocaleString()} {currency} · {r.status || "pending"}
+              {r.settled_amount != null
+                ? ` · settled ${r.settled_amount.toLocaleString()} ${currency}`
+                : ""}
               {r.note ? ` · ${r.note}` : ""}
             </Sub>
             {r.status === "pending" && (
@@ -224,6 +231,7 @@ export function AccountScreen({
                   setBusy(true);
                   try {
                     await cancelSettlementRequest(r.id);
+                    await refreshSuggestedAmount();
                     await reloadRequests();
                   } catch (e) {
                     Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -246,7 +254,7 @@ export function AccountScreen({
             requests.map((r) => (
               <View key={r.id} style={styles.card}>
                 <Sub>
-                  {r.user_name} · {r.kind} · {r.amount.toLocaleString()}
+                  {r.user_name} · {r.kind} · {r.amount.toLocaleString()} {currency}
                   {r.note ? ` · ${r.note}` : ""}
                 </Sub>
                 <View style={styles.kinds}>
@@ -280,18 +288,15 @@ export function AccountScreen({
       <NoteModal
         visible={cancelId != null}
         title="Cancel teammate request"
+        required
         onCancel={() => setCancelId(null)}
         onSubmit={async (cancelNote) => {
-          if (!cancelNote.trim()) {
-            Alert.alert("Fos", "Cancel requires a note");
-            return;
-          }
           const id = cancelId;
           setCancelId(null);
           if (id == null) return;
           setBusy(true);
           try {
-            await cancelSettlementRequest(id, cancelNote.trim());
+            await cancelSettlementRequest(id, cancelNote);
             await reloadRequests();
           } catch (e) {
             Alert.alert("Fos", e instanceof Error ? e.message : "Failed");

@@ -602,8 +602,17 @@ export type BalanceAdjustment = {
   void_blocked_reason?: string | null;
 };
 
-export function listAdjustments() {
-  return request<BalanceAdjustment[]>("/adjustments");
+export function listAdjustments(params?: {
+  voided?: boolean;
+  user_id?: number;
+  track?: "cash_on_hand" | "spendings";
+}) {
+  const q = new URLSearchParams();
+  if (params?.voided != null) q.set("voided", String(params.voided));
+  if (params?.user_id != null) q.set("user_id", String(params.user_id));
+  if (params?.track) q.set("track", params.track);
+  const qs = q.toString();
+  return request<BalanceAdjustment[]>(`/adjustments${qs ? `?${qs}` : ""}`);
 }
 
 export function createAdjustment(body: {

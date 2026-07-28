@@ -7,6 +7,16 @@ import { Brand, Btn, Card, Field, Label, LinkText, Screen, Sub } from "../compon
 const LAST_SLUG_KEY = "fos_last_org_slug";
 const LAST_EMAIL_KEY = "fos_last_email";
 
+const DEMO_SLUG =
+  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_SLUG) || "demo2092";
+const DEMO_EMAIL =
+  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_EMAIL) ||
+  "owner@demo2092.example.com";
+const DEMO_PASSWORD =
+  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_PASSWORD) || "secret12";
+const DEMO_ENABLED =
+  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_LOGIN) !== "0";
+
 export function AuthScreen({
   busy,
   setBusy,
@@ -23,6 +33,8 @@ export function AuthScreen({
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberedSlug, setRememberedSlug] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -31,13 +43,23 @@ export function AuthScreen({
           storageGet(LAST_SLUG_KEY),
           storageGet(LAST_EMAIL_KEY),
         ]);
-        if (slug) setOrgSlug(slug);
+        if (slug) {
+          setOrgSlug(slug);
+          setRememberedSlug(slug);
+        }
         if (mail) setEmail(mail);
       } catch {
         /* ignore */
       }
     })();
   }, []);
+
+  const fillDemo = () => {
+    setMode("login");
+    setOrgSlug(DEMO_SLUG);
+    setEmail(DEMO_EMAIL);
+    setPassword(DEMO_PASSWORD);
+  };
 
   const submit = async () => {
     if (!orgSlug.trim()) {
@@ -81,6 +103,7 @@ export function AuthScreen({
         });
         await storageSet(LAST_SLUG_KEY, slug);
         await storageSet(LAST_EMAIL_KEY, mail);
+        setRememberedSlug(slug);
         onDone(res.access_token, res.user);
       } else {
         const res = await login({
@@ -90,10 +113,16 @@ export function AuthScreen({
         });
         await storageSet(LAST_SLUG_KEY, slug);
         await storageSet(LAST_EMAIL_KEY, mail);
+        setRememberedSlug(slug);
         onDone(res.access_token, res.user);
       }
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      const msg = e instanceof Error ? e.message : "Failed";
+      const friendly =
+        /invalid|credential|401|unauthorized/i.test(msg)
+          ? "Check company slug, email, and password. Invited teammates use the slug from their manager — not Register."
+          : msg;
+      Alert.alert("Fos", friendly);
     } finally {
       setBusy(false);
     }
@@ -105,9 +134,12 @@ export function AuthScreen({
       <Sub>Field money. Clear books.</Sub>
       <Sub>
         {mode === "login"
-          ? "First time? Tap Register below to create your company."
+          ? "Joining a team? Use the company slug and password from your manager. Register only to create a new company."
           : "Creates your organization and owner account."}
       </Sub>
+      {mode === "login" && !!rememberedSlug && (
+        <Sub>Remembered company: /{rememberedSlug}</Sub>
+      )}
       <Card>
         <Label>Organization slug</Label>
         <Field autoCapitalize="none" value={orgSlug} onChangeText={setOrgSlug} placeholder="my-company" />
@@ -131,12 +163,18 @@ export function AuthScreen({
         />
         <Label>Password</Label>
         <Field
-          secureTextEntry
+          secureTextEntry={!showPassword}
           value={password}
           onChangeText={setPassword}
           placeholder="min 6 characters"
         />
+        <LinkText onPress={() => setShowPassword((v) => !v)}>
+          {showPassword ? "Hide password" : "Show password"}
+        </LinkText>
         <Btn title={busy ? "…" : mode === "login" ? "Log in" : "Create company"} onPress={submit} disabled={busy} />
+        {mode === "login" && DEMO_ENABLED && (
+          <Btn title="Use demo workspace" variant="ghost" onPress={fillDemo} disabled={busy} />
+        )}
       </Card>
       <LinkText onPress={() => setMode(mode === "login" ? "register" : "login")}>
         {mode === "login" ? "New company? Register" : "Have an account? Log in"}

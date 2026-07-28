@@ -276,28 +276,27 @@ export function RecordDetailScreen({
       <NoteModal
         visible={rejectOpen}
         title="Reject record"
+        required
         onCancel={() => setRejectOpen(false)}
         onSubmit={async (note) => {
-          if (!note.trim()) {
-            Alert.alert("Fos", "Reject requires a note");
-            return;
-          }
           setRejectOpen(false);
-          await decide(false, note.trim());
+          await decide(false, note);
         }}
       />
       <NoteModal
         visible={voidOpen}
         title="Void approved record"
+        required
         onCancel={() => setVoidOpen(false)}
         onSubmit={async (note) => {
           setVoidOpen(false);
-          await onVoid(note || "voided");
+          await onVoid(note);
         }}
       />
       <NoteModal
         visible={commentOpen}
         title="Manager note"
+        required
         onCancel={() => setCommentOpen(false)}
         onSubmit={async (note) => {
           setCommentOpen(false);

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.models import RecordKind, RecordStatus, UserRole
 
@@ -164,6 +164,14 @@ class DecideBatchIn(BaseModel):
 
 class CommentIn(BaseModel):
     note: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("note")
+    @classmethod
+    def note_trimmed(cls, v: str) -> str:
+        note = (v or "").strip()
+        if len(note) < 2:
+            raise ValueError("Note is required (min 2 characters)")
+        return note
 
 
 class MemberOut(BaseModel):

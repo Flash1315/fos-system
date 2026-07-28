@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles
@@ -55,6 +55,14 @@ class PayoutOut(BaseModel):
 
 class VoidIn(BaseModel):
     note: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("note")
+    @classmethod
+    def note_trimmed(cls, v: str) -> str:
+        note = (v or "").strip()
+        if len(note) < 2:
+            raise ValueError("Note is required (min 2 characters)")
+        return note
 
 
 class CancelRequestIn(BaseModel):

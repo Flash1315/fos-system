@@ -4,6 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import {
   createRecord,
   getCategories,
+  lastFuelOdometer,
   listMembers,
   myBalance,
   uploadPhoto,
@@ -45,6 +46,7 @@ export function CreateScreen({
   const [forUserId, setForUserId] = useState<number | null>(null);
   const [occurredDate, setOccurredDate] = useState("");
   const [confirming, setConfirming] = useState(false);
+  const [lastOdo, setLastOdo] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -74,6 +76,27 @@ export function CreateScreen({
       }
     })();
   }, [isManager]);
+
+  useEffect(() => {
+    if (kind !== "fuel") {
+      setLastOdo(null);
+      return;
+    }
+    const handle = setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await lastFuelOdometer({
+            bike: bike.trim() || undefined,
+            user_id: forUserId ?? undefined,
+          });
+          setLastOdo(res.odometer);
+        } catch {
+          setLastOdo(null);
+        }
+      })();
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [kind, bike, forUserId]);
 
   const pickPhoto = async (fromCamera: boolean) => {
     if (fromCamera) {
@@ -296,6 +319,9 @@ export function CreateScreen({
           <Field keyboardType="decimal-pad" value={liters} onChangeText={setLiters} />
           <Label>Odometer</Label>
           <Field keyboardType="decimal-pad" value={odometer} onChangeText={setOdometer} />
+          {lastOdo != null && (
+            <Sub>Last reading {lastOdo.toLocaleString()} — cannot go lower.</Sub>
+          )}
         </>
       )}
       {kind === "income" && (

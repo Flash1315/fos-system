@@ -78,6 +78,53 @@ def _assert_cash_for_approve(db: Session, rec: MoneyRecord) -> None:
         )
 
 
+def _last_fuel_odometer(
+    db: Session,
+    org_id: int,
+    owner_id: int,
+    bike: str,
+    *,
+    exclude_id: int | None = None,
+) -> MoneyRecord | None:
+    """Latest non-rejected fuel reading for bike (or owner when bike blank)."""
+    eff = func.coalesce(MoneyRecord.occurred_at, MoneyRecord.created_at)
+    q = db.query(MoneyRecord).filter(
+        MoneyRecord.organization_id == org_id,
+        MoneyRecord.kind == RecordKind.fuel,
+        MoneyRecord.status != RecordStatus.rejected,
+        MoneyRecord.is_voided.is_(False),
+        MoneyRecord.odometer.isnot(None),
+    )
+    bike_key = (bike or "").strip()
+    if bike_key:
+        q = q.filter(MoneyRecord.bike == bike_key)
+    else:
+        q = q.filter(MoneyRecord.created_by == owner_id, MoneyRecord.bike == "")
+    if exclude_id is not None:
+        q = q.filter(MoneyRecord.id != exclude_id)
+    return q.order_by(eff.desc(), MoneyRecord.id.desc()).first()
+
+
+def _assert_odometer(
+    db: Session,
+    org_id: int,
+    owner_id: int,
+    bike: str,
+    odometer: float | None,
+    *,
+    exclude_id: int | None = None,
+) -> None:
+    if odometer is None:
+        return
+    last = _last_fuel_odometer(db, org_id, owner_id, bike, exclude_id=exclude_id)
+    if last is not None and float(odometer) + 1e-6 < float(last.odometer or 0):
+        label = (bike or "").strip() or "this rider"
+        raise HTTPException(
+            400,
+            f"Odometer cannot decrease for {label} (last {last.odometer}).",
+        )
+
+
 @router.get("/categories", response_model=CategoriesOut)
 def list_categories(
     kind: RecordKind | None = None,
@@ -113,6 +160,14 @@ def create_record(
         stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
         note = f"[filed by {user.full_name} {stamp}]"
         body_comment = (body.comment + "\n" + note).strip() if body.comment else note
+    if body.kind == RecordKind.fuel:
+        _assert_odometer(
+            db,
+            user.organization_id,
+            owner_id,
+            body.bike,
+            body.odometer,
+        )
     rec = MoneyRecord(
         organization_id=user.organization_id,
         created_by=owner_id,
@@ -262,6 +317,33 @@ def team_balances(
     return [user_balance(db, m) for m in members]
 
 
+@router.get("/fuel/last-odometer")
+def last_fuel_odometer(
+    bike: str = "",
+    user_id: int | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Hint for fuel form — latest reading for bike (or rider when bike blank)."""
+    owner_id = user.id
+    if user_id is not None and user_id != user.id:
+        if user.role not in (UserRole.owner, UserRole.manager):
+            raise HTTPException(403, "Insufficient role")
+        target = db.get(User, user_id)
+        if not target or target.organization_id != user.organization_id:
+            raise HTTPException(404, "User not found")
+        owner_id = target.id
+    last = _last_fuel_odometer(db, user.organization_id, owner_id, bike)
+    return {
+        "bike": (bike or "").strip(),
+        "user_id": owner_id,
+        "odometer": float(last.odometer) if last and last.odometer is not None else None,
+        "record_id": last.id if last else None,
+        "occurred_at": (last.occurred_at or last.created_at).isoformat()
+        if last and (last.occurred_at or last.created_at)
+        else None,
+    }
+
 
 @router.post("/decide-batch", response_model=list[RecordOut])
 def decide_batch(
@@ -323,6 +405,17 @@ def update_pending_record(
     if rec.status != RecordStatus.pending:
         raise HTTPException(400, "Only pending records can be edited")
     data = body.model_dump(exclude_unset=True)
+    if rec.kind == RecordKind.fuel:
+        next_bike = data["bike"] if "bike" in data else rec.bike
+        next_odo = data["odometer"] if "odometer" in data else rec.odometer
+        _assert_odometer(
+            db,
+            rec.organization_id,
+            rec.created_by,
+            next_bike or "",
+            next_odo,
+            exclude_id=rec.id,
+        )
     for key, value in data.items():
         setattr(rec, key, value)
     db.commit()

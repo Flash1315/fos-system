@@ -1318,6 +1318,68 @@ def test_transfer_excluded_from_operating_report(client):
     assert report["net_result"] == 47000  # 50000 - 3000
 
 
+def test_fuel_odometer_cannot_decrease(client):
+    owner = _register(client, "flow-odo", "odo-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    first = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 200000,
+            "category": "Fuel",
+            "bike": "Scoot-1",
+            "odometer": 12000,
+            "liters": 5,
+            "approve_now": True,
+        },
+    )
+    assert first.status_code == 200, first.text
+    hint = client.get("/records/fuel/last-odometer?bike=Scoot-1", headers=h)
+    assert hint.status_code == 200
+    assert hint.json()["odometer"] == 12000
+    bad = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 100000,
+            "category": "Fuel",
+            "bike": "Scoot-1",
+            "odometer": 11900,
+            "liters": 3,
+        },
+    )
+    assert bad.status_code == 400
+    ok = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 100000,
+            "category": "Fuel",
+            "bike": "Scoot-1",
+            "odometer": 12100,
+            "liters": 3,
+        },
+    )
+    assert ok.status_code == 200, ok.text
+    # Different bike is independent
+    other = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 50000,
+            "category": "Fuel",
+            "bike": "Scoot-2",
+            "odometer": 500,
+            "liters": 2,
+        },
+    )
+    assert other.status_code == 200, other.text
+
+
 def test_balance_adjustments_and_atomic_approve(client):
     owner = _register(client, "flow-adj", "adj-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}

@@ -107,10 +107,16 @@ def main() -> None:
         csv_len = len(res.read())
     print("ok income→transfer→csv", csv_len, "bytes")
 
-    org = call("PATCH", "/orgs/me", token, {"name": "Smoke Co Renamed", "currency": "usd"})
+    org = call("PATCH", "/orgs/me", token, {"name": "Smoke Co Renamed"})
     assert org["name"] == "Smoke Co Renamed"
-    assert org["currency"] == "USD"
-    print("ok org patch")
+    print("ok org rename")
+    try:
+        call("PATCH", "/orgs/me", token, {"currency": "USD"})
+        raise SystemExit("expected currency lock after activity")
+    except urllib.error.HTTPError as e:
+        if e.code != 400:
+            raise
+    print("ok currency lock")
 
     auto = call(
         "POST",

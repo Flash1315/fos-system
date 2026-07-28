@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles
+from app.categories import PAYMENT_METHODS
 from app.db import get_db
 from app.models import (
     Organization,
@@ -16,7 +17,7 @@ from app.models import (
     UserRole,
 )
 from app.routers.records import _utcnow
-from app.services.balances import user_balance
+from app.services.balances import last_payout, user_balance
 
 router = APIRouter(prefix="/payouts", tags=["payouts"])
 
@@ -44,6 +45,7 @@ class PayoutOut(BaseModel):
     is_voided: bool = False
     voided_at: datetime | None = None
     void_note: str = ""
+    can_void: bool = False
     created_by: int
     created_at: datetime
 
@@ -54,7 +56,14 @@ class VoidIn(BaseModel):
     note: str = Field(min_length=1, max_length=2000)
 
 
-def _payout_out(row: Payout, user_name: str) -> PayoutOut:
+def _can_void_payout(db: Session, row: Payout) -> bool:
+    if row.is_voided:
+        return False
+    latest = last_payout(db, row.organization_id, row.user_id, row.kind)
+    return latest is not None and latest.id == row.id
+
+
+def _payout_out(db: Session, row: Payout, user_name: str) -> PayoutOut:
     return PayoutOut(
         id=row.id,
         user_id=row.user_id,
@@ -69,6 +78,7 @@ def _payout_out(row: Payout, user_name: str) -> PayoutOut:
         is_voided=bool(row.is_voided),
         voided_at=row.voided_at,
         void_note=row.void_note or "",
+        can_void=_can_void_payout(db, row),
         created_by=row.created_by,
         created_at=row.created_at,
     )
@@ -87,6 +97,9 @@ def create_payout(
         raise HTTPException(400, "User inactive")
     org = db.get(Organization, manager.organization_id)
     bal = user_balance(db, target)
+    method = (body.payment_method or "cash").strip().lower()
+    if method not in PAYMENT_METHODS:
+        raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
     overpayment = float(body.overpayment or 0)
     balance_after = 0.0
     if body.kind == PayoutKind.expense_payout:
@@ -113,7 +126,7 @@ def create_payout(
         kind=body.kind,
         amount=body.amount,
         currency=org.currency if org else "IDR",
-        payment_method=body.payment_method or "cash",
+        payment_method=method,
         note=body.note,
         overpayment=overpayment,
         balance_after=balance_after,
@@ -127,7 +140,7 @@ def create_payout(
         f"payout org={manager.organization_id} kind={body.kind.value} "
         f"user={target.id} amount={body.amount} overpay={overpayment} after={balance_after}"
     )
-    return _payout_out(row, target.full_name)
+    return _payout_out(db, row, target.full_name)
 
 
 @router.get("/mine", response_model=list[PayoutOut])
@@ -142,7 +155,7 @@ def my_payouts(
         .limit(50)
         .all()
     )
-    return [_payout_out(r, user.full_name) for r in rows]
+    return [_payout_out(db, r, user.full_name) for r in rows]
 
 
 @router.get("/org", response_model=list[PayoutOut])
@@ -160,7 +173,7 @@ def org_payouts(
     out = []
     for r in rows:
         u = db.get(User, r.user_id)
-        out.append(_payout_out(r, u.full_name if u else ""))
+        out.append(_payout_out(db, r, u.full_name if u else ""))
     return out
 
 
@@ -176,6 +189,11 @@ def void_payout(
         raise HTTPException(404, "Payout not found")
     if row.is_voided:
         raise HTTPException(400, "Already voided")
+    if not _can_void_payout(db, row):
+        raise HTTPException(
+            400,
+            "Only the latest settlement of this type for the teammate can be voided",
+        )
     row.is_voided = True
     row.voided_at = _utcnow()
     row.voided_by = manager.id
@@ -183,7 +201,7 @@ def void_payout(
     db.commit()
     db.refresh(row)
     target = db.get(User, row.user_id)
-    return _payout_out(row, target.full_name if target else "")
+    return _payout_out(db, row, target.full_name if target else "")
 
 
 class SettlementRequestIn(BaseModel):

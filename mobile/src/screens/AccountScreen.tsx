@@ -155,7 +155,10 @@ export function AccountScreen({
       {isOwner && (
         <>
           <Label>Company settings</Label>
-          <Sub>Owners can rename the company and set currency. Slug stays fixed for login.</Sub>
+          <Sub>
+            Owners can rename the company. Currency can change only before the first money record or
+            settlement. Slug stays fixed for login.
+          </Sub>
           <Field value={orgName} onChangeText={setOrgName} placeholder="Company name" />
           <Field
             value={currency}

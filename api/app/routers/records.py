@@ -5,7 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles
-from app.categories import PAYMENT_SOURCES, PURPOSES, categories_for
+from app.categories import PAYMENT_METHODS, PAYMENT_SOURCES, PURPOSES, categories_for
 from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
 from app.schemas import (
@@ -25,6 +25,24 @@ router = APIRouter(prefix="/records", tags=["records"])
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _normalize_payment_fields(kind: RecordKind, source: str, method: str) -> tuple[str, str]:
+    source = (source or "").strip()
+    method = (method or "").strip().lower()
+    if kind in (RecordKind.expense, RecordKind.fuel):
+        if not source:
+            source = "my_pocket"
+        if source not in PAYMENT_SOURCES:
+            raise HTTPException(400, f"payment_source must be one of {PAYMENT_SOURCES}")
+        method = ""
+    elif kind == RecordKind.income:
+        source = ""
+        if not method:
+            method = "cash"
+        if method not in PAYMENT_METHODS:
+            raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
+    return source, method
 
 
 def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
@@ -79,9 +97,7 @@ def create_record(
     org = db.get(Organization, user.organization_id)
     if body.approve_now and user.role not in (UserRole.owner, UserRole.manager):
         raise HTTPException(403, "Only managers can approve on create")
-    source = body.payment_source
-    if body.kind in (RecordKind.expense, RecordKind.fuel) and not source:
-        source = "my_pocket"
+    source, method = _normalize_payment_fields(body.kind, body.payment_source, body.payment_method)
     owner_id = user.id
     body_comment = body.comment
     if body.created_for_user_id is not None:
@@ -110,7 +126,7 @@ def create_record(
         liters=body.liters,
         odometer=body.odometer,
         client_name=body.client_name,
-        payment_method=body.payment_method,
+        payment_method=method,
         payment_source=source,
         occurred_at=body.occurred_at,
     )
@@ -359,7 +375,10 @@ def void_approved_record(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
-    """Manager voids an approved record; kept for audit, excluded from balances."""
+    """Manager voids an approved record; kept for audit, excluded from balances.
+
+    Transfer legs are voided together via transfer_group_id.
+    """
     rec = db.get(MoneyRecord, record_id)
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
@@ -368,10 +387,25 @@ def void_approved_record(
     if rec.is_voided:
         raise HTTPException(400, "Already voided")
     stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
-    rec.is_voided = True
-    rec.voided_at = _utcnow()
-    rec.voided_by = user.id
-    rec.comment = (rec.comment + f"\n[voided by {user.full_name} {stamp}] {body.note}").strip()
+    note = f"[voided by {user.full_name} {stamp}] {body.note}"
+    now = _utcnow()
+    targets = [rec]
+    if rec.transfer_group_id:
+        siblings = (
+            db.query(MoneyRecord)
+            .filter(
+                MoneyRecord.organization_id == user.organization_id,
+                MoneyRecord.transfer_group_id == rec.transfer_group_id,
+                MoneyRecord.is_voided.is_(False),
+            )
+            .all()
+        )
+        targets = siblings or [rec]
+    for row in targets:
+        row.is_voided = True
+        row.voided_at = now
+        row.voided_by = user.id
+        row.comment = (row.comment + "\n" + note).strip()
     db.commit()
     db.refresh(rec)
     return _record_out(db, rec)

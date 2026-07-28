@@ -42,6 +42,7 @@ def ensure_money_record_columns() -> None:
             ("is_voided", "BOOLEAN DEFAULT 0"),
             ("voided_at", "DATETIME"),
             ("voided_by", "INTEGER"),
+            ("transfer_group_id", "VARCHAR(40)"),
         ],
     )
     _ensure_columns(

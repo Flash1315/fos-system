@@ -1087,3 +1087,120 @@ def test_settlement_request_validates_balance(client):
         json={"kind": "income_handover", "amount": 2000, "note": "partial"},
     )
     assert ok.status_code == 200
+
+
+def test_safe_payout_void_and_transfer_pair(client):
+    owner = _register(client, "flow-safevoid", "safevoid-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "safevoid-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 1000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    p1 = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "expense_payout", "amount": 1000},
+    ).json()
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 500,
+            "category": "Food",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    p2 = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "expense_payout", "amount": 500},
+    ).json()
+    assert p2["can_void"] is True
+    older = client.post(f"/payouts/{p1['id']}/void", headers=h, json={"note": "old"})
+    assert older.status_code == 400
+    latest = client.post(f"/payouts/{p2['id']}/void", headers=h, json={"note": "latest ok"})
+    assert latest.status_code == 200
+    assert client.get("/records/balance/me", headers=h).json()["spendings"] == 500
+
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 20000,
+            "category": "Cash",
+            "payment_method": "cash",
+            "approve_now": True,
+        },
+    )
+    xfer = client.post(
+        "/transfers",
+        headers=h,
+        json={"to_email": "safevoid-emp@example.com", "amount": 4000, "comment": "pair"},
+    )
+    assert xfer.status_code == 200, xfer.text
+    group = xfer.json()["transfer_group_id"]
+    sender_id = xfer.json()["sender_record"]["id"]
+    recipient_id = xfer.json()["recipient_record"]["id"]
+    assert xfer.json()["sender_record"]["transfer_group_id"] == group
+    voided = client.post(f"/records/{sender_id}/void", headers=h, json={"note": "undo transfer"})
+    assert voided.status_code == 200
+    assert voided.json()["is_voided"] is True
+    other = client.get(f"/records/{recipient_id}", headers=h).json()
+    assert other["is_voided"] is True
+    assert client.get("/records/balance/me", headers=h).json()["cash_on_hand"] == 20000
+
+
+def test_payment_fields_and_currency_lock(client):
+    owner = _register(client, "flow-guards", "guards-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    bad = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 10, "category": "Taxi", "payment_source": "wallet"},
+    )
+    assert bad.status_code == 400
+    bad_m = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "income", "amount": 10, "category": "Cash", "payment_method": "crypto"},
+    )
+    assert bad_m.status_code == 400
+    ok = client.patch("/orgs/me", headers=h, json={"currency": "usd"})
+    assert ok.status_code == 200
+    assert ok.json()["currency"] == "USD"
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 10,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    locked = client.patch("/orgs/me", headers=h, json={"currency": "IDR"})
+    assert locked.status_code == 400
+    rename = client.patch("/orgs/me", headers=h, json={"name": "Guards Co"})
+    assert rename.status_code == 200

@@ -98,6 +98,8 @@ class MoneyRecord(Base):
     is_voided: Mapped[bool] = mapped_column(Boolean, default=False)
     voided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     voided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Links paired transfer legs (sender expense + recipient income)
+    transfer_group_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     organization: Mapped[Organization] = relationship(back_populates="records")
     created_by_user: Mapped[User] = relationship(

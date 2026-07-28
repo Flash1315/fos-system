@@ -6,7 +6,7 @@ from app.auth import (
     create_access_token, get_current_user, hash_password, require_roles, verify_password,
 )
 from app.db import get_db
-from app.models import Organization, User, UserRole
+from app.models import MoneyRecord, Organization, Payout, User, UserRole
 from app.schemas import InviteIn, LoginIn, OrgCreate, OrgOut, OrgUpdate, PasswordChangeIn, TokenOut, UserOut
 
 router = APIRouter(tags=["auth"])
@@ -101,7 +101,23 @@ def update_org(
     if "name" in data and data["name"] is not None:
         org.name = data["name"].strip()
     if "currency" in data and data["currency"] is not None:
-        org.currency = data["currency"].strip().upper()
+        new_currency = data["currency"].strip().upper()
+        if new_currency != org.currency:
+            has_records = (
+                db.query(MoneyRecord.id)
+                .filter(MoneyRecord.organization_id == org.id)
+                .first()
+                is not None
+            )
+            has_payouts = (
+                db.query(Payout.id).filter(Payout.organization_id == org.id).first() is not None
+            )
+            if has_records or has_payouts:
+                raise HTTPException(
+                    400,
+                    "Currency cannot change after money activity exists",
+                )
+            org.currency = new_currency
     db.commit()
     db.refresh(org)
     return OrgOut.model_validate(org)

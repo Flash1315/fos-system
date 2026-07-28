@@ -131,6 +131,7 @@ class RecordOut(BaseModel):
     decided_by_name: str = ""
     is_voided: bool = False
     voided_at: Optional[datetime] = None
+    transfer_group_id: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

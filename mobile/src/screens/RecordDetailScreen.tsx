@@ -196,6 +196,14 @@ export function RecordDetailScreen({
                 </Text>
               </>
             )}
+            {!!rec.transfer_group_id && (
+              <>
+                <Label>Transfer pair</Label>
+                <Text style={styles.line}>
+                  Linked transfer {rec.transfer_group_id} — voiding reverses both legs
+                </Text>
+              </>
+            )}
             <Label>Comment</Label>
             <Text style={styles.line}>{rec.comment || "—"}</Text>
             {!!rec.decided_at && (

@@ -20,6 +20,7 @@ type PayoutRow = {
   balance_after?: number;
   is_voided?: boolean;
   void_note?: string;
+  can_void?: boolean;
   created_at: string;
 };
 
@@ -92,7 +93,7 @@ export function PayoutHistoryScreen({
               {item.note ? ` · ${item.note}` : ""}
               {item.void_note ? ` · void: ${item.void_note}` : ""}
             </Text>
-            {isManager && !item.is_voided && (
+            {isManager && !!item.can_void && (
               <Btn
                 title="Void"
                 variant="ghost"

@@ -2,8 +2,10 @@
 
 Creates paired expense (sender, cash_on_hand) + income (recipient, cash).
 Peer transfers are auto-approved so cash balances move immediately; they
-remain visible in the org ledger.
+remain visible in the org ledger and share transfer_group_id for atomic void.
 """
+
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
@@ -28,6 +30,7 @@ class TransferIn(BaseModel):
 class TransferOut(BaseModel):
     sender_record: RecordOut
     recipient_record: RecordOut
+    transfer_group_id: str
 
 
 @router.post("", response_model=TransferOut)
@@ -61,6 +64,7 @@ def create_transfer(
     currency = org.currency if org else "IDR"
     note = body.comment or f"Cash transfer to {recipient.full_name}"
     now = _utcnow()
+    group_id = uuid.uuid4().hex[:16]
 
     sender_rec = MoneyRecord(
         organization_id=user.organization_id,
@@ -76,6 +80,7 @@ def create_transfer(
         decided_at=now,
         decided_by=user.id,
         occurred_at=now,
+        transfer_group_id=group_id,
     )
     recipient_rec = MoneyRecord(
         organization_id=user.organization_id,
@@ -92,14 +97,19 @@ def create_transfer(
         decided_at=now,
         decided_by=user.id,
         occurred_at=now,
+        transfer_group_id=group_id,
     )
     db.add(sender_rec)
     db.add(recipient_rec)
     db.commit()
     db.refresh(sender_rec)
     db.refresh(recipient_rec)
-    print(f"transfer org={user.organization_id} from={user.id} to={recipient.id} amount={body.amount}")
+    print(
+        f"transfer org={user.organization_id} from={user.id} to={recipient.id} "
+        f"amount={body.amount} group={group_id}"
+    )
     return TransferOut(
         sender_record=_record_out(db, sender_rec),
         recipient_record=_record_out(db, recipient_rec),
+        transfer_group_id=group_id,
     )

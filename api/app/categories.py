@@ -6,6 +6,8 @@ PURPOSES = ["Rental", "Lesson", "Office", "Other"]
 
 PAYMENT_SOURCES = ["my_pocket", "cash_on_hand"]
 
+PAYMENT_METHODS = ["cash", "transfer"]
+
 PRESETS: dict[RecordKind, list[str]] = {
     RecordKind.expense: [
         "Bike service",

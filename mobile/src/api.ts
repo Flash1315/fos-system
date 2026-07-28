@@ -40,6 +40,7 @@ export type MoneyRecord = {
   decided_by_name?: string;
   is_voided?: boolean;
   voided_at?: string | null;
+  transfer_group_id?: string | null;
 };
 
 export type OrgReport = {
@@ -415,6 +416,7 @@ export function listMyPayouts() {
       balance_after?: number;
       is_voided?: boolean;
       void_note?: string;
+      can_void?: boolean;
       created_at: string;
     }[]
   >("/payouts/mine");
@@ -435,6 +437,7 @@ export function listOrgPayouts() {
       balance_after?: number;
       is_voided?: boolean;
       void_note?: string;
+      can_void?: boolean;
       created_at: string;
     }[]
   >("/payouts/org");

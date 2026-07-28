@@ -101,6 +101,7 @@ def test_employee_cannot_approve(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert inv.status_code == 200
@@ -157,7 +158,7 @@ def test_transfer_creates_two_pending(client):
     inv = client.post(
         "/orgs/invite",
         headers=oh,
-        json={"email": "xfer-emp@example.com", "full_name": "Emp", "role": "employee", "password": "secret12"},
+        json={"email": "xfer-emp@example.com", "full_name": "Emp", "role": "employee", "password": "secret12", "password_confirm": "secret12"},
     )
     assert inv.status_code == 200
     login = client.post(
@@ -169,7 +170,7 @@ def test_transfer_creates_two_pending(client):
     inv2 = client.post(
         "/orgs/invite",
         headers=oh,
-        json={"email": "xfer-recv@example.com", "full_name": "Recv", "role": "employee", "password": "secret12"},
+        json={"email": "xfer-recv@example.com", "full_name": "Recv", "role": "employee", "password": "secret12", "password_confirm": "secret12"},
     )
     assert inv2.status_code == 200
     # Seed cash on hand for sender (approved cash income)
@@ -207,7 +208,7 @@ def test_transfer_rejects_when_insufficient_cash(client):
     client.post(
         "/orgs/invite",
         headers=oh,
-        json={"email": "xfer2-recv@example.com", "full_name": "Recv", "role": "employee", "password": "secret12"},
+        json={"email": "xfer2-recv@example.com", "full_name": "Recv", "role": "employee", "password": "secret12", "password_confirm": "secret12"},
     )
     denied = client.post(
         "/transfers",
@@ -229,6 +230,7 @@ def test_transfer_and_approve_honor_reserved_cash(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert inv.status_code == 200
@@ -435,6 +437,7 @@ def test_create_on_behalf_edit_export_role(client):
             "full_name": "Emp B",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert inv.status_code == 200
@@ -606,6 +609,7 @@ def test_password_and_settlement_request(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert inv.status_code == 200
@@ -786,6 +790,7 @@ def test_owner_resets_member_password(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert inv.status_code == 200
@@ -804,7 +809,7 @@ def test_owner_resets_member_password(client):
     reset = client.post(
         f"/orgs/members/{emp_id}/password",
         headers=h,
-        json={"new_password": "brandnew1"},
+        json={"new_password": "brandnew1", "password_confirm": "brandnew1"},
     )
     assert reset.status_code == 200, reset.text
     assert client.get("/auth/me", headers=old_emp_h).status_code == 401
@@ -877,6 +882,7 @@ def test_update_org_owner_only(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert inv.status_code == 200
@@ -987,6 +993,7 @@ def test_approve_now_on_create(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert inv.status_code == 200
@@ -1279,6 +1286,7 @@ def test_safe_payout_void_and_transfer_pair(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     client.post(
@@ -1505,6 +1513,7 @@ def test_transfer_excluded_from_operating_report(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     client.post(
@@ -1587,6 +1596,7 @@ def test_manager_cancel_request_requires_note(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert inv.status_code == 200
@@ -2496,6 +2506,7 @@ def test_owner_issues_password_reset_token(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert inv.status_code == 200
@@ -2621,7 +2632,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.14"
+    assert health.json()["version"] == "0.7.15"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -2817,7 +2828,7 @@ def test_owner_cannot_self_reset_password(client):
     bad = client.post(
         f"/orgs/members/{uid}/password",
         headers=h,
-        json={"new_password": "otherpass1"},
+        json={"new_password": "otherpass1", "password_confirm": "otherpass1"},
     )
     assert bad.status_code == 400
     bad_tok = client.post(f"/orgs/members/{uid}/reset-token", headers=h)
@@ -2971,6 +2982,7 @@ def test_cannot_deactivate_with_pending_and_org_name_trim(client):
             "full_name": "Deact Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert inv.status_code == 200
@@ -3041,6 +3053,7 @@ def test_cannot_approve_inactive_creator_record(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     emp_id = inv.json()["id"]
@@ -3186,6 +3199,7 @@ def test_decide_batch_skips_inactive_creator(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     emp_id = inv.json()["id"]
@@ -3517,6 +3531,7 @@ def test_role_change_bumps_token_and_void_income_cash_guard(client):
             "full_name": "Mgr",
             "role": "manager",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert inv.status_code == 200
@@ -3620,6 +3635,7 @@ def test_decide_batch_soft_retry_and_inactive_invite_message(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     emp_id = inv.json()["id"]
@@ -3639,6 +3655,7 @@ def test_decide_batch_soft_retry_and_inactive_invite_message(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert reinvite.status_code == 400
@@ -3757,6 +3774,7 @@ def test_fuel_liters_required_and_accept_requires_must_set(client):
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
     assert inv.status_code == 200
@@ -3907,4 +3925,150 @@ def test_register_confirm_nonfinite_billing_stub_and_void_reapprove(client, monk
     assert replay.status_code == 200, replay.text
     assert replay.json()["id"] == new_id
     assert replay.json()["is_voided"] is False
+
+
+def test_deactivate_balance_bike_trim_finite_and_password_confirm(client):
+    owner = _register(client, "flow-0715", "v0715-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    # Invite temp password requires matching confirm
+    mismatch = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0715-bad@example.com",
+            "full_name": "Bad",
+            "role": "employee",
+            "password": "secret12",
+            "password_confirm": "other12",
+        },
+    )
+    assert mismatch.status_code == 422
+
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0715-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+            "password_confirm": "secret12",
+        },
+    )
+    assert inv.status_code == 200, inv.text
+    emp_id = inv.json()["id"]
+
+    # Member password reset requires confirm
+    bad_reset = client.post(
+        f"/orgs/members/{emp_id}/password",
+        headers=h,
+        json={"new_password": "brandnew1", "password_confirm": "othernew1"},
+    )
+    assert bad_reset.status_code == 422
+
+    # Category over VARCHAR limit
+    too_long = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 10,
+            "category": "C" * 121,
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert too_long.status_code == 422
+
+    # Non-finite liters rejected
+    bad_liters = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 10,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "X1",
+            "liters": "Infinity",
+            "odometer": 100,
+            "payment_source": "my_pocket",
+        },
+    )
+    assert bad_liters.status_code == 422
+
+    # Bike whitespace normalized — odometer continuity across trim
+    first = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 50,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "  Scoot  ",
+            "liters": 3,
+            "odometer": 1000,
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["bike"] == "Scoot"
+    lower = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 40,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "Scoot",
+            "liters": 2,
+            "odometer": 900,
+            "payment_source": "my_pocket",
+        },
+    )
+    assert lower.status_code == 400
+    assert "odometer" in lower.json()["detail"].lower()
+
+    # Deactivate blocked while teammate holds spendings
+    emp_login = client.post(
+        "/auth/login",
+        json={
+            "email": "v0715-emp@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-0715",
+        },
+    )
+    assert emp_login.status_code == 200
+    eh = {"Authorization": f"Bearer {emp_login.json()['access_token']}"}
+    spent = client.post(
+        "/records",
+        headers=eh,
+        json={
+            "kind": "expense",
+            "amount": 250,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": False,
+        },
+    )
+    assert spent.status_code == 200
+    rid = spent.json()["id"]
+    decided = client.post(
+        f"/records/{rid}/decide",
+        headers=h,
+        json={"approve": True},
+    )
+    assert decided.status_code == 200, decided.text
+    blocked = client.post(
+        f"/orgs/members/{emp_id}/active",
+        headers=h,
+        json={"is_active": False},
+    )
+    assert blocked.status_code == 400
+    assert "cash or spendings" in blocked.json()["detail"].lower()
 

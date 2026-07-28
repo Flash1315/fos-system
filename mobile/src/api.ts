@@ -357,6 +357,7 @@ export function inviteUser(body: {
   full_name: string;
   role: "owner" | "manager" | "employee";
   password?: string;
+  password_confirm?: string;
 }) {
   return request<InviteResult>("/orgs/invite", {
     method: "POST",
@@ -386,10 +387,14 @@ export function setMemberRole(id: number, role: "owner" | "manager" | "employee"
   });
 }
 
-export function resetMemberPassword(id: number, new_password: string) {
+export function resetMemberPassword(
+  id: number,
+  new_password: string,
+  password_confirm: string,
+) {
   return request<User>(`/orgs/members/${id}/password`, {
     method: "POST",
-    body: JSON.stringify({ new_password }),
+    body: JSON.stringify({ new_password, password_confirm }),
   });
 }
 

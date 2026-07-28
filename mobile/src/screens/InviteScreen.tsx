@@ -85,7 +85,9 @@ export function InviteScreen({
         email: email.trim(),
         full_name: fullName.trim(),
         role,
-        ...(setTempPassword ? { password } : {}),
+        ...(setTempPassword
+          ? { password, password_confirm: passwordConfirm }
+          : {}),
       });
       if (res.invite_token) {
         Alert.alert(

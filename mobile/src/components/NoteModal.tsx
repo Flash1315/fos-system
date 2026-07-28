@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors } from "../theme";
 import { Btn, Field, Label } from "./ui";
@@ -13,6 +13,10 @@ export function NoteModal({
   label,
   placeholder = "Reason",
   secureTextEntry = false,
+  confirmField = false,
+  confirmLabel = "Confirm",
+  confirmPlaceholder = "repeat",
+  minLength,
   confirmTitle = "Confirm",
   confirmVariant = "primary",
 }: {
@@ -24,13 +28,31 @@ export function NoteModal({
   label?: string;
   placeholder?: string;
   secureTextEntry?: boolean;
+  confirmField?: boolean;
+  confirmLabel?: string;
+  confirmPlaceholder?: string;
+  /** When required, minimum trimmed length (default 2; use 6 for passwords). */
+  minLength?: number;
   confirmTitle?: string;
   confirmVariant?: "primary" | "secondary" | "danger" | "ghost";
 }) {
   const [note, setNote] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const submitLock = useRef(false);
+  const min = minLength ?? (required ? 2 : 0);
+
+  useEffect(() => {
+    if (!visible) {
+      setNote("");
+      setConfirm("");
+      setError("");
+      setSubmitting(false);
+      submitLock.current = false;
+    }
+  }, [visible]);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel}>
@@ -49,6 +71,23 @@ export function NoteModal({
             autoCorrect={!secureTextEntry}
             editable={!submitting}
           />
+          {confirmField && (
+            <>
+              <Label>{confirmLabel}</Label>
+              <Field
+                value={confirm}
+                onChangeText={(t) => {
+                  setConfirm(t);
+                  setError("");
+                }}
+                placeholder={confirmPlaceholder}
+                secureTextEntry={secureTextEntry}
+                autoCapitalize={secureTextEntry ? "none" : undefined}
+                autoCorrect={!secureTextEntry}
+                editable={!submitting}
+              />
+            </>
+          )}
           {!!error && <Text style={styles.error}>{error}</Text>}
           <View style={styles.row}>
             <Btn title="Cancel" variant="ghost" onPress={onCancel} disabled={submitting} />
@@ -58,9 +97,18 @@ export function NoteModal({
               disabled={submitting}
               onPress={() => {
                 if (submitLock.current) return;
-                const trimmed = note.trim();
-                if (required && trimmed.length < 2) {
-                  setError("Add a short reason (min 2 characters)");
+                const trimmed = secureTextEntry ? note : note.trim();
+                const confirmTrimmed = secureTextEntry ? confirm : confirm.trim();
+                if (required && trimmed.length < min) {
+                  setError(
+                    secureTextEntry
+                      ? `Must be at least ${min} characters`
+                      : `Add a short reason (min ${min} characters)`,
+                  );
+                  return;
+                }
+                if (confirmField && trimmed !== confirmTrimmed) {
+                  setError("Entries do not match");
                   return;
                 }
                 submitLock.current = true;
@@ -73,6 +121,7 @@ export function NoteModal({
                     submitLock.current = false;
                     setSubmitting(false);
                     setNote("");
+                    setConfirm("");
                     setError("");
                   });
               }}

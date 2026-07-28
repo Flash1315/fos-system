@@ -57,7 +57,7 @@ export function TeamScreen({
         : `Activate ${member.full_name}?`;
     const deactivateMsg =
       `Deactivate ${member.full_name}? They will not be able to log in. ` +
-      "Blocked if they still have pending records or settlement requests.";
+      "Blocked if they still have pending records, settlement requests, or nonzero cash/spendings.";
     Alert.alert("Fos", nextActive ? activateMsg : deactivateMsg, [
       { text: "Cancel", style: "cancel" },
       {
@@ -213,8 +213,12 @@ export function TeamScreen({
         title="New password (min 6)"
         required
         secureTextEntry
+        confirmField
+        minLength={6}
         label="New password"
         placeholder="min 6 characters"
+        confirmLabel="Confirm password"
+        confirmPlaceholder="repeat password"
         onCancel={() => setResetId(null)}
         onSubmit={async (pwd) => {
           const id = resetId;
@@ -226,7 +230,7 @@ export function TeamScreen({
           }
           setBusy(true);
           try {
-            await resetMemberPassword(id, pwd);
+            await resetMemberPassword(id, pwd, pwd);
             Alert.alert("Fos", "Password reset — their other sessions signed out");
             await reload();
           } catch (e) {

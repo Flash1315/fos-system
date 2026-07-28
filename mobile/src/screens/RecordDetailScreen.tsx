@@ -259,17 +259,17 @@ export function RecordDetailScreen({
       if (editPurpose) body.purpose = editPurpose;
     }
     if (rec?.kind === "fuel") {
-      body.bike = editBike;
+      body.bike = editBike.trim();
       const liters = Number(editLiters.replace(",", "."));
       const odo = Number(editOdometer.replace(",", "."));
-      if (!editLiters.trim() || !liters || liters <= 0) {
+      if (!editLiters.trim() || !Number.isFinite(liters) || liters <= 0) {
         Alert.alert("Fos", "Liters is required for fuel");
         return;
       }
       body.liters = liters;
       if (editOdometer.trim()) {
-        if (Number.isNaN(odo) || odo < 0) {
-          Alert.alert("Fos", "Odometer must be a number");
+        if (!Number.isFinite(odo) || odo < 0) {
+          Alert.alert("Fos", "Odometer must be a finite number");
           return;
         }
         body.odometer = odo;

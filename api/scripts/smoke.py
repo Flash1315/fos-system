@@ -56,6 +56,7 @@ def main() -> None:
             "full_name": "Emp",
             "role": "employee",
             "password": "secret12",
+            "password_confirm": "secret12",
         },
     )
 

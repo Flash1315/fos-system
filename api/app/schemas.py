@@ -1,10 +1,25 @@
 from datetime import datetime
 from typing import Optional
+import math
 import re
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.models import RecordKind, RecordStatus, UserRole
+
+
+def _strip_optional(v: Optional[str]) -> Optional[str]:
+    if v is None:
+        return None
+    return v.strip()
+
+
+def _require_finite(v: Optional[float], *, field: str) -> Optional[float]:
+    if v is None:
+        return None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)):
+        raise ValueError(f"{field} must be a finite number")
+    return float(v)
 
 
 class OrgCreate(BaseModel):
@@ -99,10 +114,29 @@ class LoginIn(BaseModel):
 
 class InviteIn(BaseModel):
     email: EmailStr
-    full_name: str
+    full_name: str = Field(min_length=1, max_length=200)
     role: UserRole = UserRole.employee
     # Optional: omit to generate a one-time invite token (preferred)
     password: Optional[str] = Field(default=None, min_length=6, max_length=128)
+    password_confirm: Optional[str] = Field(default=None, min_length=6, max_length=128)
+
+    @field_validator("full_name")
+    @classmethod
+    def strip_full_name(cls, v: str) -> str:
+        cleaned = (v or "").strip()
+        if len(cleaned) < 2:
+            raise ValueError("must be at least 2 characters")
+        return cleaned
+
+    @model_validator(mode="after")
+    def confirm_temp_password(self):
+        if self.password is None:
+            if self.password_confirm is not None:
+                raise ValueError("password_confirm requires password")
+            return self
+        if self.password_confirm != self.password:
+            raise ValueError("Passwords do not match")
+        return self
 
 
 class InviteOut(BaseModel):
@@ -145,6 +179,13 @@ class PasswordChangeIn(BaseModel):
 
 class MemberPasswordResetIn(BaseModel):
     new_password: str = Field(min_length=6, max_length=128)
+    password_confirm: str = Field(min_length=6, max_length=128)
+
+    @model_validator(mode="after")
+    def confirm_matches(self):
+        if self.password_confirm != self.new_password:
+            raise ValueError("Passwords do not match")
+        return self
 
 
 class MemberResetTokenOut(BaseModel):
@@ -160,23 +201,48 @@ class MemberResetTokenOut(BaseModel):
 class RecordCreate(BaseModel):
     kind: RecordKind
     amount: float = Field(gt=0)
-    category: str = ""
-    purpose: str = ""
-    place: str = ""
-    bike: str = ""
-    comment: str = ""
-    photo_url: str = ""
+    category: str = Field(default="", max_length=120)
+    purpose: str = Field(default="", max_length=80)
+    place: str = Field(default="", max_length=200)
+    bike: str = Field(default="", max_length=120)
+    comment: str = Field(default="", max_length=4000)
+    photo_url: str = Field(default="", max_length=500)
     liters: Optional[float] = Field(default=None, gt=0)
     odometer: Optional[float] = Field(default=None, ge=0)
-    client_name: str = ""
-    payment_method: str = ""
-    payment_source: str = ""
+    client_name: str = Field(default="", max_length=200)
+    payment_method: str = Field(default="", max_length=40)
+    payment_source: str = Field(default="", max_length=40)
     # Manager can file on behalf of a teammate (balances attribute to them)
     created_for_user_id: Optional[int] = None
     # ISO datetime or date when money moved (optional; defaults to created_at)
     occurred_at: Optional[datetime] = None
     # Managers/owners can create already-approved (skip queue)
     approve_now: bool = False
+
+    @field_validator(
+        "category",
+        "purpose",
+        "place",
+        "bike",
+        "comment",
+        "photo_url",
+        "client_name",
+        "payment_method",
+        "payment_source",
+    )
+    @classmethod
+    def strip_text_fields(cls, v: str) -> str:
+        return (v or "").strip()
+
+    @field_validator("liters")
+    @classmethod
+    def finite_liters(cls, v: Optional[float]) -> Optional[float]:
+        return _require_finite(v, field="liters")
+
+    @field_validator("odometer")
+    @classmethod
+    def finite_odometer(cls, v: Optional[float]) -> Optional[float]:
+        return _require_finite(v, field="odometer")
 
     @model_validator(mode="after")
     def fuel_requires_liters(self):
@@ -187,18 +253,43 @@ class RecordCreate(BaseModel):
 
 class RecordUpdate(BaseModel):
     amount: Optional[float] = Field(default=None, gt=0)
-    category: Optional[str] = None
-    purpose: Optional[str] = None
-    place: Optional[str] = None
-    bike: Optional[str] = None
-    comment: Optional[str] = None
-    photo_url: Optional[str] = None
+    category: Optional[str] = Field(default=None, max_length=120)
+    purpose: Optional[str] = Field(default=None, max_length=80)
+    place: Optional[str] = Field(default=None, max_length=200)
+    bike: Optional[str] = Field(default=None, max_length=120)
+    comment: Optional[str] = Field(default=None, max_length=4000)
+    photo_url: Optional[str] = Field(default=None, max_length=500)
     liters: Optional[float] = Field(default=None, gt=0)
     odometer: Optional[float] = Field(default=None, ge=0)
-    client_name: Optional[str] = None
-    payment_method: Optional[str] = None
-    payment_source: Optional[str] = None
+    client_name: Optional[str] = Field(default=None, max_length=200)
+    payment_method: Optional[str] = Field(default=None, max_length=40)
+    payment_source: Optional[str] = Field(default=None, max_length=40)
     occurred_at: Optional[datetime] = None
+
+    @field_validator(
+        "category",
+        "purpose",
+        "place",
+        "bike",
+        "comment",
+        "photo_url",
+        "client_name",
+        "payment_method",
+        "payment_source",
+    )
+    @classmethod
+    def strip_optional_text(cls, v: Optional[str]) -> Optional[str]:
+        return _strip_optional(v)
+
+    @field_validator("liters")
+    @classmethod
+    def finite_liters(cls, v: Optional[float]) -> Optional[float]:
+        return _require_finite(v, field="liters")
+
+    @field_validator("odometer")
+    @classmethod
+    def finite_odometer(cls, v: Optional[float]) -> Optional[float]:
+        return _require_finite(v, field="odometer")
 
 
 class RecordOut(BaseModel):

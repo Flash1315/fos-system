@@ -114,6 +114,24 @@ def set_member_active(
                 400,
                 "Cannot deactivate — teammate still has pending settlement requests",
             )
+        from app.services.balances import user_balance
+
+        bal = user_balance(db, member)
+        cash = float(bal.get("cash_on_hand") or 0)
+        spend = float(bal.get("spendings") or 0)
+        reserved_cash = float(bal.get("reserved_cash") or 0)
+        reserved_spend = float(bal.get("reserved_spendings") or 0)
+        if (
+            cash > 1e-6
+            or spend > 1e-6
+            or reserved_cash > 1e-6
+            or reserved_spend > 1e-6
+        ):
+            raise HTTPException(
+                400,
+                "Cannot deactivate — teammate still holds cash or spendings "
+                "(settle or adjust to zero first)",
+            )
     if body.is_active and not member.is_active:
         if member.must_set_password and not member.invite_token:
             raise HTTPException(

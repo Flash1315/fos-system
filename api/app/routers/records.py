@@ -172,9 +172,12 @@ def _last_fuel_odometer(
     )
     bike_key = (bike or "").strip()
     if bike_key:
-        q = q.filter(MoneyRecord.bike == bike_key)
+        q = q.filter(func.trim(MoneyRecord.bike) == bike_key)
     else:
-        q = q.filter(MoneyRecord.created_by == owner_id, MoneyRecord.bike == "")
+        q = q.filter(
+            MoneyRecord.created_by == owner_id,
+            func.trim(MoneyRecord.bike) == "",
+        )
     if exclude_id is not None:
         q = q.filter(MoneyRecord.id != exclude_id)
     return q.order_by(eff.desc(), MoneyRecord.id.desc()).first()

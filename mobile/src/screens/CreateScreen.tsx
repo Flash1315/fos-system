@@ -254,26 +254,21 @@ export function CreateScreen({
       return;
     }
     if (kind === "fuel") {
-      if (!liters.trim() || !(Number(liters.replace(",", ".")) > 0)) {
+      const litersVal = Number(liters.replace(",", "."));
+      const odoVal = odometer.trim() ? Number(odometer.replace(",", ".")) : null;
+      if (!liters.trim() || !Number.isFinite(litersVal) || litersVal <= 0) {
         Alert.alert("Fos", "Liters is required for fuel");
         return;
       }
-      if (odometer && !(Number(odometer.replace(",", ".")) >= 0)) {
-        Alert.alert("Fos", "Odometer must be a number");
+      if (odometer.trim() && (!Number.isFinite(odoVal as number) || (odoVal as number) < 0)) {
+        Alert.alert("Fos", "Odometer must be a finite number");
         return;
       }
-      if (
-        lastOdo != null &&
-        (!odometer.trim() || Number.isNaN(Number(odometer.replace(",", "."))))
-      ) {
+      if (lastOdo != null && (odoVal == null || !Number.isFinite(odoVal))) {
         Alert.alert("Fos", `Odometer is required (last reading ${lastOdo})`);
         return;
       }
-      if (
-        odometer &&
-        lastOdo != null &&
-        Number(odometer.replace(",", ".")) < lastOdo
-      ) {
+      if (odoVal != null && lastOdo != null && odoVal < lastOdo) {
         Alert.alert(
           "Fos",
           `Odometer cannot decrease (last ${lastOdo}). Enter a higher reading.`,
@@ -405,17 +400,20 @@ export function CreateScreen({
         {
           kind,
           amount: value,
-          category,
+          category: category.trim(),
           purpose,
-          place,
-          bike,
-          comment,
+          place: place.trim(),
+          bike: bike.trim(),
+          comment: comment.trim(),
           photo_url: photoUrl,
           payment_method: kind === "income" ? paymentMethod : "",
           payment_source: kind === "income" ? "" : paymentSource,
-          client_name: kind === "income" ? clientName : "",
+          client_name: kind === "income" ? clientName.trim() : "",
           liters: kind === "fuel" ? Number(liters.replace(",", ".")) : undefined,
-          odometer: kind === "fuel" && odometer ? Number(odometer.replace(",", ".")) : undefined,
+          odometer:
+            kind === "fuel" && odometer.trim()
+              ? Number(odometer.replace(",", "."))
+              : undefined,
           created_for_user_id: forUserId ?? undefined,
           occurred_at: occurredDate.trim() ? `${occurredDate.trim()}T12:00:00` : undefined,
           approve_now: isManager && approveNow,

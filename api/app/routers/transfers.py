@@ -7,7 +7,7 @@ remain visible in the org ledger and share transfer_group_id for atomic void.
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,8 @@ from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User
 from app.schemas import RecordOut
 from app.routers.records import _record_out, _utcnow
 from app.services.balances import user_balance
+from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+from app.services.money import round_money
 
 router = APIRouter(prefix="/transfers", tags=["transfers"])
 
@@ -38,7 +40,32 @@ def create_transfer(
     body: TransferIn,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="transfers.create",
+            key=key,
+        )
+        if hit:
+            sender = db.get(MoneyRecord, hit.resource_id)
+            recipient_rec = db.get(MoneyRecord, hit.secondary_id) if hit.secondary_id else None
+            if (
+                sender
+                and recipient_rec
+                and sender.organization_id == user.organization_id
+                and recipient_rec.organization_id == user.organization_id
+            ):
+                return TransferOut(
+                    sender_record=_record_out(db, sender),
+                    recipient_record=_record_out(db, recipient_rec),
+                    transfer_group_id=sender.transfer_group_id or "",
+                )
+
     recipient = (
         db.query(User)
         .filter(
@@ -53,11 +80,16 @@ def create_transfer(
     if recipient.id == user.id:
         raise HTTPException(400, "Cannot transfer to yourself")
 
+    amount = round_money(body.amount)
     bal = user_balance(db, user)
     held = float(bal.get("cash_on_hand") or 0)
     reserved = float(bal.get("reserved_cash") or 0)
-    available = float(bal.get("available_cash") if bal.get("available_cash") is not None else max(0.0, held - reserved))
-    if body.amount > available + 1e-6:
+    available = float(
+        bal.get("available_cash")
+        if bal.get("available_cash") is not None
+        else max(0.0, held - reserved)
+    )
+    if amount > available + 1e-6:
         raise HTTPException(
             400,
             f"Only {available} available to transfer "
@@ -75,7 +107,7 @@ def create_transfer(
         created_by=user.id,
         kind=RecordKind.expense,
         status=RecordStatus.approved,
-        amount=body.amount,
+        amount=amount,
         currency=currency,
         category="Transfer",
         purpose="Other",
@@ -91,7 +123,7 @@ def create_transfer(
         created_by=recipient.id,
         kind=RecordKind.income,
         status=RecordStatus.approved,
-        amount=body.amount,
+        amount=amount,
         currency=currency,
         category="Transfer",
         purpose="Other",
@@ -105,12 +137,23 @@ def create_transfer(
     )
     db.add(sender_rec)
     db.add(recipient_rec)
+    db.flush()
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="transfers.create",
+            key=key,
+            resource_id=sender_rec.id,
+            secondary_id=recipient_rec.id,
+        )
     db.commit()
     db.refresh(sender_rec)
     db.refresh(recipient_rec)
     print(
         f"transfer org={user.organization_id} from={user.id} to={recipient.id} "
-        f"amount={body.amount} group={group_id}"
+        f"amount={amount} group={group_id}"
     )
     return TransferOut(
         sender_record=_record_out(db, sender_rec),

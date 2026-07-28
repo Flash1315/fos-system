@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -188,7 +188,24 @@ def create_record(
     body: RecordCreate,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.money import round_money
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.create",
+            key=key,
+        )
+        if hit:
+            existing = db.get(MoneyRecord, hit.resource_id)
+            if existing and existing.organization_id == user.organization_id:
+                return _record_out(db, existing)
     org = db.get(Organization, user.organization_id)
     if body.approve_now and user.role not in (UserRole.owner, UserRole.manager):
         raise HTTPException(403, "Only managers can approve on create")
@@ -196,6 +213,7 @@ def create_record(
     category, purpose = _normalize_category_purpose(body.kind, body.category, body.purpose)
     owner_id = user.id
     body_comment = body.comment
+    amount = round_money(body.amount)
     if body.created_for_user_id is not None:
         if user.role not in (UserRole.owner, UserRole.manager):
             raise HTTPException(403, "Only managers can create on behalf")
@@ -219,7 +237,7 @@ def create_record(
         created_by=owner_id,
         kind=body.kind,
         status=RecordStatus.pending,
-        amount=body.amount,
+        amount=amount,
         currency=org.currency if org else "IDR",
         category=category,
         purpose=purpose,
@@ -252,6 +270,16 @@ def create_record(
         stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
         note = f"[auto-approved on create by {user.full_name} {stamp}]"
         rec.comment = (rec.comment + "\n" + note).strip() if rec.comment else note
+    db.flush()
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.create",
+            key=key,
+            resource_id=rec.id,
+        )
     db.commit()
     db.refresh(rec)
     return _record_out(db, rec)
@@ -532,6 +560,10 @@ def update_pending_record(
     if rec.status != RecordStatus.pending:
         raise HTTPException(400, "Only pending records can be edited")
     data = body.model_dump(exclude_unset=True)
+    if "amount" in data and data["amount"] is not None:
+        from app.services.money import round_money
+
+        data["amount"] = round_money(data["amount"])
     if rec.kind == RecordKind.fuel:
         next_bike = data["bike"] if "bike" in data else rec.bike
         next_odo = data["odometer"] if "odometer" in data else rec.odometer

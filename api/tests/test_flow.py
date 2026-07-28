@@ -2482,3 +2482,49 @@ def test_owner_issues_password_reset_token(client):
     )
     assert ok.status_code == 200
 
+def test_idempotency_key_and_money_round(client):
+    owner = _register(client, "flow-idem", "idem-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    key = "create-once-abc123"
+    first = client.post(
+        "/records",
+        headers={**h, "Idempotency-Key": key},
+        json={
+            "kind": "expense",
+            "amount": 10.006,
+            "category": "Supplies",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["amount"] == 10.01
+    second = client.post(
+        "/records",
+        headers={**h, "Idempotency-Key": key},
+        json={
+            "kind": "expense",
+            "amount": 99,
+            "category": "Food",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert second.status_code == 200
+    assert second.json()["id"] == first.json()["id"]
+    assert second.json()["amount"] == 10.01
+    # Without key, a new row is created
+    third = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 5,
+            "category": "Food",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert third.status_code == 200
+    assert third.json()["id"] != first.json()["id"]
+

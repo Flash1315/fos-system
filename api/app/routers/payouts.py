@@ -153,6 +153,8 @@ def _create_payout_row(
     requests. Approving a request passes exclude_request_id so its own reserve
     does not block itself.
     """
+    from app.services.money import round_money
+
     target = db.get(User, body.user_id)
     if not target or target.organization_id != manager.organization_id:
         raise HTTPException(404, "User not found")
@@ -163,6 +165,7 @@ def _create_payout_row(
     method = (body.payment_method or "cash").strip().lower()
     if method not in PAYMENT_METHODS:
         raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
+    amount = round_money(body.amount)
     overpayment = 0.0
     balance_after = 0.0
     if body.kind == PayoutKind.expense_payout:
@@ -171,9 +174,9 @@ def _create_payout_row(
             db, target.id, manager.organization_id, PayoutKind.expense_payout, exclude_request_id
         )
         available = max(0.0, owed - reserved)
-        if body.amount > available + 1e-6:
-            if reserved <= 1e-9 and body.amount > owed + 1e-6:
-                overpayment = body.amount - owed
+        if amount > available + 1e-6:
+            if reserved <= 1e-9 and amount > owed + 1e-6:
+                overpayment = round_money(amount - owed)
                 balance_after = 0.0
             else:
                 raise HTTPException(
@@ -183,26 +186,26 @@ def _create_payout_row(
                 )
         else:
             overpayment = 0.0
-            balance_after = max(0.0, owed - body.amount)
+            balance_after = round_money(max(0.0, owed - amount))
     elif body.kind == PayoutKind.income_handover:
         held = float(bal.get("cash_on_hand") or 0)
         reserved = pending_reserved(
             db, target.id, manager.organization_id, PayoutKind.income_handover, exclude_request_id
         )
         available = max(0.0, held - reserved)
-        if body.amount > available + 1e-6:
+        if amount > available + 1e-6:
             raise HTTPException(
                 400,
                 f"Only {available} available to take "
                 f"({held} held, {reserved} reserved by pending requests).",
             )
-        balance_after = max(0.0, held - body.amount)
+        balance_after = round_money(max(0.0, held - amount))
         overpayment = 0.0
     row = Payout(
         organization_id=manager.organization_id,
         user_id=target.id,
         kind=body.kind,
-        amount=body.amount,
+        amount=amount,
         currency=org.currency if org else "IDR",
         payment_method=method,
         note=body.note,
@@ -215,7 +218,7 @@ def _create_payout_row(
     db.flush()
     print(
         f"payout org={manager.organization_id} kind={body.kind.value} "
-        f"user={target.id} amount={body.amount} overpay={overpayment} after={balance_after}"
+        f"user={target.id} amount={amount} overpay={overpayment} after={balance_after}"
     )
     return row, target
 
@@ -467,6 +470,9 @@ def request_settlement(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from app.services.money import round_money
+
+    amount = round_money(body.amount)
     bal = user_balance(db, user)
     if body.kind == PayoutKind.expense_payout:
         available = float(bal.get("spendings") or 0)
@@ -476,7 +482,7 @@ def request_settlement(
         label = "cash on hand"
     reserved = pending_reserved(db, user.id, user.organization_id, body.kind)
     open_to_request = max(0.0, available - reserved)
-    if body.amount > open_to_request + 1e-6:
+    if amount > open_to_request + 1e-6:
         raise HTTPException(
             400,
             f"Request exceeds available {label} ({open_to_request}; "
@@ -486,7 +492,7 @@ def request_settlement(
         organization_id=user.organization_id,
         user_id=user.id,
         kind=body.kind,
-        amount=body.amount,
+        amount=amount,
         note=body.note,
         status=SettlementRequestStatus.pending,
         created_at=_utcnow(),

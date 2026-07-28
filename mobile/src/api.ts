@@ -469,8 +469,13 @@ export function createRecord(body: {
   occurred_at?: string;
   approve_now?: boolean;
 }) {
+  const idem =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `rec-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   return request<MoneyRecord>("/records", {
     method: "POST",
+    headers: { "Idempotency-Key": idem },
     body: JSON.stringify(body),
   });
 }
@@ -674,8 +679,13 @@ export function voidPayout(id: number, note: string) {
 }
 
 export function transferCash(body: { to_email: string; amount: number; comment?: string }) {
+  const idem =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `xfer-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   return request<{ sender_record: MoneyRecord; recipient_record: MoneyRecord }>("/transfers", {
     method: "POST",
+    headers: { "Idempotency-Key": idem },
     body: JSON.stringify(body),
   });
 }
@@ -745,9 +755,13 @@ export function requestSettlement(body: {
 
 export function listSettlementRequests(params?: {
   status?: "pending" | "approved" | "cancelled" | "all";
+  limit?: number;
+  offset?: number;
 }) {
   const q = new URLSearchParams();
   if (params?.status) q.set("status", params.status);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
   const qs = q.toString();
   return request<
     {

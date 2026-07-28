@@ -189,3 +189,22 @@ class BalanceAdjustment(Base):
     is_voided: Mapped[bool] = mapped_column(Boolean, default=False)
     voided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     voided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class IdempotencyKey(Base):
+    """Client Idempotency-Key → created resource (records / transfers)."""
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "user_id", "scope", "key", name="uq_idempotency_scope_key"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    scope: Mapped[str] = mapped_column(String(40), nullable=False)
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
+    resource_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    secondary_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

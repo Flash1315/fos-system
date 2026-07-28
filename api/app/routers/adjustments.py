@@ -112,7 +112,10 @@ def create_adjustment(
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
-    if abs(float(body.amount)) < 1e-9:
+    from app.services.money import round_money
+
+    amount = round_money(body.amount)
+    if abs(amount) < 1e-9:
         raise HTTPException(400, "Amount cannot be zero")
     target = db.get(User, body.user_id)
     if not target or target.organization_id != manager.organization_id or not target.is_active:
@@ -123,17 +126,17 @@ def create_adjustment(
         if body.track == AdjustmentTrack.cash_on_hand
         else float(bal.get("spendings") or 0)
     )
-    if current + float(body.amount) < -1e-6:
+    if current + amount < -1e-6:
         raise HTTPException(
             400,
             f"Adjustment would make {body.track.value} negative "
-            f"(current {current}, delta {body.amount})",
+            f"(current {current}, delta {amount})",
         )
     row = BalanceAdjustment(
         organization_id=manager.organization_id,
         user_id=target.id,
         track=body.track,
-        amount=float(body.amount),
+        amount=amount,
         note=body.note.strip(),
         occurred_at=body.occurred_at or _utcnow(),
         created_by=manager.id,

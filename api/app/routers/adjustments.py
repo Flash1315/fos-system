@@ -84,6 +84,7 @@ def list_adjustments(
     user_id: int | None = None,
     track: AdjustmentTrack | None = None,
     limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -98,7 +99,9 @@ def list_adjustments(
         q = q.filter(BalanceAdjustment.user_id == user_id)
     if track is not None:
         q = q.filter(BalanceAdjustment.track == track)
-    rows = q.order_by(BalanceAdjustment.created_at.desc()).limit(limit).all()
+    rows = (
+        q.order_by(BalanceAdjustment.created_at.desc()).offset(offset).limit(limit).all()
+    )
     out = []
     for r in rows:
         u = db.get(User, r.user_id)

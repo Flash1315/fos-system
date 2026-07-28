@@ -2538,8 +2538,7 @@ def test_billing_and_money_numeric(client):
     assert body["billing_status"] == "ok"
     assert body["media_backend"] in ("local", "s3")
     plan = client.post("/billing/plan", headers=h, json={"plan": "pro"})
-    assert plan.status_code == 200
-    assert plan.json()["plan"] == "pro"
+    assert plan.status_code == 400
     tg = client.post(
         "/integrations/telegram/chat",
         headers=h,
@@ -2565,5 +2564,63 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.0"
+    assert health.json()["version"] == "0.7.1"
+
+def test_photo_url_media_token_and_invite_expiry(client):
+    owner = _register(client, "flow-sec", "sec-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    bad = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 10,
+            "category": "Supplies",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "photo_url": "https://evil.example/x?steal=1",
+        },
+    )
+    assert bad.status_code == 400
+    bad2 = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 10,
+            "category": "Supplies",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "photo_url": "/media/files/999/not-ours.jpg",
+        },
+    )
+    assert bad2.status_code == 400
+    mt = client.get("/records/media-token", headers=h)
+    assert mt.status_code == 200
+    media_tok = mt.json()["access_token"]
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {media_tok}"}).status_code == 401
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={"email": "sec-emp@example.com", "full_name": "Emp", "role": "employee"},
+    )
+    assert inv.status_code == 200
+    token = inv.json()["invite_token"]
+    from app.db import SessionLocal
+    from app.models import User
+    from datetime import datetime, timedelta
+
+    db = SessionLocal()
+    try:
+        u = db.query(User).filter(User.email == "sec-emp@example.com").one()
+        u.invite_token_expires_at = datetime.utcnow() - timedelta(days=1)
+        db.commit()
+    finally:
+        db.close()
+    expired = client.post(
+        "/auth/accept-invite",
+        json={"token": token, "password": "freshpass1"},
+    )
+    assert expired.status_code == 400
+    assert client.get("/records/pending/count", headers=h).json()["count"] == 0
 

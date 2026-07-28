@@ -65,6 +65,7 @@ class User(Base):
     token_version: Mapped[int] = mapped_column(Integer, default=0)
     # One-time invite acceptance (optional password invite)
     invite_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    invite_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     must_set_password: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 

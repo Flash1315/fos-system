@@ -56,7 +56,12 @@ def set_plan(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
-    """Stub plan switch — no payment processor yet."""
+    """Stub plan switch — disabled unless BILLING_PLAN_SWITCH=1."""
+    if not settings.billing_plan_switch:
+        raise HTTPException(
+            400,
+            "Plan changes are disabled until billing is enabled (set BILLING_PLAN_SWITCH=1)",
+        )
     org = db.get(Organization, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")

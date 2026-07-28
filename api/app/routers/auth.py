@@ -1,4 +1,5 @@
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
@@ -28,6 +29,16 @@ from app.schemas import (
 )
 
 router = APIRouter(tags=["auth"])
+
+INVITE_TTL_DAYS = 7
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _invite_expiry() -> datetime:
+    return _utcnow() + timedelta(days=INVITE_TTL_DAYS)
 
 
 def _currency_locked(db: Session, org_id: int) -> bool:
@@ -126,6 +137,7 @@ def change_password(
     bump_token_version(user)
     user.must_set_password = False
     user.invite_token = None
+    user.invite_token_expires_at = None
     db.commit()
     db.refresh(user)
     return TokenOut(access_token=_token_for(user), user=UserOut.model_validate(user))
@@ -137,9 +149,16 @@ def accept_invite(body: AcceptInviteIn, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.invite_token == token).first()
     if not user or not user.is_active:
         raise HTTPException(400, "Invalid or expired invite token")
+    expires = getattr(user, "invite_token_expires_at", None)
+    if expires is not None and expires < _utcnow():
+        user.invite_token = None
+        user.invite_token_expires_at = None
+        db.commit()
+        raise HTTPException(400, "Invalid or expired invite token")
     user.hashed_password = hash_password(body.password)
     user.must_set_password = False
     user.invite_token = None
+    user.invite_token_expires_at = None
     bump_token_version(user)
     db.commit()
     db.refresh(user)
@@ -200,6 +219,7 @@ def invite_user(
     org = db.get(Organization, user.organization_id)
     invite_token: str | None = None
     must_set = False
+    invite_expires = None
     if body.password:
         hashed = hash_password(body.password)
     else:
@@ -207,6 +227,7 @@ def invite_user(
         hashed = hash_password(secrets.token_urlsafe(24))
         invite_token = secrets.token_urlsafe(24)
         must_set = True
+        invite_expires = _invite_expiry()
     invited = User(
         organization_id=user.organization_id,
         email=body.email.lower(),
@@ -214,6 +235,7 @@ def invite_user(
         hashed_password=hashed,
         role=body.role,
         invite_token=invite_token,
+        invite_token_expires_at=invite_expires,
         must_set_password=must_set,
     )
     db.add(invited)

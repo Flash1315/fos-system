@@ -11,7 +11,6 @@ import {
   approveSettlementRequest,
   cancelSettlementRequest,
   saveToken,
-  setBillingPlan,
   setTelegramChat,
   testTelegram,
   updateOrg,
@@ -276,8 +275,8 @@ export function AccountScreen({
 
           <Label>Plan & integrations</Label>
           <Sub>
-            Plan is a stub (no payments yet). Optional Telegram chat for org alerts when the server
-            has TELEGRAM_BOT_TOKEN. SMTP invites when SMTP_HOST is set.
+            Plan is informational until billing goes live. Optional Telegram chat for org alerts when
+            the server has TELEGRAM_BOT_TOKEN. SMTP invites when SMTP_HOST is set.
           </Sub>
           {billing && (
             <Sub>
@@ -286,25 +285,6 @@ export function AccountScreen({
               {billing.telegram_configured ? " · telegram bot on" : " · telegram bot off"}
             </Sub>
           )}
-          <View style={styles.kinds}>
-            {(["free", "trial", "pro"] as const).map((p) => (
-              <Chip
-                key={p}
-                label={p}
-                on={billing?.plan === p}
-                onPress={async () => {
-                  setBusy(true);
-                  try {
-                    setBilling(await setBillingPlan(p));
-                  } catch (e) {
-                    Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              />
-            ))}
-          </View>
           <Label>Telegram chat id</Label>
           <Field value={tgChat} onChangeText={setTgChat} placeholder="-100…" autoCapitalize="none" />
           <Btn

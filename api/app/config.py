@@ -32,5 +32,8 @@ class Settings(BaseSettings):
     # Optional Telegram bot for org notifications
     telegram_bot_token: str = ""
 
+    # Allow POST /billing/plan stub switches (off by default)
+    billing_plan_switch: bool = False
+
 
 settings = Settings()

@@ -1,4 +1,5 @@
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -15,6 +16,12 @@ from app.db import get_db
 from app.models import Organization, User, UserRole
 
 router = APIRouter(prefix="/orgs", tags=["team"])
+
+RESET_TTL_DAYS = 2
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 @router.get("/members", response_model=list[MemberOut])
@@ -74,6 +81,7 @@ def set_member_active(
     if not body.is_active:
         bump_token_version(member)
         member.invite_token = None
+        member.invite_token_expires_at = None
     db.commit()
     db.refresh(member)
     return MemberOut.model_validate(member)
@@ -123,6 +131,7 @@ def reset_member_password(
     bump_token_version(member)
     member.must_set_password = False
     member.invite_token = None
+    member.invite_token_expires_at = None
     db.commit()
     db.refresh(member)
     return MemberOut.model_validate(member)
@@ -144,6 +153,7 @@ def issue_member_reset_token(
     token = secrets.token_urlsafe(24)
     member.hashed_password = hash_password(secrets.token_urlsafe(24))
     member.invite_token = token
+    member.invite_token_expires_at = _utcnow() + timedelta(days=RESET_TTL_DAYS)
     member.must_set_password = True
     bump_token_version(member)
     db.commit()

@@ -19,7 +19,7 @@ _optional_bearer = HTTPBearer(auto_error=False)
 
 
 def _user_from_token(token: str, db: Session) -> User:
-    return user_from_token(token, db)
+    return user_from_token(token, db, allow_media=True)
 
 
 @router.post("/media/photo", response_model=PhotoOut)

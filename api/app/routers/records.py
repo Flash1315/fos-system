@@ -1,10 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_roles
+from app.auth import create_media_token, get_current_user, require_roles
 from app.categories import PAYMENT_METHODS, PAYMENT_SOURCES, PURPOSES, categories_for
 from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
@@ -23,9 +24,37 @@ from app.services.balances import user_balance
 
 router = APIRouter(prefix="/records", tags=["records"])
 
+_PHOTO_RE = re.compile(r"^/media/files/(\d+)/[A-Za-z0-9._-]+$")
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _validate_photo_url(photo_url: str, org_id: int) -> str:
+    url = (photo_url or "").strip()
+    if not url:
+        return ""
+    m = _PHOTO_RE.match(url)
+    if not m:
+        raise HTTPException(400, "photo_url must be an uploaded /media/files/{org}/{file} path")
+    if int(m.group(1)) != org_id:
+        raise HTTPException(400, "photo_url does not belong to this organization")
+    return url
+
+
+def _validate_occurred_at(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    now = _utcnow()
+    # Normalize aware → naive UTC
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    if value > now + timedelta(days=1):
+        raise HTTPException(400, "occurred_at cannot be more than 1 day in the future")
+    if value < now - timedelta(days=365 * 10):
+        raise HTTPException(400, "occurred_at cannot be older than 10 years")
+    return value
 
 
 def _normalize_category_purpose(kind: RecordKind, category: str, purpose: str) -> tuple[str, str]:
@@ -214,6 +243,8 @@ def create_record(
     owner_id = user.id
     body_comment = body.comment
     amount = round_money(body.amount)
+    photo_url = _validate_photo_url(body.photo_url, user.organization_id)
+    occurred_at = _validate_occurred_at(body.occurred_at)
     if body.created_for_user_id is not None:
         if user.role not in (UserRole.owner, UserRole.manager):
             raise HTTPException(403, "Only managers can create on behalf")
@@ -244,13 +275,13 @@ def create_record(
         place=body.place,
         bike=body.bike,
         comment=body_comment,
-        photo_url=body.photo_url,
+        photo_url=photo_url,
         liters=body.liters,
         odometer=body.odometer,
         client_name=body.client_name,
         payment_method=method,
         payment_source=source,
-        occurred_at=body.occurred_at,
+        occurred_at=occurred_at,
     )
     db.add(rec)
     if body.approve_now:
@@ -392,6 +423,33 @@ def pending_records(
         q = q.filter(MoneyRecord.kind == kind)
     rows = q.order_by(MoneyRecord.created_at.asc()).offset(offset).limit(limit).all()
     return [_record_out(db, r) for r in rows]
+
+
+@router.get("/pending/count")
+def pending_count(
+    purpose: str | None = None,
+    kind: RecordKind | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    q = db.query(func.count(MoneyRecord.id)).filter(
+        MoneyRecord.organization_id == user.organization_id,
+        MoneyRecord.status == RecordStatus.pending,
+    )
+    if purpose:
+        q = q.filter(MoneyRecord.purpose == purpose)
+    if kind:
+        q = q.filter(MoneyRecord.kind == kind)
+    return {"count": int(q.scalar() or 0)}
+
+
+@router.get("/media-token")
+def issue_media_token(user: User = Depends(get_current_user)):
+    """Short-lived token for loading receipt images without the full access JWT."""
+    token = create_media_token(
+        user.id, user.organization_id, user.token_version or 0, minutes=15
+    )
+    return {"access_token": token, "token_type": "bearer", "expires_in": 900}
 
 
 @router.get("/balance/me", response_model=BalanceOut)
@@ -564,6 +622,10 @@ def update_pending_record(
         from app.services.money import round_money
 
         data["amount"] = round_money(data["amount"])
+    if "photo_url" in data:
+        data["photo_url"] = _validate_photo_url(data["photo_url"] or "", user.organization_id)
+    if "occurred_at" in data:
+        data["occurred_at"] = _validate_occurred_at(data["occurred_at"])
     if rec.kind == RecordKind.fuel:
         next_bike = data["bike"] if "bike" in data else rec.bike
         next_odo = data["odometer"] if "odometer" in data else rec.odometer

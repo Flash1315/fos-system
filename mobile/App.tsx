@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Alert } from "react-native";
 import {
   clearToken,
   getToken,
@@ -231,10 +232,19 @@ export default function App() {
       onBalances={() => setScreen("balances")}
       onAccount={() => setScreen("account")}
       onRecord={(id) => openRecord(id, "home")}
-      onLogout={async () => {
-        await clearToken();
-        setUser(null);
-        setScreen("auth");
+      onLogout={() => {
+        Alert.alert("Fos", "Log out of this device?", [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Log out",
+            style: "destructive",
+            onPress: async () => {
+              await clearToken();
+              setUser(null);
+              setScreen("auth");
+            },
+          },
+        ]);
       }}
     />
   );

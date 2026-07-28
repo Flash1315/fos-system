@@ -68,6 +68,7 @@ def ensure_money_record_columns() -> None:
         [
             ("token_version", "INTEGER DEFAULT 0"),
             ("invite_token", "VARCHAR(64)"),
+            ("invite_token_expires_at", "DATETIME"),
             ("must_set_password", "BOOLEAN DEFAULT 0"),
         ],
     )

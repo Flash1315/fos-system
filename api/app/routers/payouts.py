@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, Body, Header, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -228,8 +228,34 @@ def create_payout(
     body: PayoutCreate,
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="payouts.create",
+            key=key,
+        )
+        if hit:
+            existing = db.get(Payout, hit.resource_id)
+            if existing and existing.organization_id == manager.organization_id:
+                u = db.get(User, existing.user_id)
+                return _payout_out(db, existing, u.full_name if u else "")
     row, target = _create_payout_row(body, db, manager)
+    if key:
+        store_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="payouts.create",
+            key=key,
+            resource_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     return _payout_out(db, row, target.full_name)
@@ -544,7 +570,24 @@ def approve_settlement_request(
     body: ApproveRequestIn | None = Body(default=None),
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="payouts.approve_request",
+            key=key,
+        )
+        if hit:
+            existing = db.get(Payout, hit.resource_id)
+            if existing and existing.organization_id == manager.organization_id:
+                u = db.get(User, existing.user_id)
+                return _payout_out(db, existing, u.full_name if u else "")
     req = db.get(SettlementRequest, request_id)
     if not req or req.organization_id != manager.organization_id:
         raise HTTPException(404, "Request not found")
@@ -591,6 +634,15 @@ def approve_settlement_request(
     req.decided_by = manager.id
     req.settled_amount = amount
     req.payout_id = row.id
+    if key:
+        store_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="payouts.approve_request",
+            key=key,
+            resource_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     return _payout_out(db, row, target.full_name)

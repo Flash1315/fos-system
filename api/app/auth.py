@@ -33,12 +33,26 @@ def create_access_token(user_id: int, org_id: int, role: str, token_version: int
         "org": org_id,
         "role": role,
         "ver": int(token_version or 0),
+        "typ": "access",
         "exp": expire,
     }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
-def user_from_token(token: str, db: Session) -> User:
+def create_media_token(user_id: int, org_id: int, token_version: int = 0, minutes: int = 15) -> str:
+    """Short-lived token for <Image> query auth — scoped to media only."""
+    expire = _utcnow() + timedelta(minutes=max(1, minutes))
+    payload = {
+        "sub": str(user_id),
+        "org": org_id,
+        "ver": int(token_version or 0),
+        "typ": "media",
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+def user_from_token(token: str, db: Session, *, allow_media: bool = False) -> User:
     """Decode JWT and return active user; rejects revoked token_version."""
     credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -49,7 +63,12 @@ def user_from_token(token: str, db: Session) -> User:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         user_id = int(payload.get("sub", 0))
         token_ver = int(payload.get("ver", 0) or 0)
+        typ = payload.get("typ") or "access"
     except (JWTError, ValueError, TypeError):
+        raise credentials_exc
+    if typ == "media" and not allow_media:
+        raise credentials_exc
+    if typ not in ("access", "media"):
         raise credentials_exc
     user = db.get(User, user_id)
     if not user or not user.is_active:
@@ -68,7 +87,7 @@ def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    return user_from_token(token, db)
+    return user_from_token(token, db, allow_media=False)
 
 
 def require_roles(*roles: UserRole):

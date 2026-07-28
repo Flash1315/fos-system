@@ -19,7 +19,7 @@ Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.7.0")
+app = FastAPI(title=settings.app_name, version="0.7.1")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
@@ -46,6 +46,10 @@ def health():
     return {
         "ok": True,
         "app": settings.app_name,
-        "version": "0.7.0",
+        "version": "0.7.1",
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }
+
+
+if settings.secret_key in ("dev-secret-change-me", "change-me-in-production", ""):
+    print("WARNING: SECRET_KEY is insecure — set a strong SECRET_KEY in production")

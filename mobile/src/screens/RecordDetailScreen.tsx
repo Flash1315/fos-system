@@ -6,8 +6,7 @@ import {
   commentRecord,
   decideRecord,
   getRecord,
-  getToken,
-  mediaUrl,
+  mediaUrlWithMediaToken,
   updateRecord,
   voidRecord,
   type MoneyRecord,
@@ -53,7 +52,7 @@ export function RecordDetailScreen({
   const [editBike, setEditBike] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [token, setToken] = useState<string | null>(null);
+  const [photoUri, setPhotoUri] = useState("");
   const isManager = user.role === "owner" || user.role === "manager";
 
   const applyEditFields = (row: MoneyRecord) => {
@@ -75,10 +74,14 @@ export function RecordDetailScreen({
   const reload = async () => {
     try {
       setLoadError("");
-      const [row, t] = await Promise.all([getRecord(id), getToken()]);
-      setToken(t);
+      const row = await getRecord(id);
       setRec(row);
       applyEditFields(row);
+      if (row.photo_url) {
+        setPhotoUri(await mediaUrlWithMediaToken(row.photo_url));
+      } else {
+        setPhotoUri("");
+      }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -368,10 +371,10 @@ export function RecordDetailScreen({
               </>
             )}
           </Card>
-          {!!rec.photo_url && (
+          {!!rec.photo_url && !!photoUri && (
             <Card>
               <Label>Receipt</Label>
-              <Image source={{ uri: mediaUrl(rec.photo_url, token) }} style={styles.photo} />
+              <Image source={{ uri: photoUri }} style={styles.photo} />
             </Card>
           )}
           {isManager && rec.status === "pending" && (

@@ -566,6 +566,14 @@ export function pendingRecords(params?: {
   return request<MoneyRecord[]>(`/records/pending${suffix}`);
 }
 
+export function pendingCount(params?: { purpose?: string; kind?: string }) {
+  const q = new URLSearchParams();
+  if (params?.purpose) q.set("purpose", params.purpose);
+  if (params?.kind) q.set("kind", params.kind);
+  const suffix = q.toString() ? `?${q}` : "";
+  return request<{ count: number }>(`/records/pending/count${suffix}`);
+}
+
 export function decideRecord(id: number, approve: boolean, note = "") {
   return request<MoneyRecord>(`/records/${id}/decide`, {
     method: "POST",
@@ -732,8 +740,13 @@ export function createPayout(body: {
   note?: string;
   overpayment?: number;
 }) {
+  const idem =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `pay-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   return request("/payouts", {
     method: "POST",
+    headers: { "Idempotency-Key": idem },
     body: JSON.stringify(body),
   });
 }
@@ -817,8 +830,13 @@ export function approveSettlementRequest(
   id: number,
   paymentMethod: "cash" | "transfer" = "cash",
 ) {
+  const idem =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `appr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   return request(`/payouts/requests/${id}/approve`, {
     method: "POST",
+    headers: { "Idempotency-Key": idem },
     body: JSON.stringify({ payment_method: paymentMethod }),
   });
 }
@@ -897,9 +915,27 @@ export async function uploadPhoto(uri: string, name = "receipt.jpg") {
 
 export function mediaUrl(path: string, token?: string | null): string {
   if (!path) return "";
-  const base = path.startsWith("http") ? path : `${API_URL}${path}`;
+  // Never attach credentials to absolute third-party URLs
+  if (/^https?:\/\//i.test(path)) return path;
+  const base = `${API_URL}${path.startsWith("/") ? path : `/${path}`}`;
   const auth = token ?? cachedToken;
   if (!auth) return base;
+  // Only sign our own media paths
+  if (!path.startsWith("/media/files/")) return base;
   const sep = base.includes("?") ? "&" : "?";
   return `${base}${sep}token=${encodeURIComponent(auth)}`;
+}
+
+export async function mediaUrlWithMediaToken(path: string): Promise<string> {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  if (!path.startsWith("/media/files/")) {
+    return mediaUrl(path);
+  }
+  try {
+    const res = await request<{ access_token: string }>("/records/media-token");
+    return mediaUrl(path, res.access_token);
+  } catch {
+    return mediaUrl(path);
+  }
 }

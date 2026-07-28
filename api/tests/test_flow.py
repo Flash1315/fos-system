@@ -566,13 +566,27 @@ def test_password_and_settlement_request(client):
     bad = client.post(
         "/auth/password",
         headers=h,
-        json={"current_password": "wrong", "new_password": "newsecret"},
+        json={
+            "current_password": "wrong",
+            "new_password": "newsecret",
+            "password_confirm": "newsecret",
+        },
     )
     assert bad.status_code == 400
-    ok = client.post(
+    missing = client.post(
         "/auth/password",
         headers=h,
         json={"current_password": "secret12", "new_password": "newsecret"},
+    )
+    assert missing.status_code == 422
+    ok = client.post(
+        "/auth/password",
+        headers=h,
+        json={
+            "current_password": "secret12",
+            "new_password": "newsecret",
+            "password_confirm": "newsecret",
+        },
     )
     assert ok.status_code == 200
     body = ok.json()
@@ -2415,7 +2429,11 @@ def test_invite_token_accept_and_pagination(client):
     assert blocked.status_code == 401
     accept = client.post(
         "/auth/accept-invite",
-        json={"token": body["invite_token"], "password": "chosen99"},
+        json={
+            "token": body["invite_token"],
+            "password": "chosen99",
+            "password_confirm": "chosen99",
+        },
     )
     assert accept.status_code == 200, accept.text
     assert "access_token" in accept.json()
@@ -2423,7 +2441,11 @@ def test_invite_token_accept_and_pagination(client):
     assert client.get("/auth/me", headers=eh).status_code == 200
     again = client.post(
         "/auth/accept-invite",
-        json={"token": body["invite_token"], "password": "chosen99"},
+        json={
+            "token": body["invite_token"],
+            "password": "chosen99",
+            "password_confirm": "chosen99",
+        },
     )
     assert again.status_code == 400
     login = client.post(
@@ -2503,7 +2525,7 @@ def test_owner_issues_password_reset_token(client):
     assert blocked.status_code == 401
     accept = client.post(
         "/auth/accept-invite",
-        json={"token": token, "password": "freshpass1"},
+        json={"token": token, "password": "freshpass1", "password_confirm": "freshpass1"},
     )
     assert accept.status_code == 200, accept.text
     ok = client.post(
@@ -2598,7 +2620,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.11"
+    assert health.json()["version"] == "0.7.12"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -2653,7 +2675,7 @@ def test_photo_url_media_token_and_invite_expiry(client):
         db.close()
     expired = client.post(
         "/auth/accept-invite",
-        json={"token": token, "password": "freshpass1"},
+        json={"token": token, "password": "freshpass1", "password_confirm": "freshpass1"},
     )
     assert expired.status_code == 400
     assert client.get("/records/pending/count", headers=h).json()["count"] == 0
@@ -3480,4 +3502,143 @@ def test_decide_void_idempotency_keys_and_upload_rate_limit(client, monkeypatch)
     assert "Retry-After" in last.headers
     reset_limiter_for_tests()
     monkeypatch.setattr(settings, "rate_limit_enabled", False)
+
+
+def test_role_change_bumps_token_and_void_income_cash_guard(client):
+    owner = _register(client, "flow-0711", "v0711-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0711-mgr@example.com",
+            "full_name": "Mgr",
+            "role": "manager",
+            "password": "secret12",
+        },
+    )
+    assert inv.status_code == 200
+    emp_id = inv.json()["id"]
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "v0711-mgr@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-0711",
+        },
+    )
+    assert login.status_code == 200
+    old_h = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert client.get("/auth/me", headers=old_h).status_code == 200
+    demote = client.post(
+        f"/orgs/members/{emp_id}/role",
+        headers=h,
+        json={"role": "employee"},
+    )
+    assert demote.status_code == 200
+    assert demote.json()["role"] == "employee"
+    assert client.get("/auth/me", headers=old_h).status_code == 401
+
+    income = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 10000,
+            "category": "Cash",
+            "payment_method": "cash",
+            "approve_now": True,
+        },
+    )
+    assert income.status_code == 200, income.text
+    iid = income.json()["id"]
+    spend = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 8000,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "cash_on_hand",
+            "approve_now": True,
+        },
+    )
+    assert spend.status_code == 200, spend.text
+    bad = client.post(f"/records/{iid}/void", headers=h, json={"note": "undo income"})
+    assert bad.status_code == 400
+    assert "negative" in bad.json()["detail"].lower()
+
+
+def test_decide_batch_soft_retry_and_inactive_invite_message(client):
+    owner = _register(client, "flow-0711b", "v0711b-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    a = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 11,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    ).json()["id"]
+    b = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 12,
+            "category": "Food",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    ).json()["id"]
+    first = client.post(
+        "/records/decide-batch",
+        headers=h,
+        json={"ids": [a, b], "approve": True},
+    )
+    assert first.status_code == 200, first.text
+    again = client.post(
+        "/records/decide-batch",
+        headers=h,
+        json={"ids": [a, b], "approve": True},
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["decided"] == []
+    assert again.json()["skipped"] == 2
+
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0711b-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    emp_id = inv.json()["id"]
+    assert (
+        client.post(
+            f"/orgs/members/{emp_id}/active",
+            headers=h,
+            json={"is_active": False},
+        ).status_code
+        == 200
+    )
+    reinvite = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0711b-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    assert reinvite.status_code == 400
+    assert "inactive" in reinvite.json()["detail"].lower()
 

@@ -15,6 +15,7 @@ from app.models import (
     Payout,
     RecordKind,
     RecordStatus,
+    SettlementRequest,
     User,
     UserRole,
 )
@@ -345,6 +346,10 @@ def export_csv(
             "balance_after",
             "is_voided",
             "comment",
+            "liters",
+            "odometer",
+            "transfer_group_id",
+            "payout_id",
         ]
     )
     for r in rows:
@@ -373,6 +378,10 @@ def export_csv(
                 "",
                 1 if r.is_voided else 0,
                 _csv_text(r.comment or ""),
+                r.liters if r.liters is not None else "",
+                r.odometer if r.odometer is not None else "",
+                _csv_text(r.transfer_group_id or ""),
+                "",
             ]
         )
 
@@ -409,6 +418,10 @@ def export_csv(
                 float(p.balance_after or 0),
                 1 if p.is_voided else 0,
                 _csv_text(p.void_note or p.note or ""),
+                "",
+                "",
+                "",
+                "",
             ]
         )
 
@@ -445,6 +458,51 @@ def export_csv(
                 "",
                 1 if a.is_voided else 0,
                 _csv_text(a.note or ""),
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
+
+    sq = db.query(SettlementRequest).filter(SettlementRequest.organization_id == oid)
+    if since is not None:
+        sq = sq.filter(SettlementRequest.created_at >= since)
+    if until is not None:
+        sq = sq.filter(SettlementRequest.created_at < until)
+    requests = sq.order_by(SettlementRequest.created_at.asc()).limit(2001).all()
+    if len(requests) > 2000:
+        raise HTTPException(400, "Export too large — narrow the date range")
+    for req in requests:
+        u = db.get(User, req.user_id)
+        name = u.full_name if u else ""
+        rkind = req.kind.value if hasattr(req.kind, "value") else str(req.kind)
+        rstatus = req.status.value if hasattr(req.status, "value") else str(req.status)
+        writer.writerow(
+            [
+                "settlement_request",
+                req.id,
+                rkind,
+                rstatus,
+                req.amount,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                _csv_text(name),
+                req.created_at.isoformat() if req.created_at else "",
+                req.decided_at.isoformat() if req.decided_at else "",
+                float(req.settled_amount or 0) if req.settled_amount is not None else "",
+                "",
+                0,
+                _csv_text(req.note or ""),
+                "",
+                "",
+                "",
+                req.payout_id or "",
             ]
         )
 

@@ -221,7 +221,7 @@ def create_record(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
-    from app.services.money import round_money
+    from app.services.money import require_positive_money
 
     key = normalize_idem_key(idempotency_key)
     if key:
@@ -243,7 +243,10 @@ def create_record(
     category, purpose = _normalize_category_purpose(body.kind, body.category, body.purpose)
     owner_id = user.id
     body_comment = body.comment
-    amount = round_money(body.amount)
+    try:
+        amount = require_positive_money(body.amount)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     photo_url = _validate_photo_url(body.photo_url, user.organization_id)
     occurred_at = _validate_occurred_at(body.occurred_at)
     if body.created_for_user_id is not None:
@@ -696,9 +699,12 @@ def update_pending_record(
         raise HTTPException(400, "Only pending records can be edited")
     data = body.model_dump(exclude_unset=True)
     if "amount" in data and data["amount"] is not None:
-        from app.services.money import round_money
+        from app.services.money import require_positive_money
 
-        data["amount"] = round_money(data["amount"])
+        try:
+            data["amount"] = require_positive_money(data["amount"])
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
     if "photo_url" in data:
         data["photo_url"] = _validate_photo_url(data["photo_url"] or "", user.organization_id)
     if "occurred_at" in data:

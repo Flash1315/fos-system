@@ -18,7 +18,7 @@ from app.schemas import RecordOut
 from app.routers.records import _record_out, _utcnow
 from app.services.balances import user_balance
 from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
-from app.services.money import round_money
+from app.services.money import require_positive_money
 
 router = APIRouter(prefix="/transfers", tags=["transfers"])
 
@@ -80,7 +80,10 @@ def create_transfer(
     if recipient.id == user.id:
         raise HTTPException(400, "Cannot transfer to yourself")
 
-    amount = round_money(body.amount)
+    try:
+        amount = require_positive_money(body.amount)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     bal = user_balance(db, user)
     held = float(bal.get("cash_on_hand") or 0)
     reserved = float(bal.get("reserved_cash") or 0)

@@ -62,6 +62,10 @@ export default function App() {
       setUser(null);
       setRecordId(null);
       setScreen("auth");
+      Alert.alert(
+        "Fos",
+        "Session ended — role changed, password reset, or signed out elsewhere. Log in again.",
+      );
     });
     return () => setUnauthorizedHandler(null);
   }, []);

@@ -14,6 +14,16 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
   unauthorizedHandler = handler;
 }
 
+export type User = {
+  id: number;
+  email: string;
+  full_name: string;
+  role: "owner" | "manager" | "employee";
+  organization_id: number;
+  is_active?: boolean;
+  must_set_password?: boolean;
+};
+
 function isFormDataBody(body: BodyInit | null | undefined): boolean {
   if (!body || typeof body !== "object") return false;
   if (typeof FormData !== "undefined" && body instanceof FormData) return true;
@@ -50,15 +60,6 @@ function newIdemKey(prefix: string): string {
 export function makeIdempotencyKey(prefix = "idem"): string {
   return newIdemKey(prefix);
 }
-
-export type User = {
-  id: number;
-  email: string;
-  full_name: string;
-  role: "owner" | "manager" | "employee";
-  organization_id: number;
-  is_active?: boolean;
-};
 
 export type MoneyRecord = {
   id: number;

@@ -51,38 +51,39 @@ export function TeamScreen({
       return;
     }
     const nextActive = member.is_active === false;
-    Alert.alert(
-      "Fos",
-      nextActive
-        ? `Activate ${member.full_name}?`
-        : `Deactivate ${member.full_name}? They will not be able to log in.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: nextActive ? "Activate" : "Deactivate",
-          style: nextActive ? "default" : "destructive",
-          onPress: async () => {
-            if (busy) return;
-            setBusy(true);
-            try {
-              await setMemberActive(member.id, nextActive);
-              await reload();
-            } catch (e) {
-              Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-            } finally {
-              setBusy(false);
-            }
-          },
+    const activateMsg =
+      member.must_set_password
+        ? `Activate ${member.full_name}? They must still set a password (issue a reset token if they lost the invite).`
+        : `Activate ${member.full_name}?`;
+    const deactivateMsg =
+      `Deactivate ${member.full_name}? They will not be able to log in. ` +
+      "Blocked if they still have pending records or settlement requests.";
+    Alert.alert("Fos", nextActive ? activateMsg : deactivateMsg, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: nextActive ? "Activate" : "Deactivate",
+        style: nextActive ? "default" : "destructive",
+        onPress: async () => {
+          if (busy) return;
+          setBusy(true);
+          try {
+            await setMemberActive(member.id, nextActive);
+            await reload();
+          } catch (e) {
+            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+          } finally {
+            setBusy(false);
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   const changeRole = async (member: User, role: "owner" | "manager" | "employee") => {
     if (busy) return;
     if (currentUser.role !== "owner") return;
     if (member.role === role) return;
-    Alert.alert("Fos", `Change ${member.full_name} role to ${role}?`, [
+    Alert.alert("Fos", `Change ${member.full_name} role to ${role}? Their current sessions will end.`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Change",
@@ -141,6 +142,7 @@ export function TeamScreen({
               {"\n"}
               <Text style={styles.meta}>
                 {item.email} · {item.is_active === false ? "inactive" : "active"}
+                {item.must_set_password ? " · must set password" : ""}
               </Text>
             </Text>
             {currentUser.role === "owner" && item.id !== currentUser.id && (

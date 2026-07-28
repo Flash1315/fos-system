@@ -115,11 +115,11 @@ class InviteOut(BaseModel):
 class AcceptInviteIn(BaseModel):
     token: str = Field(min_length=16, max_length=128)
     password: str = Field(min_length=6, max_length=128)
-    password_confirm: Optional[str] = Field(default=None, max_length=128)
+    password_confirm: str = Field(min_length=6, max_length=128)
 
     @model_validator(mode="after")
     def confirm_matches(self):
-        if self.password_confirm is not None and self.password_confirm != self.password:
+        if self.password_confirm != self.password:
             raise ValueError("Passwords do not match")
         return self
 
@@ -127,11 +127,11 @@ class AcceptInviteIn(BaseModel):
 class PasswordChangeIn(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
     new_password: str = Field(min_length=6, max_length=128)
-    password_confirm: Optional[str] = Field(default=None, max_length=128)
+    password_confirm: str = Field(min_length=6, max_length=128)
 
     @model_validator(mode="after")
     def confirm_matches(self):
-        if self.password_confirm is not None and self.password_confirm != self.new_password:
+        if self.password_confirm != self.new_password:
             raise ValueError("Passwords do not match")
         return self
 
@@ -274,6 +274,7 @@ class MemberOut(BaseModel):
     role: UserRole
     is_active: bool
     organization_id: int
+    must_set_password: bool = False
 
     model_config = {"from_attributes": True}
 

@@ -154,7 +154,7 @@ def _create_payout_row(
     requests. Approving a request passes exclude_request_id so its own reserve
     does not block itself.
     """
-    from app.services.money import round_money
+    from app.services.money import require_positive_money, round_money
 
     target = db.get(User, body.user_id)
     if not target or target.organization_id != manager.organization_id:
@@ -166,7 +166,10 @@ def _create_payout_row(
     method = (body.payment_method or "cash").strip().lower()
     if method not in PAYMENT_METHODS:
         raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
-    amount = round_money(body.amount)
+    try:
+        amount = require_positive_money(body.amount)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     overpayment = 0.0
     balance_after = 0.0
     if body.kind == PayoutKind.expense_payout:
@@ -625,7 +628,7 @@ def request_settlement(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
-    from app.services.money import round_money
+    from app.services.money import require_positive_money
 
     key = normalize_idem_key(idempotency_key)
     if key:
@@ -641,7 +644,10 @@ def request_settlement(
             if existing and existing.organization_id == user.organization_id:
                 return _request_out(existing, user.full_name)
 
-    amount = round_money(body.amount)
+    try:
+        amount = require_positive_money(body.amount)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     bal = user_balance(db, user)
     if body.kind == PayoutKind.expense_payout:
         available = float(bal.get("spendings") or 0)

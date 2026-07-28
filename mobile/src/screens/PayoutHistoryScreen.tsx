@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { listMyPayouts, listOrgPayouts, voidPayout, type User } from "../api";
+import { listMembers, listMyPayouts, listOrgPayouts, voidPayout, type User } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
@@ -36,12 +36,25 @@ export function PayoutHistoryScreen({
   const [scope, setScope] = useState<"mine" | "org">(isManager ? "org" : "mine");
   const [voidFilter, setVoidFilter] = useState<"active" | "voided" | "all">("active");
   const [kindFilter, setKindFilter] = useState<"" | "expense_payout" | "income_handover">("");
+  const [userFilter, setUserFilter] = useState<number | null>(null);
+  const [members, setMembers] = useState<User[]>([]);
   const [rows, setRows] = useState<PayoutRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [voidId, setVoidId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    if (!isManager) return;
+    (async () => {
+      try {
+        setMembers(await listMembers());
+      } catch {
+        /* optional */
+      }
+    })();
+  }, [isManager]);
 
   const reload = async () => {
     try {
@@ -53,6 +66,7 @@ export function PayoutHistoryScreen({
           ? await listOrgPayouts({
               voided,
               kind: kindFilter || undefined,
+              user_id: userFilter ?? undefined,
             })
           : await listMyPayouts({
               voided,
@@ -70,7 +84,7 @@ export function PayoutHistoryScreen({
   useFocusEffect(reload);
   React.useEffect(() => {
     void reload();
-  }, [scope, voidFilter, kindFilter]);
+  }, [scope, voidFilter, kindFilter, userFilter]);
 
   return (
     <Screen>
@@ -100,6 +114,19 @@ export function PayoutHistoryScreen({
           onPress={() => setKindFilter("income_handover")}
         />
       </View>
+      {isManager && scope === "org" && members.length > 0 && (
+        <View style={styles.kinds}>
+          <Chip label="Anyone" on={userFilter == null} onPress={() => setUserFilter(null)} />
+          {members.map((m) => (
+            <Chip
+              key={m.id}
+              label={m.full_name.split(" ")[0] || m.full_name}
+              on={userFilter === m.id}
+              onPress={() => setUserFilter(m.id)}
+            />
+          ))}
+        </View>
+      )}
       <FlatList
         data={rows}
         keyExtractor={(item) => String(item.id)}

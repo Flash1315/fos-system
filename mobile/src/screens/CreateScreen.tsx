@@ -16,7 +16,7 @@ import {
 } from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { isValidYmd } from "../dates";
-import { formatWhen } from "../format";
+import { formatWhen, parseFiniteMoney } from "../format";
 
 export function CreateScreen({
   busy,
@@ -57,6 +57,7 @@ export function CreateScreen({
   const [lastOdo, setLastOdo] = useState<number | null>(null);
   const [minOdo, setMinOdo] = useState<number | null>(null);
   const [maxOdo, setMaxOdo] = useState<number | null>(null);
+  const [hasFuelHistory, setHasFuelHistory] = useState(false);
   const [closedCycleHint, setClosedCycleHint] = useState("");
   const [teamBals, setTeamBals] = useState<TeamBalance[]>([]);
   const [myCurrency, setMyCurrency] = useState("IDR");
@@ -174,6 +175,7 @@ export function CreateScreen({
       setLastOdo(null);
       setMinOdo(null);
       setMaxOdo(null);
+      setHasFuelHistory(false);
       return;
     }
     const handle = setTimeout(() => {
@@ -188,10 +190,12 @@ export function CreateScreen({
           setLastOdo(res.odometer);
           setMinOdo(res.min_odometer);
           setMaxOdo(res.max_odometer);
+          setHasFuelHistory(Boolean(res.has_history));
         } catch {
           setLastOdo(null);
           setMinOdo(null);
           setMaxOdo(null);
+          setHasFuelHistory(false);
         }
       })();
     }, 300);
@@ -247,8 +251,8 @@ export function CreateScreen({
   };
 
   const submit = async () => {
-    const value = Number(amount.replace(",", "."));
-    if (!value || value <= 0) {
+    const value = parseFiniteMoney(amount);
+    if (value == null) {
       Alert.alert("Fos", "Enter a valid amount");
       return;
     }
@@ -275,8 +279,13 @@ export function CreateScreen({
         Alert.alert("Fos", "Odometer must be a finite number");
         return;
       }
-      if (lastOdo != null && (odoVal == null || !Number.isFinite(odoVal))) {
-        Alert.alert("Fos", `Odometer is required (last reading ${lastOdo})`);
+      if (hasFuelHistory && (odoVal == null || !Number.isFinite(odoVal))) {
+        Alert.alert(
+          "Fos",
+          `Odometer is required after prior fuel history${
+            lastOdo != null ? ` (last ${lastOdo})` : ""
+          }`,
+        );
         return;
       }
       if (odoVal != null && minOdo != null && odoVal < minOdo) {
@@ -389,7 +398,7 @@ export function CreateScreen({
         return;
       }
     }
-    if (kind === "fuel" && odometer) {
+    if (kind === "fuel") {
       try {
         const last = await lastFuelOdometer({
           bike: bike.trim() || undefined,
@@ -399,20 +408,37 @@ export function CreateScreen({
         setLastOdo(last.odometer);
         setMinOdo(last.min_odometer);
         setMaxOdo(last.max_odometer);
-        const odoVal = Number(odometer.replace(",", "."));
-        if (last.min_odometer != null && odoVal < last.min_odometer) {
+        setHasFuelHistory(Boolean(last.has_history));
+        const odoRaw = odometer.trim();
+        if (last.has_history && !odoRaw) {
           Alert.alert(
             "Fos",
-            `Odometer cannot decrease (previous ${last.min_odometer}). Enter a higher reading.`,
+            `Odometer is required after prior fuel history${
+              last.odometer != null ? ` (last ${last.odometer})` : ""
+            }`,
           );
           return;
         }
-        if (last.max_odometer != null && odoVal > last.max_odometer) {
-          Alert.alert(
-            "Fos",
-            `Odometer cannot jump past the next reading (${last.max_odometer}).`,
-          );
-          return;
+        if (odoRaw) {
+          const odoVal = Number(odoRaw.replace(",", "."));
+          if (!Number.isFinite(odoVal) || odoVal < 0) {
+            Alert.alert("Fos", "Odometer must be a finite number");
+            return;
+          }
+          if (last.min_odometer != null && odoVal < last.min_odometer) {
+            Alert.alert(
+              "Fos",
+              `Odometer cannot decrease (previous ${last.min_odometer}). Enter a higher reading.`,
+            );
+            return;
+          }
+          if (last.max_odometer != null && odoVal > last.max_odometer) {
+            Alert.alert(
+              "Fos",
+              `Odometer cannot jump past the next reading (${last.max_odometer}).`,
+            );
+            return;
+          }
         }
       } catch (e) {
         Alert.alert("Fos", e instanceof Error ? e.message : "Could not verify odometer");

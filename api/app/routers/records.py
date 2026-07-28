@@ -299,9 +299,9 @@ def create_record(
         normalize_idem_key,
         require_idem_match,
         store_idem,
+        commit_or_replay,
     )
     from app.services.money import require_positive_money
-    from sqlalchemy.exc import IntegrityError
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None
@@ -403,24 +403,22 @@ def create_record(
             resource_id=rec.id,
             request_hash=fp,
         )
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        if key:
-            hit = lookup_idem(
-                db,
-                organization_id=user.organization_id,
-                user_id=user.id,
-                scope="records.create",
-                key=key,
-            )
-            if hit:
-                require_idem_match(hit, fp)
-                existing = db.get(MoneyRecord, hit.resource_id)
-                if existing and existing.organization_id == user.organization_id:
-                    return _record_out(db, existing)
-        raise HTTPException(409, "Concurrent request conflict — retry") from None
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="records.create",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _record_out(db, existing)
+            if (existing := db.get(MoneyRecord, hit.resource_id))
+            and existing.organization_id == user.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(rec)
     return _record_out(db, rec)
 
@@ -607,6 +605,7 @@ def last_fuel_odometer(
     bike: str = "",
     user_id: int | None = None,
     at: str | None = None,
+    exclude_id: int | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -631,10 +630,12 @@ def last_fuel_odometer(
                     when = when.astimezone(timezone.utc).replace(tzinfo=None)
         except ValueError as exc:
             raise HTTPException(400, "at must be YYYY-MM-DD or ISO datetime") from exc
-    last = _last_fuel_odometer(db, user.organization_id, owner_id, bike)
+    last = _last_fuel_odometer(
+        db, user.organization_id, owner_id, bike, exclude_id=exclude_id
+    )
     if when is not None:
         pred, succ = _fuel_odometer_neighbors(
-            db, user.organization_id, owner_id, bike, at=when
+            db, user.organization_id, owner_id, bike, at=when, exclude_id=exclude_id
         )
         return {
             "bike": (bike or "").strip(),
@@ -862,9 +863,44 @@ def update_pending_record(
     body: RecordUpdate,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Creator or manager can edit fields while status is still pending."""
-    rec = db.get(MoneyRecord, record_id)
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+        commit_or_replay,
+    )
+
+    key = normalize_idem_key(idempotency_key)
+    fp = (
+        fingerprint({"record_id": record_id, **body.model_dump(mode="json")})
+        if key
+        else None
+    )
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.update",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            existing = db.get(MoneyRecord, hit.resource_id)
+            if existing and existing.organization_id == user.organization_id:
+                return _record_out(db, existing)
+
+    rec = (
+        db.query(MoneyRecord)
+        .filter(MoneyRecord.id == record_id)
+        .with_for_update()
+        .first()
+    )
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
     is_manager = user.role in (UserRole.owner, UserRole.manager)
@@ -887,6 +923,9 @@ def update_pending_record(
     if "occurred_at" in data:
         data["occurred_at"] = _validate_occurred_at(data["occurred_at"])
     if rec.kind == RecordKind.fuel:
+        from app.services.locks import lock_users
+
+        lock_users(db, rec.created_by)
         next_bike = data["bike"] if "bike" in data else rec.bike
         next_odo = data["odometer"] if "odometer" in data else rec.odometer
         next_at = (
@@ -909,8 +948,8 @@ def update_pending_record(
         cat, pur = _normalize_category_purpose(rec.kind, next_cat or "", next_pur or "")
         data["category"] = cat
         data["purpose"] = pur
-    for key, value in data.items():
-        setattr(rec, key, value)
+    for field, value in data.items():
+        setattr(rec, field, value)
     if rec.kind == RecordKind.fuel and (rec.liters is None or float(rec.liters) <= 0):
         raise HTTPException(400, "Fuel records require liters > 0")
     # Re-normalize money fields after edit (create path already validates)
@@ -920,7 +959,32 @@ def update_pending_record(
         )
         rec.payment_source = source
         rec.payment_method = method
-    db.commit()
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.update",
+            key=key,
+            resource_id=rec.id,
+            request_hash=fp,
+        )
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="records.update",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _record_out(db, existing)
+            if (existing := db.get(MoneyRecord, hit.resource_id))
+            and existing.organization_id == user.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(rec)
     return _record_out(db, rec)
 

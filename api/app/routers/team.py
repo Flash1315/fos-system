@@ -68,7 +68,7 @@ def set_member_active(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
-    from app.services.locks import lock_organization
+    from app.services.locks import lock_organization, lock_users
 
     lock_organization(db, user.organization_id)
     member = db.get(User, member_id)
@@ -89,6 +89,7 @@ def set_member_active(
         if owners <= 1:
             raise HTTPException(400, "Cannot deactivate the last active owner")
     if not body.is_active:
+        lock_users(db, member.id)
         pending_recs = (
             db.query(MoneyRecord.id)
             .filter(

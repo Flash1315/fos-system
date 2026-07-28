@@ -198,8 +198,8 @@ export function BalancesScreen({
 
   const postAdjustment = async () => {
     if (isBusy) return;
-    const value = Number(amount.replace(",", "."));
-    if (!userId || !value || !note.trim()) {
+    const value = Number(String(amount ?? "").trim().replace(",", "."));
+    if (!userId || !Number.isFinite(value) || value === 0 || !note.trim()) {
       Alert.alert("Fos", "Pick teammate, signed amount, and note");
       return;
     }

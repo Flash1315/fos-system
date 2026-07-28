@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import { makeIdempotencyKey, me, myBalance, orgDirectory, transferCash, type User } from "../api";
-import { formatMoney } from "../format";
+import { formatMoney, parseFiniteMoney } from "../format";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
 export function TransferScreen({
@@ -56,8 +56,8 @@ export function TransferScreen({
       if (bootError || booting) Alert.alert("Fos", bootError || "Still loading balances");
       return;
     }
-    const value = Number(amount.replace(",", "."));
-    if (!email.trim() || !Number.isFinite(value) || value < 0.01) {
+    const value = parseFiniteMoney(amount);
+    if (!email.trim() || value == null) {
       Alert.alert("Fos", "Recipient and amount (at least 0.01) required");
       return;
     }

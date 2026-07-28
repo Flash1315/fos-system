@@ -1748,6 +1748,9 @@ def test_fuel_odometer_cannot_decrease(client):
     hint = client.get("/records/fuel/last-odometer?bike=Scoot-1", headers=h)
     assert hint.status_code == 200
     assert hint.json()["odometer"] == 12000
+    assert hint.json()["min_odometer"] == 12000
+    assert hint.json()["max_odometer"] is None
+    assert hint.json()["has_history"] is True
     bad = client.post(
         "/records",
         headers=h,
@@ -2758,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.19"
+    assert health.json()["version"] == "0.7.20"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -4512,3 +4515,105 @@ def test_overpayment_credit_null_patch_and_inactive_owner_demote(client):
     assert demote.status_code == 200, demote.text
     assert demote.json()["role"] == "employee"
 
+
+
+def test_record_patch_idempotency_and_batch_locks(client):
+    owner = _register(client, "flow-0720", "v0720-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 33,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "place": "A",
+        },
+    )
+    assert rec.status_code == 200, rec.text
+    rid = rec.json()["id"]
+    key = "patch-once-0720"
+    first = client.patch(
+        f"/records/{rid}",
+        headers={**h, "Idempotency-Key": key},
+        json={"place": "B", "comment": "edited"},
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["place"] == "B"
+    replay = client.patch(
+        f"/records/{rid}",
+        headers={**h, "Idempotency-Key": key},
+        json={"place": "B", "comment": "edited"},
+    )
+    assert replay.status_code == 200
+    assert replay.json()["id"] == rid
+    assert replay.json()["place"] == "B"
+    mismatch = client.patch(
+        f"/records/{rid}",
+        headers={**h, "Idempotency-Key": key},
+        json={"place": "C", "comment": "edited"},
+    )
+    assert mismatch.status_code == 409
+
+    # Seed spendings then batch-pay with idem key
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 80,
+            "category": "Food",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    bkey = "batch-spend-0720"
+    batch = client.post(
+        "/payouts/batch-spendings?payment_method=cash",
+        headers={**h, "Idempotency-Key": bkey},
+    )
+    assert batch.status_code == 200, batch.text
+    assert isinstance(batch.json(), list)
+    assert len(batch.json()) >= 1
+    batch_replay = client.post(
+        "/payouts/batch-spendings?payment_method=cash",
+        headers={**h, "Idempotency-Key": bkey},
+    )
+    assert batch_replay.status_code == 200
+    assert [x["id"] for x in batch_replay.json()] == [x["id"] for x in batch.json()]
+    batch_mismatch = client.post(
+        "/payouts/batch-spendings?payment_method=transfer",
+        headers={**h, "Idempotency-Key": bkey},
+    )
+    assert batch_mismatch.status_code == 409
+
+    # Trim note on settlement request
+    req = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 1, "note": "  padded  "},
+    )
+    # May fail if no spendings left after batch — seed again if needed
+    if req.status_code == 400:
+        client.post(
+            "/records",
+            headers=h,
+            json={
+                "kind": "expense",
+                "amount": 5,
+                "category": "Taxi",
+                "purpose": "Office",
+                "payment_source": "my_pocket",
+                "approve_now": True,
+            },
+        )
+        req = client.post(
+            "/payouts/requests",
+            headers=h,
+            json={"kind": "expense_payout", "amount": 1, "note": "  padded  "},
+        )
+    assert req.status_code == 200, req.text
+    assert req.json()["note"] == "padded"

@@ -18,6 +18,7 @@ from app.schemas import RecordOut
 from app.routers.records import _record_out, _utcnow
 from app.services.balances import user_balance
 from app.services.idempotency import (
+    commit_or_replay,
     fingerprint,
     lookup_idem,
     normalize_idem_key,
@@ -25,7 +26,6 @@ from app.services.idempotency import (
     store_idem,
 )
 from app.services.money import require_positive_money
-from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(prefix="/transfers", tags=["transfers"])
 
@@ -170,36 +170,28 @@ def create_transfer(
             secondary_id=recipient_rec.id,
             request_hash=fp,
         )
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        if key:
-            hit = lookup_idem(
-                db,
-                organization_id=user.organization_id,
-                user_id=user.id,
-                scope="transfers.create",
-                key=key,
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="transfers.create",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            TransferOut(
+                sender_record=_record_out(db, sender),
+                recipient_record=_record_out(db, recipient_row),
+                transfer_group_id=sender.transfer_group_id or "",
             )
-            if hit:
-                require_idem_match(hit, fp)
-                sender = db.get(MoneyRecord, hit.resource_id)
-                recipient_rec = (
-                    db.get(MoneyRecord, hit.secondary_id) if hit.secondary_id else None
-                )
-                if (
-                    sender
-                    and recipient_rec
-                    and sender.organization_id == user.organization_id
-                    and recipient_rec.organization_id == user.organization_id
-                ):
-                    return TransferOut(
-                        sender_record=_record_out(db, sender),
-                        recipient_record=_record_out(db, recipient_rec),
-                        transfer_group_id=sender.transfer_group_id or "",
-                    )
-        raise HTTPException(409, "Concurrent request conflict — retry") from None
+            if (sender := db.get(MoneyRecord, hit.resource_id))
+            and (recipient_row := db.get(MoneyRecord, hit.secondary_id) if hit.secondary_id else None)
+            and sender.organization_id == user.organization_id
+            and recipient_row.organization_id == user.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(sender_rec)
     db.refresh(recipient_rec)
     return TransferOut(

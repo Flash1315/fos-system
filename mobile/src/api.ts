@@ -585,9 +585,12 @@ export function updateRecord(
     odometer?: number;
     occurred_at?: string | null;
   },
+  opts?: { idempotencyKey?: string },
 ) {
+  const idem = opts?.idempotencyKey || newIdemKey("rupd");
   return request<MoneyRecord>(`/records/${id}`, {
     method: "PATCH",
+    headers: { "Idempotency-Key": idem },
     body: JSON.stringify(body),
   });
 }
@@ -596,11 +599,13 @@ export function lastFuelOdometer(params?: {
   bike?: string;
   user_id?: number;
   at?: string;
+  exclude_id?: number;
 }) {
   const q = new URLSearchParams();
   if (params?.bike) q.set("bike", params.bike);
   if (params?.user_id != null) q.set("user_id", String(params.user_id));
   if (params?.at) q.set("at", params.at);
+  if (params?.exclude_id != null) q.set("exclude_id", String(params.exclude_id));
   const suffix = q.toString() ? `?${q}` : "";
   return request<{
     bike: string;

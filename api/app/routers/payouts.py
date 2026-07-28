@@ -2,7 +2,6 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Body, Header, Query
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles
@@ -30,6 +29,16 @@ class PayoutCreate(BaseModel):
     payment_method: str = "cash"
     note: str = ""
     overpayment: float = Field(default=0, ge=0)
+
+    @field_validator("payment_method")
+    @classmethod
+    def payment_method_norm(cls, v: str) -> str:
+        return (v or "cash").strip().lower() or "cash"
+
+    @field_validator("note")
+    @classmethod
+    def note_trim(cls, v: str) -> str:
+        return (v or "").strip()
 
 
 class PayoutOut(BaseModel):
@@ -69,11 +78,21 @@ class VoidIn(BaseModel):
 class CancelRequestIn(BaseModel):
     note: str = ""
 
+    @field_validator("note")
+    @classmethod
+    def note_trim(cls, v: str) -> str:
+        return (v or "").strip()
+
 
 class SettlementRequestIn(BaseModel):
     kind: PayoutKind
     amount: float = Field(gt=0)
     note: str = ""
+
+    @field_validator("note")
+    @classmethod
+    def note_trim(cls, v: str) -> str:
+        return (v or "").strip()
 
 
 class SettlementRequestOut(BaseModel):
@@ -537,6 +556,10 @@ def batch_pay_all_spendings(
         .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
         .all()
     )
+    from app.services.locks import lock_users
+
+    if members:
+        lock_users(db, *[m.id for m in members])
     built: list[tuple[Payout, User]] = []
     for m in members:
         bal = user_balance(db, m)
@@ -571,25 +594,24 @@ def batch_pay_all_spendings(
             response_json=dumps_json([o.model_dump(mode="json") for o in out]),
             request_hash=fp,
         )
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        if key:
-            hit = lookup_idem(
-                db,
-                organization_id=manager.organization_id,
-                user_id=manager.id,
-                scope="payouts.batch_spendings",
-                key=key,
-            )
-            if hit:
-                require_idem_match(hit, fp)
-                if hit.response_json:
-                    cached = loads_json(hit.response_json)
-                    if isinstance(cached, list):
-                        return [PayoutOut.model_validate(item) for item in cached]
-        raise HTTPException(409, "Idempotent batch conflict — retry") from None
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=manager.organization_id,
+        user_id=manager.id,
+        scope="payouts.batch_spendings",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            [PayoutOut.model_validate(item) for item in cached]
+            if hit.response_json
+            and isinstance((cached := loads_json(hit.response_json)), list)
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     return out
 
 
@@ -632,6 +654,10 @@ def batch_take_all_cash(
         .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
         .all()
     )
+    from app.services.locks import lock_users
+
+    if members:
+        lock_users(db, *[m.id for m in members])
     built: list[tuple[Payout, User]] = []
     for m in members:
         bal = user_balance(db, m)
@@ -666,25 +692,24 @@ def batch_take_all_cash(
             response_json=dumps_json([o.model_dump(mode="json") for o in out]),
             request_hash=fp,
         )
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        if key:
-            hit = lookup_idem(
-                db,
-                organization_id=manager.organization_id,
-                user_id=manager.id,
-                scope="payouts.batch_cash",
-                key=key,
-            )
-            if hit:
-                require_idem_match(hit, fp)
-                if hit.response_json:
-                    cached = loads_json(hit.response_json)
-                    if isinstance(cached, list):
-                        return [PayoutOut.model_validate(item) for item in cached]
-        raise HTTPException(409, "Idempotent batch conflict — retry") from None
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=manager.organization_id,
+        user_id=manager.id,
+        scope="payouts.batch_cash",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            [PayoutOut.model_validate(item) for item in cached]
+            if hit.response_json
+            and isinstance((cached := loads_json(hit.response_json)), list)
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     return out
 
 
@@ -879,6 +904,11 @@ def org_pending_settlement_count(
 
 class ApproveRequestIn(BaseModel):
     payment_method: str = "cash"
+
+    @field_validator("payment_method")
+    @classmethod
+    def payment_method_norm(cls, v: str) -> str:
+        return (v or "cash").strip().lower() or "cash"
 
 
 @router.post("/requests/{request_id}/approve", response_model=PayoutOut)

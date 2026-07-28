@@ -7,6 +7,7 @@ import {
   commentRecord,
   decideRecord,
   getRecord,
+  lastFuelOdometer,
   makeIdempotencyKey,
   mediaUrlWithMediaToken,
   updateRecord,
@@ -17,7 +18,7 @@ import {
 } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Card, Chip, Field, Label, Row, Screen, Sub, TopBar } from "../components/ui";
-import { formatMoney, formatWhen, statusColor } from "../format";
+import { formatMoney, formatWhen, parseFiniteMoney, statusColor } from "../format";
 import { isValidYmd, ymdError } from "../dates";
 import { colors } from "../theme";
 
@@ -65,6 +66,7 @@ export function RecordDetailScreen({
   const decideIdemRef = useRef<string | null>(null);
   const decideSlotRef = useRef<string | null>(null);
   const voidIdemRef = useRef<string | null>(null);
+  const editIdemRef = useRef<string | null>(null);
   const isManager = user.role === "owner" || user.role === "manager";
 
   const applyEditFields = (row: MoneyRecord) => {
@@ -241,8 +243,8 @@ export function RecordDetailScreen({
   };
 
   const onSaveEdit = async () => {
-    const value = Number(editAmount.replace(",", "."));
-    if (!value || value <= 0) {
+    const value = parseFiniteMoney(editAmount);
+    if (value == null) {
       Alert.alert("Fos", "Enter a valid amount");
       return;
     }
@@ -268,18 +270,55 @@ export function RecordDetailScreen({
     if (rec?.kind === "fuel") {
       body.bike = editBike.trim();
       const liters = Number(editLiters.replace(",", "."));
-      const odo = Number(editOdometer.replace(",", "."));
       if (!editLiters.trim() || !Number.isFinite(liters) || liters <= 0) {
         Alert.alert("Fos", "Liters is required for fuel");
         return;
       }
       body.liters = liters;
-      if (editOdometer.trim()) {
-        if (!Number.isFinite(odo) || odo < 0) {
-          Alert.alert("Fos", "Odometer must be a finite number");
+      const when = editOccurred.trim();
+      const at = when ? `${when}T12:00:00` : undefined;
+      try {
+        const hint = await lastFuelOdometer({
+          bike: editBike.trim() || undefined,
+          user_id: rec.created_by,
+          at,
+          exclude_id: rec.id,
+        });
+        const odoRaw = editOdometer.trim();
+        if (hint.has_history && !odoRaw) {
+          Alert.alert(
+            "Fos",
+            `Odometer is required after prior fuel history${
+              hint.odometer != null ? ` (last ${hint.odometer})` : ""
+            }`,
+          );
           return;
         }
-        body.odometer = odo;
+        if (odoRaw) {
+          const odo = Number(odoRaw.replace(",", "."));
+          if (!Number.isFinite(odo) || odo < 0) {
+            Alert.alert("Fos", "Odometer must be a finite number");
+            return;
+          }
+          if (hint.min_odometer != null && odo < hint.min_odometer) {
+            Alert.alert(
+              "Fos",
+              `Odometer cannot decrease (previous ${hint.min_odometer}).`,
+            );
+            return;
+          }
+          if (hint.max_odometer != null && odo > hint.max_odometer) {
+            Alert.alert(
+              "Fos",
+              `Odometer cannot jump past the next reading (${hint.max_odometer}).`,
+            );
+            return;
+          }
+          body.odometer = odo;
+        }
+      } catch (e) {
+        Alert.alert("Fos", e instanceof Error ? e.message : "Could not verify odometer");
+        return;
       }
     }
     const when = editOccurred.trim();
@@ -296,9 +335,11 @@ export function RecordDetailScreen({
     if (editPhotoUrl !== (rec?.photo_url || "")) {
       body.photo_url = editPhotoUrl || "";
     }
+    if (!editIdemRef.current) editIdemRef.current = makeIdempotencyKey("rupd");
     setBusy(true);
     try {
-      const updated = await updateRecord(id, body);
+      const updated = await updateRecord(id, body, { idempotencyKey: editIdemRef.current });
+      editIdemRef.current = null;
       setRec(updated);
       applyEditFields(updated);
       setEditing(false);

@@ -1,3 +1,11 @@
+export function parseFiniteMoney(raw: string, opts?: { min?: number }): number | null {
+  const value = Number(String(raw ?? "").trim().replace(",", "."));
+  if (!Number.isFinite(value)) return null;
+  const min = opts?.min ?? 0.01;
+  if (value < min) return null;
+  return value;
+}
+
 export function formatMoney(amount: number, currency: string) {
   try {
     return `${amount.toLocaleString()} ${currency}`;

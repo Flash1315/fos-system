@@ -20,6 +20,7 @@ import {
 } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
+import { parseFiniteMoney } from "../format";
 
 type ReqRow = {
   id: number;
@@ -266,8 +267,8 @@ export function AccountScreen({
 
   const onRequest = async () => {
     if (busy) return;
-    const value = Number(amount.replace(",", "."));
-    if (!value || value <= 0) {
+    const value = parseFiniteMoney(amount);
+    if (value == null) {
       Alert.alert("Fos", "Enter amount");
       return;
     }

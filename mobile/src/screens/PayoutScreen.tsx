@@ -11,6 +11,7 @@ import {
   type User,
 } from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
+import { parseFiniteMoney } from "../format";
 
 export function PayoutScreen({
   busy,
@@ -98,8 +99,8 @@ export function PayoutScreen({
 
   const submit = async () => {
     if (busy) return;
-    const value = Number(amount.replace(",", "."));
-    if (!userId || !value || value <= 0) {
+    const value = parseFiniteMoney(amount);
+    if (!userId || value == null) {
       Alert.alert("Fos", "Select teammate and amount");
       return;
     }

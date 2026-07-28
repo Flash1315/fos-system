@@ -45,6 +45,21 @@ PYTHONPATH=. pytest -q
 docker compose up --build
 ```
 
+> Compose is a **local/dev** stack (weak default `SECRET_KEY`, `CORS_ORIGINS=*`, published Postgres). Do not treat it as a production deploy.
+
+### Production checklist
+
+- Set `ENVIRONMENT=production` and a strong `SECRET_KEY` (≥32 chars, not a known default)
+- Use Postgres (`DATABASE_URL=postgresql+psycopg2://…`); keep SQLite for local/dev only
+- Set explicit `CORS_ORIGINS` (never `*` in production)
+- Terminate TLS at a reverse proxy; set `ENABLE_HSTS=true` only behind HTTPS
+- If the proxy forwards client IPs: `TRUST_X_FORWARDED_FOR=true` **and** `TRUSTED_PROXY_CIDRS=…`
+- Persist `/app/uploads` (or use `MEDIA_BACKEND=s3` with `S3_BUCKET` + paired access/secret keys)
+- Keep `RATE_LIMIT_ENABLED=true` (production refuses `false`); note limits are process-local
+- Probe `GET /health` for liveness; OpenAPI/docs are hidden in production
+- Mobile release builds need `EXPO_PUBLIC_API_URL` as an **https** API origin
+- Image runs as non-root and includes Alembic (`alembic upgrade` on startup when available)
+
 ### Main endpoints
 
 | Method | Path | Who |

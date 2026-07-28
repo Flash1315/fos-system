@@ -43,3 +43,33 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npm run typecheck
+
+  docker-api-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -t fos-api ./api
+      - name: Health smoke
+        run: |
+          set -euo pipefail
+          docker run -d --name fos-api \
+            -e SECRET_KEY=ci-docker-secret-key-32chars-minxx \
+            -e DATABASE_URL=sqlite:////tmp/fos.db \
+            -e ENVIRONMENT=development \
+            -p 8000:8000 \
+            fos-api
+          ok=0
+          for _ in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8000/health | grep -q '"ok"'; then
+              curl -fsS http://127.0.0.1:8000/health
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ok" != "1" ]; then
+            docker logs fos-api || true
+            exit 1
+          fi
+          docker stop fos-api

@@ -2,7 +2,9 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.auth import (
@@ -165,10 +167,13 @@ def login_form(
         limit=10,
         window_sec=60,
     )
-    return _authenticate_login(
-        LoginIn(email=email, password=form.password, organization_slug=slug),
-        db,
-    )
+    try:
+        body = LoginIn(
+            email=email, password=form.password, organization_slug=slug
+        )
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors()) from exc
+    return _authenticate_login(body, db)
 
 
 @router.get("/auth/me", response_model=UserOut)

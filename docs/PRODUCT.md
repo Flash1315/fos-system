@@ -228,6 +228,7 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Production refuses `RATE_LIMIT_ENABLED=false`; process-local limiter hard-caps unique keys
 - Settlement-request cancel idempotency replay re-checks ownership/manager role
 - Mobile release builds require `EXPO_PUBLIC_API_URL` (https); upload media failures return 503
+- API Docker image includes Alembic + runs as non-root; Compose is for local/dev only
 - Rate limits are process-local (not shared across workers)
 - All record mutations scoped to caller’s `organization_id`
 - Do not leak other orgs’ data in list/balance endpoints
@@ -247,6 +248,9 @@ CORS_ORIGINS=*
 # TRUST_X_FORWARDED_FOR=true
 # TRUSTED_PROXY_CIDRS=10.0.0.0/8
 # MAX_ORG_MEMBERS=300
+# SMTP_HOST=  SMTP_PORT=587  PUBLIC_APP_URL=https://app.example.com
+# MEDIA_BACKEND=s3  S3_BUCKET=…  S3_ACCESS_KEY=…  S3_SECRET_KEY=…
+# TELEGRAM_BOT_TOKEN=  BILLING_PLAN_SWITCH=false
 ```
 
 Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`

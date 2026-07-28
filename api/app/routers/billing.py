@@ -49,7 +49,9 @@ def billing_me(user: User = Depends(get_current_user), db: Session = Depends(get
         currency=org.currency,
         organization_slug=org.slug,
         telegram_configured=telegram_configured(),
-        telegram_chat_id=getattr(org, "telegram_chat_id", "") or "",
+        telegram_chat_id=(getattr(org, "telegram_chat_id", "") or "")
+        if user.role == UserRole.owner
+        else "",
         email_configured=email_configured(),
         media_backend=media_backend(),
     )

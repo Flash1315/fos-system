@@ -166,12 +166,6 @@ export function TeamScreen({
                   onPress={() => toggle(item)}
                 />
                 <Btn
-                  title="Reset password"
-                  variant="ghost"
-                  disabled={busy}
-                  onPress={() => setResetId(item.id)}
-                />
-                <Btn
                   title="Issue reset token"
                   variant="ghost"
                   disabled={busy}
@@ -202,6 +196,12 @@ export function TeamScreen({
                       ],
                     );
                   }}
+                />
+                <Btn
+                  title="Set password (owner)"
+                  variant="ghost"
+                  disabled={busy}
+                  onPress={() => setResetId(item.id)}
                 />
               </>
             )}

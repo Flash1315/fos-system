@@ -73,7 +73,7 @@ def set_member_active(
     lock_organization(db, user.organization_id)
     member = (
         db.query(User)
-        .filter(User.id == member_id)
+        .filter(User.id == member_id, User.organization_id == user.organization_id)
         .with_for_update()
         .first()
     )
@@ -181,7 +181,7 @@ def set_member_role(
     lock_organization(db, user.organization_id)
     member = (
         db.query(User)
-        .filter(User.id == member_id)
+        .filter(User.id == member_id, User.organization_id == user.organization_id)
         .with_for_update()
         .first()
     )
@@ -230,7 +230,7 @@ def reset_member_password(
     )
     member = (
         db.query(User)
-        .filter(User.id == member_id)
+        .filter(User.id == member_id, User.organization_id == user.organization_id)
         .with_for_update()
         .first()
     )
@@ -262,7 +262,7 @@ def issue_member_reset_token(
     enforce_rate_limit(f"reset-token:{user.organization_id}:{user.id}", limit=20, window_sec=60)
     member = (
         db.query(User)
-        .filter(User.id == member_id)
+        .filter(User.id == member_id, User.organization_id == user.organization_id)
         .with_for_update()
         .first()
     )

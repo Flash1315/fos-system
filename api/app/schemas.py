@@ -355,7 +355,7 @@ class DecideIn(BaseModel):
 
 
 class DecideBatchIn(BaseModel):
-    ids: list[int] = Field(min_length=1)
+    ids: list[int] = Field(min_length=1, max_length=100)
     approve: bool
     note: str = Field(default="", max_length=2000)
 
@@ -363,6 +363,20 @@ class DecideBatchIn(BaseModel):
     @classmethod
     def note_trim(cls, v: str) -> str:
         return (v or "").strip()
+
+    @field_validator("ids")
+    @classmethod
+    def ids_unique(cls, v: list[int]) -> list[int]:
+        seen: set[int] = set()
+        out: list[int] = []
+        for rid in v:
+            if rid in seen:
+                continue
+            seen.add(rid)
+            out.append(rid)
+        if not out:
+            raise ValueError("ids required")
+        return out
 
 
 class DecideBatchOut(BaseModel):

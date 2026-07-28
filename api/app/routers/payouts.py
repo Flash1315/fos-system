@@ -353,7 +353,7 @@ def my_payouts(
     voided: bool | None = None,
     kind: PayoutKind | None = None,
     limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10000),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -376,7 +376,7 @@ def org_payouts(
     user_id: int | None = None,
     kind: PayoutKind | None = None,
     limit: int = Query(100, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10000),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -449,7 +449,10 @@ def void_payout(
     lock_users(db, row.user_id)
     row = (
         db.query(Payout)
-        .filter(Payout.id == payout_id)
+        .filter(
+            Payout.id == payout_id,
+            Payout.organization_id == manager.organization_id,
+        )
         .with_for_update()
         .first()
     )
@@ -761,7 +764,7 @@ def batch_take_all_cash(
 def my_settlement_requests(
     status: str | None = None,
     limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10000),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -904,7 +907,7 @@ def request_settlement(
 def list_settlement_requests(
     status: str | None = "pending",
     limit: int = Query(100, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10000),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -1004,7 +1007,10 @@ def approve_settlement_request(
             db.flush()
     req = (
         db.query(SettlementRequest)
-        .filter(SettlementRequest.id == request_id)
+        .filter(
+            SettlementRequest.id == request_id,
+            SettlementRequest.organization_id == manager.organization_id,
+        )
         .with_for_update()
         .first()
     )
@@ -1142,7 +1148,10 @@ def cancel_settlement_request(
                 return _request_out(existing, u.full_name if u else "")
     req = (
         db.query(SettlementRequest)
-        .filter(SettlementRequest.id == request_id)
+        .filter(
+            SettlementRequest.id == request_id,
+            SettlementRequest.organization_id == user.organization_id,
+        )
         .with_for_update()
         .first()
     )

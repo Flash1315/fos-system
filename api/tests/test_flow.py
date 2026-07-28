@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.23"
+    assert health.json()["version"] == "0.7.24"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -4993,3 +4993,76 @@ def test_manager_invite_role_comment_cap_and_odo_bounds(client):
         },
     )
     assert nan.status_code == 422
+
+
+def test_org_scoped_locks_batch_bounds_and_billing_redact(client):
+    owner = _register(client, "flow-0724", "v0724-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    # Batch ids capped / deduped
+    too_many = client.post(
+        "/records/decide-batch",
+        headers=h,
+        json={"ids": list(range(1, 102)), "approve": True},
+    )
+    assert too_many.status_code == 422
+    # Offset upper bound
+    huge_off = client.get("/records/mine?offset=10001", headers=h)
+    assert huge_off.status_code == 422
+
+    # Cross-org lock miss stays 404 (org filter in FOR UPDATE)
+    other = _register(client, "flow-0724b", "v0724b-owner@example.com")
+    oh = {"Authorization": f"Bearer {other['access_token']}"}
+    foreign = client.post(
+        "/records",
+        headers=oh,
+        json={
+            "kind": "expense",
+            "amount": 9,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert foreign.status_code == 200
+    miss = client.post(
+        f"/records/{foreign.json()['id']}/decide",
+        headers=h,
+        json={"approve": True},
+    )
+    assert miss.status_code == 404
+
+    # Telegram chat id only for owner
+    client.post(
+        "/integrations/telegram/chat",
+        headers=h,
+        json={"telegram_chat_id": "999"},
+    )
+    mgr = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0724-mgr@example.com",
+            "full_name": "Mgr",
+            "role": "manager",
+            "password": "secret12",
+            "password_confirm": "secret12",
+        },
+    )
+    assert mgr.status_code == 200, mgr.text
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "v0724-mgr@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-0724",
+        },
+    )
+    assert login.status_code == 200
+    mh = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    owner_bill = client.get("/billing/me", headers=h)
+    assert owner_bill.status_code == 200
+    assert owner_bill.json()["telegram_chat_id"] == "999"
+    mgr_bill = client.get("/billing/me", headers=mh)
+    assert mgr_bill.status_code == 200
+    assert mgr_bill.json()["telegram_chat_id"] == ""

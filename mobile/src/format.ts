@@ -1,3 +1,12 @@
+const MAX_MONEY = 9999999999999999.99;
+
+function normalizeMoney(value: number): number | null {
+  if (!Number.isFinite(value)) return null;
+  const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
+  if (!Number.isFinite(rounded) || Math.abs(rounded) > MAX_MONEY) return null;
+  return rounded;
+}
+
 export function parseFiniteMoney(
   raw: string,
   opts?: { min?: number; allowZero?: boolean },
@@ -7,13 +16,13 @@ export function parseFiniteMoney(
   if (!opts?.allowZero && Math.abs(value) < 1e-9) return null;
   if (opts?.min != null && value < opts.min) return null;
   if (opts?.min == null && value < 0.01) return null;
-  return value;
+  return normalizeMoney(value);
 }
 
 export function parseFiniteSignedMoney(raw: string): number | null {
   const value = Number(String(raw ?? "").trim().replace(",", "."));
   if (!Number.isFinite(value) || value === 0) return null;
-  return value;
+  return normalizeMoney(value);
 }
 
 export function formatMoney(amount: number, currency: string) {

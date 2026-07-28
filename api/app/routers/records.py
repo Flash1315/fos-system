@@ -461,7 +461,7 @@ def my_records(
     q: str | None = None,
     voided: bool | None = None,
     limit: int = Query(100, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10000),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -506,7 +506,7 @@ def org_records(
     q: str | None = None,
     voided: bool | None = None,
     limit: int = Query(200, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10000),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -546,7 +546,7 @@ def pending_records(
     purpose: str | None = None,
     kind: RecordKind | None = None,
     limit: int = Query(100, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10000),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -756,7 +756,10 @@ def decide_batch(
     for rid in body.ids:
         rec = (
             db.query(MoneyRecord)
-            .filter(MoneyRecord.id == rid)
+            .filter(
+                MoneyRecord.id == rid,
+                MoneyRecord.organization_id == user.organization_id,
+            )
             .with_for_update()
             .first()
         )
@@ -936,7 +939,10 @@ def update_pending_record(
 
     rec = (
         db.query(MoneyRecord)
-        .filter(MoneyRecord.id == record_id)
+        .filter(
+            MoneyRecord.id == record_id,
+            MoneyRecord.organization_id == user.organization_id,
+        )
         .with_for_update()
         .first()
     )
@@ -1065,7 +1071,10 @@ def decide_record(
                 return _record_out(db, existing)
     rec = (
         db.query(MoneyRecord)
-        .filter(MoneyRecord.id == record_id)
+        .filter(
+            MoneyRecord.id == record_id,
+            MoneyRecord.organization_id == user.organization_id,
+        )
         .with_for_update()
         .first()
     )
@@ -1174,7 +1183,10 @@ def comment_record(
                 return _record_out(db, existing)
     rec = (
         db.query(MoneyRecord)
-        .filter(MoneyRecord.id == record_id)
+        .filter(
+            MoneyRecord.id == record_id,
+            MoneyRecord.organization_id == user.organization_id,
+        )
         .with_for_update()
         .first()
     )
@@ -1258,7 +1270,10 @@ def void_approved_record(
                 return _record_out(db, existing)
     rec = (
         db.query(MoneyRecord)
-        .filter(MoneyRecord.id == record_id)
+        .filter(
+            MoneyRecord.id == record_id,
+            MoneyRecord.organization_id == user.organization_id,
+        )
         .with_for_update()
         .first()
     )
@@ -1370,7 +1385,10 @@ def cancel_pending_record(
                 return _record_out(db, existing)
     rec = (
         db.query(MoneyRecord)
-        .filter(MoneyRecord.id == record_id)
+        .filter(
+            MoneyRecord.id == record_id,
+            MoneyRecord.organization_id == user.organization_id,
+        )
         .with_for_update()
         .first()
     )

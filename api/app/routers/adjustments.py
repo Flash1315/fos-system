@@ -102,7 +102,7 @@ def list_adjustments(
     user_id: int | None = None,
     track: AdjustmentTrack | None = None,
     limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10000),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -296,7 +296,10 @@ def void_adjustment(
     lock_users(db, row.user_id)
     row = (
         db.query(BalanceAdjustment)
-        .filter(BalanceAdjustment.id == adjustment_id)
+        .filter(
+            BalanceAdjustment.id == adjustment_id,
+            BalanceAdjustment.organization_id == manager.organization_id,
+        )
         .with_for_update()
         .first()
     )

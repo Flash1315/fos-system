@@ -107,7 +107,11 @@ def register_organization(body: OrgCreate, request: Request, db: Session = Depen
 
 @router.post("/auth/login", response_model=TokenOut)
 def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
-    enforce_rate_limit(f"login:{client_ip(request)}", limit=20, window_sec=60)
+    ip = client_ip(request)
+    enforce_rate_limit(f"login:{ip}", limit=20, window_sec=60)
+    slug = (body.organization_slug or "").strip().lower()
+    email = (body.email or "").strip().lower()
+    enforce_rate_limit(f"login-acct:{slug}:{email}", limit=10, window_sec=60)
     return _authenticate_login(body, db)
 
 
@@ -136,11 +140,17 @@ def login_form(
     db: Session = Depends(get_db),
 ):
     """OAuth2 password form: username = email@@organization-slug."""
-    enforce_rate_limit(f"login:{client_ip(request)}", limit=20, window_sec=60)
+    ip = client_ip(request)
+    enforce_rate_limit(f"login:{ip}", limit=20, window_sec=60)
     raw = form.username or ""
     if "@@" not in raw:
         raise HTTPException(400, "Use username format: email@@organization-slug")
     email, slug = raw.rsplit("@@", 1)
+    enforce_rate_limit(
+        f"login-acct:{(slug or '').strip().lower()}:{(email or '').strip().lower()}",
+        limit=10,
+        window_sec=60,
+    )
     return _authenticate_login(
         LoginIn(email=email, password=form.password, organization_slug=slug),
         db,
@@ -185,14 +195,20 @@ def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(
 
     enforce_rate_limit(f"accept-invite:{client_ip(request)}", limit=15, window_sec=60)
     token = body.token.strip()
+    digest = hash_invite_token(token)
+    enforce_rate_limit(f"accept-invite-tok:{digest[:16]}", limit=10, window_sec=60)
     found = find_user_by_invite_token(db, token)
     if not found:
         raise HTTPException(400, "Invalid or expired invite token")
     # Lock row so concurrent accepts cannot both succeed
-    user = db.query(User).filter(User.id == found.id).with_for_update().first()
+    user = (
+        db.query(User)
+        .filter(User.id == found.id, User.organization_id == found.organization_id)
+        .with_for_update()
+        .first()
+    )
     if not user or not user.is_active or not getattr(user, "must_set_password", False):
         raise HTTPException(400, "Invalid or expired invite token")
-    digest = hash_invite_token(token)
     stored = user.invite_token or ""
     if stored != digest and stored != token:
         raise HTTPException(400, "Invalid or expired invite token")

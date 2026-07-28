@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { acceptInvite, login, registerOrg, type User } from "../api";
+import { acceptInvite, login, makeIdempotencyKey, registerOrg, type User } from "../api";
 import { storageDelete, storageGet, storageSet } from "../storage";
 import { Brand, Btn, Card, Field, Label, LinkText, Screen, Sub } from "../components/ui";
 import { currencyCodeError, emailFormatError, passwordStrengthError } from "../format";
@@ -42,6 +42,11 @@ export function AuthScreen({
   const [rememberedEmail, setRememberedEmail] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
   const submitLock = useRef(false);
+  const acceptInviteIdemRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    acceptInviteIdemRef.current = null;
+  }, [inviteToken, password, passwordConfirm]);
 
   useEffect(() => {
     (async () => {
@@ -103,7 +108,16 @@ export function AuthScreen({
       submitLock.current = true;
       setBusy(true);
       try {
-        const res = await acceptInvite(inviteToken.trim(), password, passwordConfirm);
+        if (!acceptInviteIdemRef.current) {
+          acceptInviteIdemRef.current = makeIdempotencyKey("accept-invite");
+        }
+        const res = await acceptInvite(
+          inviteToken.trim(),
+          password,
+          passwordConfirm,
+          { idempotencyKey: acceptInviteIdemRef.current },
+        );
+        acceptInviteIdemRef.current = null;
         if (res.user?.email) {
           await storageSet(LAST_EMAIL_KEY, res.user.email);
         }

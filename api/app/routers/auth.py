@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import ValidationError
@@ -18,7 +18,15 @@ from app.auth import (
 )
 from app.config import settings
 from app.db import get_db
-from app.models import BalanceAdjustment, MoneyRecord, Organization, Payout, User, UserRole
+from app.models import (
+    BalanceAdjustment,
+    IdempotencyKey,
+    MoneyRecord,
+    Organization,
+    Payout,
+    User,
+    UserRole,
+)
 from app.schemas import (
     AcceptInviteIn,
     InviteIn,
@@ -249,13 +257,64 @@ def change_password(
 
 
 @router.post("/auth/accept-invite", response_model=TokenOut)
-def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(get_db)):
+def accept_invite(
+    body: AcceptInviteIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
     from app.services.invite_tokens import find_user_by_invite_token, hash_invite_token
+    from app.services.idempotency import (
+        commit_or_replay,
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
 
     enforce_rate_limit(f"accept-invite:{client_ip(request)}", limit=15, window_sec=60)
     token = body.token.strip()
     digest = hash_invite_token(token)
     enforce_rate_limit(f"accept-invite-tok:{digest[:16]}", limit=10, window_sec=60)
+    key = normalize_idem_key(idempotency_key)
+    fp = (
+        fingerprint({"token_digest": digest, "password_present": bool(body.password)})
+        if key
+        else None
+    )
+    # The token is erased on success, so an authenticated-style lookup is impossible
+    # on replay. The request fingerprint binds this global key lookup to the token
+    # digest, and the stored resource_id binds it to the user who accepted it.
+    if key:
+        hits = (
+            db.query(IdempotencyKey)
+            .filter(
+                IdempotencyKey.scope == "auth.accept_invite",
+                IdempotencyKey.key == key,
+            )
+            .all()
+        )
+        if hits:
+            hit = next(
+                (
+                    row
+                    for row in hits
+                    if not row.request_hash or row.request_hash == fp
+                ),
+                hits[0],
+            )
+            require_idem_match(hit, fp)
+            replay_user = db.get(User, hit.resource_id)
+            if (
+                replay_user
+                and replay_user.id == hit.user_id
+                and replay_user.organization_id == hit.organization_id
+                and replay_user.is_active
+                and not replay_user.must_set_password
+            ):
+                return _token_out(db, replay_user)
+            raise HTTPException(400, "Invalid or expired invite token")
     found = find_user_by_invite_token(db, token)
     if not found:
         raise HTTPException(400, "Invalid or expired invite token")
@@ -276,6 +335,17 @@ def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(
         window_sec=60,
     )
     if not getattr(user, "must_set_password", False):
+        if key:
+            hit = lookup_idem(
+                db,
+                organization_id=user.organization_id,
+                user_id=user.id,
+                scope="auth.accept_invite",
+                key=key,
+            )
+            if hit:
+                require_idem_match(hit, fp)
+                return _token_out(db, user)
         raise HTTPException(400, "Invite already accepted — log in instead")
     stored = user.invite_token or ""
     if stored != digest:
@@ -291,7 +361,35 @@ def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(
     user.invite_token = None
     user.invite_token_expires_at = None
     bump_token_version(user)
-    db.commit()
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="auth.accept_invite",
+            key=key,
+            resource_id=user.id,
+            request_hash=fp,
+        )
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="auth.accept_invite",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _token_out(db, replay_user)
+            if (replay_user := db.get(User, hit.resource_id))
+            and replay_user.id == hit.user_id
+            and replay_user.organization_id == hit.organization_id
+            and replay_user.is_active
+            and not replay_user.must_set_password
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(user)
     return _token_out(db, user)
 
@@ -317,7 +415,18 @@ def update_org(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import (
+        commit_or_replay,
+        fingerprint,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+        dumps_json,
+    )
     from app.services.locks import lock_organization
     from app.services.org_gates import require_org_writable
 
@@ -331,6 +440,20 @@ def update_org(
         limit=40,
         window_sec=60,
     )
+    key = normalize_idem_key(idempotency_key)
+    fp = fingerprint(body.model_dump(mode="json", exclude_unset=True)) if key else None
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="orgs.update",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            if payload := loads_json(hit.response_json):
+                return OrgOut.model_validate(payload)
     require_org_writable(db, user.organization_id)
     org = lock_organization(db, user.organization_id)
     if not org:
@@ -349,9 +472,35 @@ def update_org(
                     "Currency cannot change after money activity exists",
                 )
             org.currency = new_currency
-    db.commit()
+    response = _org_out(db, org)
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="orgs.update",
+            key=key,
+            resource_id=org.id,
+            response_json=dumps_json(response.model_dump(mode="json")),
+            request_hash=fp,
+        )
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="orgs.update",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            OrgOut.model_validate(payload)
+            if (payload := loads_json(hit.response_json))
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(org)
-    return _org_out(db, org)
+    return response
 
 
 @router.post("/orgs/invite", response_model=InviteOut)
@@ -361,7 +510,18 @@ def invite_user(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import (
+        commit_or_replay,
+        dumps_json,
+        fingerprint,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
     from app.services.locks import lock_organization
     from app.services.org_limits import require_org_can_add_member
 
@@ -377,7 +537,40 @@ def invite_user(
         limit=5,
         window_sec=3600,
     )
+    key = normalize_idem_key(idempotency_key)
+    fp = fingerprint(body.model_dump(mode="json")) if key else None
+
+    def load_replay(hit: IdempotencyKey):
+        payload = loads_json(hit.response_json)
+        return InviteOut.model_validate(payload) if payload else None
+
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="orgs.invite",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     lock_organization(db, user.organization_id)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="orgs.invite",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     from app.services.org_gates import require_org_writable
 
     require_org_writable(db, user.organization_id)
@@ -425,15 +618,41 @@ def invite_user(
         must_set_password=must_set,
     )
     db.add(invited)
-    try:
-        db.commit()
-    except Exception as exc:
-        from sqlalchemy.exc import IntegrityError
-
-        db.rollback()
-        if isinstance(exc, IntegrityError):
-            raise HTTPException(400, "User already in organization") from None
-        raise
+    db.flush()
+    response = InviteOut(
+        id=invited.id,
+        email=invited.email,
+        full_name=invited.full_name,
+        role=invited.role,
+        organization_id=invited.organization_id,
+        organization_slug=org.slug if org else "",
+        must_set_password=must_set,
+        invite_token=raw_invite,
+        email_sent=False,
+    )
+    idem_row = None
+    if key:
+        idem_row = store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="orgs.invite",
+            key=key,
+            resource_id=invited.id,
+            response_json=dumps_json(response.model_dump(mode="json")),
+            request_hash=fp,
+        )
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="orgs.invite",
+        key=key,
+        request_hash=fp,
+        load_replay=load_replay,
+    )
+    if replay is not None:
+        return replay
     db.refresh(invited)
     emailed = False
     if org:
@@ -453,15 +672,9 @@ def invite_user(
             org,
             f"Fos: invited {invited.full_name} ({invited.email}) as {invited.role.value}",
         )
-    return InviteOut(
-        id=invited.id,
-        email=invited.email,
-        full_name=invited.full_name,
-        role=invited.role,
-        organization_id=invited.organization_id,
-        organization_slug=org.slug if org else "",
-        must_set_password=must_set,
-        # Always return the raw token to the issuer — email is best-effort delivery.
-        invite_token=raw_invite,
-        email_sent=emailed,
-    )
+    response.email_sent = emailed
+    if idem_row is not None:
+        idem_row.response_json = dumps_json(response.model_dump(mode="json"))
+        db.commit()
+    # Always return the raw token to the issuer — email is best-effort delivery.
+    return response

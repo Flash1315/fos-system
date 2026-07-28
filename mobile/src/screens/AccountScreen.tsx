@@ -88,6 +88,11 @@ export function AccountScreen({
   const approveSlotRef = useRef<number | null>(null);
   const cancelIdemRef = useRef<string | null>(null);
   const cancelSlotRef = useRef<number | null>(null);
+  const orgIdemRef = useRef<string | null>(null);
+  const orgSlotRef = useRef<string | null>(null);
+  const telegramChatIdemRef = useRef<string | null>(null);
+  const telegramChatSlotRef = useRef<string | null>(null);
+  const telegramTestIdemRef = useRef<string | null>(null);
   const reqReloadGen = useRef(0);
   const orgReloadGen = useRef(0);
   const suggestGen = useRef(0);
@@ -306,7 +311,15 @@ export function AccountScreen({
       } else {
         setCurrency(fresh.currency || currency);
       }
-      const org = await updateOrg(payload);
+      const orgKey = idemKeyFor(
+        orgIdemRef,
+        orgSlotRef,
+        "org-update",
+        JSON.stringify(payload),
+      );
+      const org = await updateOrg(payload, { idempotencyKey: orgKey });
+      orgIdemRef.current = null;
+      orgSlotRef.current = null;
       setOrgName(org.name);
       setCurrency(org.currency);
       setCurrencyLocked(!!org.currency_locked);
@@ -507,7 +520,18 @@ export function AccountScreen({
                     return;
                   }
                 } catch { /* API 403 if frozen */ }
-                const b = await setTelegramChat(tgChat.trim());
+                const chatId = tgChat.trim();
+                const chatKey = idemKeyFor(
+                  telegramChatIdemRef,
+                  telegramChatSlotRef,
+                  "telegram-chat",
+                  chatId,
+                );
+                const b = await setTelegramChat(chatId, {
+                  idempotencyKey: chatKey,
+                });
+                telegramChatIdemRef.current = null;
+                telegramChatSlotRef.current = null;
                 setBilling(b);
                 Alert.alert("Fos", "Telegram chat saved");
               } catch (e) {
@@ -537,7 +561,13 @@ export function AccountScreen({
                     return;
                   }
                 } catch { /* API 403 if frozen */ }
-                await testTelegram();
+                if (!telegramTestIdemRef.current) {
+                  telegramTestIdemRef.current = makeIdempotencyKey("telegram-test");
+                }
+                await testTelegram({
+                  idempotencyKey: telegramTestIdemRef.current,
+                });
+                telegramTestIdemRef.current = null;
                 Alert.alert("Fos", "Test message sent");
               } catch (e) {
                 alertFosError(e);

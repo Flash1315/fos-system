@@ -4,11 +4,13 @@ import { useFocusEffect } from "../useFocus";
 import {
   BILLING_READONLY_MSG,
   billingMe,
+  idemKeyFor,
   isBillingReadOnly,
   listMembers,
   onResumeRefresh,
   resetMemberPassword,
   issueMemberResetToken,
+  makeIdempotencyKey,
   setMemberActive,
   setMemberRole,
   type User,
@@ -38,6 +40,14 @@ export function TeamScreen({
   const [loadError, setLoadError] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const reloadGen = useRef(0);
+  const activeIdemRef = useRef<string | null>(null);
+  const activeSlotRef = useRef<string | null>(null);
+  const roleIdemRef = useRef<string | null>(null);
+  const roleSlotRef = useRef<string | null>(null);
+  const resetTokenIdemRef = useRef<string | null>(null);
+  const resetTokenSlotRef = useRef<string | null>(null);
+  const passwordIdemRef = useRef<string | null>(null);
+  const passwordSlotRef = useRef<number | null>(null);
   const [lastReset, setLastReset] = useState<{
     name: string;
     slug: string;
@@ -111,7 +121,15 @@ export function TeamScreen({
                 return;
               }
             } catch { /* API 403 if frozen */ }
-            await setMemberActive(member.id, nextActive);
+            const key = idemKeyFor(
+              activeIdemRef,
+              activeSlotRef,
+              "member-active",
+              `${member.id}:${nextActive}`,
+            );
+            await setMemberActive(member.id, nextActive, { idempotencyKey: key });
+            activeIdemRef.current = null;
+            activeSlotRef.current = null;
             await reload();
           } catch (e) {
             alertFosError(e);
@@ -147,7 +165,15 @@ export function TeamScreen({
                 return;
               }
             } catch { /* API 403 if frozen */ }
-            await setMemberRole(member.id, role);
+            const key = idemKeyFor(
+              roleIdemRef,
+              roleSlotRef,
+              "member-role",
+              `${member.id}:${role}`,
+            );
+            await setMemberRole(member.id, role, { idempotencyKey: key });
+            roleIdemRef.current = null;
+            roleSlotRef.current = null;
             await reload();
           } catch (e) {
             alertFosError(e);
@@ -261,7 +287,15 @@ export function TeamScreen({
                               } catch { /* API 403 if frozen */ }
                               let res;
                               try {
-                                res = await issueMemberResetToken(item.id);
+                                const key = idemKeyFor(
+                                  resetTokenIdemRef,
+                                  resetTokenSlotRef,
+                                  "reset-token",
+                                  `${item.id}:false`,
+                                );
+                                res = await issueMemberResetToken(item.id, {
+                                  idempotencyKey: key,
+                                });
                               } catch (first) {
                                 const msg =
                                   first instanceof Error ? first.message : "Failed";
@@ -287,8 +321,19 @@ export function TeamScreen({
                                   );
                                 });
                                 if (!rotate) return;
-                                res = await issueMemberResetToken(item.id, { force: true });
+                                const key = idemKeyFor(
+                                  resetTokenIdemRef,
+                                  resetTokenSlotRef,
+                                  "reset-token",
+                                  `${item.id}:true`,
+                                );
+                                res = await issueMemberResetToken(item.id, {
+                                  force: true,
+                                  idempotencyKey: key,
+                                });
                               }
+                              resetTokenIdemRef.current = null;
+                              resetTokenSlotRef.current = null;
                               const payload = {
                                 name: item.full_name,
                                 slug: res.organization_slug,
@@ -381,7 +426,11 @@ export function TeamScreen({
         placeholder="min 8 characters, letter + digit"
         confirmLabel="Confirm password"
         confirmPlaceholder="repeat password"
-        onCancel={() => setResetId(null)}
+        onCancel={() => {
+          passwordIdemRef.current = null;
+          passwordSlotRef.current = null;
+          setResetId(null);
+        }}
         onSubmit={async (pwd) => {
           const id = resetId;
           if (id == null) throw new Error("Teammate is no longer selected");
@@ -405,7 +454,18 @@ export function TeamScreen({
                 return Promise.reject(new Error(BILLING_READONLY_MSG));
               }
             } catch { /* API 403 if frozen */ }
-            await resetMemberPassword(id, pwd, pwd);
+            if (passwordSlotRef.current !== id) {
+              passwordSlotRef.current = id;
+              passwordIdemRef.current = null;
+            }
+            if (!passwordIdemRef.current) {
+              passwordIdemRef.current = makeIdempotencyKey("member-password");
+            }
+            await resetMemberPassword(id, pwd, pwd, {
+              idempotencyKey: passwordIdemRef.current,
+            });
+            passwordIdemRef.current = null;
+            passwordSlotRef.current = null;
             Alert.alert("Fos", "Password reset — their other sessions signed out");
             await reload();
           } catch (e) {

@@ -639,9 +639,17 @@ export function changePassword(
   });
 }
 
-export function acceptInvite(token: string, password: string, password_confirm: string) {
+export function acceptInvite(
+  token: string,
+  password: string,
+  password_confirm: string,
+  opts?: { idempotencyKey?: string },
+) {
   return request<AuthToken>("/auth/accept-invite", {
     method: "POST",
+    headers: opts?.idempotencyKey
+      ? { "Idempotency-Key": opts.idempotencyKey }
+      : undefined,
     body: JSON.stringify({
       token,
       password,
@@ -660,7 +668,10 @@ export function myOrg() {
   }>("/orgs/me");
 }
 
-export function updateOrg(body: { name?: string; currency?: string }) {
+export function updateOrg(
+  body: { name?: string; currency?: string },
+  opts?: { idempotencyKey?: string },
+) {
   return request<{
     id: number;
     name: string;
@@ -669,6 +680,9 @@ export function updateOrg(body: { name?: string; currency?: string }) {
     currency_locked?: boolean;
   }>("/orgs/me", {
     method: "PATCH",
+    headers: opts?.idempotencyKey
+      ? { "Idempotency-Key": opts.idempotencyKey }
+      : undefined,
     body: JSON.stringify(body),
   });
 }
@@ -680,15 +694,21 @@ export type InviteResult = User & {
   email_sent?: boolean;
 };
 
-export function inviteUser(body: {
-  email: string;
-  full_name: string;
-  role: "owner" | "manager" | "employee";
-  password?: string;
-  password_confirm?: string;
-}) {
+export function inviteUser(
+  body: {
+    email: string;
+    full_name: string;
+    role: "owner" | "manager" | "employee";
+    password?: string;
+    password_confirm?: string;
+  },
+  opts?: { idempotencyKey?: string },
+) {
   return request<InviteResult>("/orgs/invite", {
     method: "POST",
+    headers: opts?.idempotencyKey
+      ? { "Idempotency-Key": opts.idempotencyKey }
+      : undefined,
     body: JSON.stringify(body),
   });
 }
@@ -719,16 +739,30 @@ async function fetchAllMemberPages(path: string): Promise<User[]> {
   return out;
 }
 
-export function setMemberActive(id: number, is_active: boolean) {
+export function setMemberActive(
+  id: number,
+  is_active: boolean,
+  opts?: { idempotencyKey?: string },
+) {
   return request<User>(`/orgs/members/${id}/active`, {
     method: "POST",
+    headers: opts?.idempotencyKey
+      ? { "Idempotency-Key": opts.idempotencyKey }
+      : undefined,
     body: JSON.stringify({ is_active }),
   });
 }
 
-export function setMemberRole(id: number, role: "owner" | "manager" | "employee") {
+export function setMemberRole(
+  id: number,
+  role: "owner" | "manager" | "employee",
+  opts?: { idempotencyKey?: string },
+) {
   return request<User>(`/orgs/members/${id}/role`, {
     method: "POST",
+    headers: opts?.idempotencyKey
+      ? { "Idempotency-Key": opts.idempotencyKey }
+      : undefined,
     body: JSON.stringify({ role }),
   });
 }
@@ -737,14 +771,21 @@ export function resetMemberPassword(
   id: number,
   new_password: string,
   password_confirm: string,
+  opts?: { idempotencyKey?: string },
 ) {
   return request<User>(`/orgs/members/${id}/password`, {
     method: "POST",
+    headers: opts?.idempotencyKey
+      ? { "Idempotency-Key": opts.idempotencyKey }
+      : undefined,
     body: JSON.stringify({ new_password, password_confirm }),
   });
 }
 
-export function issueMemberResetToken(id: number, opts?: { force?: boolean }) {
+export function issueMemberResetToken(
+  id: number,
+  opts?: { force?: boolean; idempotencyKey?: string },
+) {
   const q = opts?.force ? "?force=true" : "";
   return request<{
     id: number;
@@ -754,7 +795,12 @@ export function issueMemberResetToken(id: number, opts?: { force?: boolean }) {
     invite_token: string;
     must_set_password: boolean;
     email_sent?: boolean;
-  }>(`/orgs/members/${id}/reset-token${q}`, { method: "POST" });
+  }>(`/orgs/members/${id}/reset-token${q}`, {
+    method: "POST",
+    headers: opts?.idempotencyKey
+      ? { "Idempotency-Key": opts.idempotencyKey }
+      : undefined,
+  });
 }
 
 export type BillingInfo = {
@@ -773,22 +819,39 @@ export function billingMe() {
 }
 
 /** Stub only — paid plans are refused server-side until billing ships. Prefer free/trial. */
-export function setBillingPlan(plan: "free" | "trial") {
+export function setBillingPlan(
+  plan: "free" | "trial",
+  opts?: { idempotencyKey?: string },
+) {
   return request<BillingInfo>("/billing/plan", {
     method: "POST",
+    headers: opts?.idempotencyKey
+      ? { "Idempotency-Key": opts.idempotencyKey }
+      : undefined,
     body: JSON.stringify({ plan }),
   });
 }
 
-export function setTelegramChat(telegram_chat_id: string) {
+export function setTelegramChat(
+  telegram_chat_id: string,
+  opts?: { idempotencyKey?: string },
+) {
   return request<BillingInfo>("/integrations/telegram/chat", {
     method: "POST",
+    headers: opts?.idempotencyKey
+      ? { "Idempotency-Key": opts.idempotencyKey }
+      : undefined,
     body: JSON.stringify({ telegram_chat_id }),
   });
 }
 
-export function testTelegram() {
-  return request<{ ok: boolean }>("/integrations/telegram/test", { method: "POST" });
+export function testTelegram(opts?: { idempotencyKey?: string }) {
+  return request<{ ok: boolean }>("/integrations/telegram/test", {
+    method: "POST",
+    headers: opts?.idempotencyKey
+      ? { "Idempotency-Key": opts.idempotencyKey }
+      : undefined,
+  });
 }
 
 export type BalanceInfo = {

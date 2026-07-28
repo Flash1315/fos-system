@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 import re
@@ -86,11 +86,22 @@ def set_plan(
     body: PlanIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Stub plan switch — disabled unless BILLING_PLAN_SWITCH=1.
 
     Even with the flag on, paid `pro` is refused until real billing exists.
     """
+    from app.services.idempotency import (
+        commit_or_replay,
+        dumps_json,
+        fingerprint,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
     from app.services.locks import lock_organization
     from app.services.rate_limit import enforce_rate_limit
 
@@ -99,6 +110,26 @@ def set_plan(
         limit=10,
         window_sec=60,
     )
+    key = normalize_idem_key(idempotency_key)
+    fp = fingerprint({"plan": body.plan}) if key else None
+
+    def load_replay(hit):
+        payload = loads_json(hit.response_json)
+        return BillingOut.model_validate(payload) if payload else None
+
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="billing.set_plan",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     from app.services.org_gates import require_org_writable
 
     require_org_writable(db, user.organization_id)
@@ -115,10 +146,45 @@ def set_plan(
     org = lock_organization(db, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="billing.set_plan",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     org.plan = body.plan
-    db.commit()
+    response = billing_me(user, db)
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="billing.set_plan",
+            key=key,
+            resource_id=org.id,
+            response_json=dumps_json(response.model_dump(mode="json")),
+            request_hash=fp,
+        )
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="billing.set_plan",
+        key=key,
+        request_hash=fp,
+        load_replay=load_replay,
+    )
+    if replay is not None:
+        return replay
     db.refresh(org)
-    return billing_me(user, db)
+    return response
 
 
 @router.post("/integrations/telegram/chat", response_model=BillingOut)
@@ -126,7 +192,18 @@ def set_telegram_chat(
     body: TelegramChatIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import (
+        commit_or_replay,
+        dumps_json,
+        fingerprint,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
     from app.services.locks import lock_organization
     from app.services.rate_limit import enforce_rate_limit
 
@@ -140,23 +217,90 @@ def set_telegram_chat(
         limit=30,
         window_sec=60,
     )
+    key = normalize_idem_key(idempotency_key)
+    fp = fingerprint({"chat_id": body.telegram_chat_id}) if key else None
+
+    def load_replay(hit):
+        payload = loads_json(hit.response_json)
+        return BillingOut.model_validate(payload) if payload else None
+
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="billing.telegram_chat",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     from app.services.org_gates import require_org_writable
 
     require_org_writable(db, user.organization_id)
     org = lock_organization(db, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="billing.telegram_chat",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     org.telegram_chat_id = body.telegram_chat_id
-    db.commit()
+    response = billing_me(user, db)
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="billing.telegram_chat",
+            key=key,
+            resource_id=org.id,
+            response_json=dumps_json(response.model_dump(mode="json")),
+            request_hash=fp,
+        )
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="billing.telegram_chat",
+        key=key,
+        request_hash=fp,
+        load_replay=load_replay,
+    )
+    if replay is not None:
+        return replay
     db.refresh(org)
-    return billing_me(user, db)
+    return response
 
 
 @router.post("/integrations/telegram/test")
 def test_telegram(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import (
+        commit_or_replay,
+        dumps_json,
+        fingerprint,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
+    from app.services.locks import lock_organization
     from app.services.rate_limit import enforce_rate_limit
 
     enforce_rate_limit(
@@ -169,15 +313,70 @@ def test_telegram(
         limit=30,
         window_sec=60,
     )
+    key = normalize_idem_key(idempotency_key)
+    fp = fingerprint({}) if key else None
+
+    def load_replay(hit):
+        return loads_json(hit.response_json)
+
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="billing.telegram_test",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     from app.services.org_gates import require_org_writable
 
     require_org_writable(db, user.organization_id)
     if not telegram_configured():
         raise HTTPException(400, "TELEGRAM_BOT_TOKEN is not configured on the server")
-    org = db.get(Organization, user.organization_id)
+    org = lock_organization(db, user.organization_id)
     if not org or not (org.telegram_chat_id or "").strip():
         raise HTTPException(400, "Set telegram_chat_id first")
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="billing.telegram_test",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     ok = notify_org(org, f"Fos test from {org.name} (/{org.slug}) — ok")
     if not ok:
         raise HTTPException(502, "Telegram API call failed")
-    return {"ok": True}
+    response = {"ok": True}
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="billing.telegram_test",
+            key=key,
+            resource_id=org.id,
+            response_json=dumps_json(response),
+            request_hash=fp,
+        )
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="billing.telegram_test",
+        key=key,
+        request_hash=fp,
+        load_replay=load_replay,
+    )
+    if replay is not None:
+        return replay
+    return response

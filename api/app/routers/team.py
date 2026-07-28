@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.schemas import (
@@ -103,7 +103,18 @@ def set_member_active(
     body: MemberActiveIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import (
+        commit_or_replay,
+        dumps_json,
+        fingerprint,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
     from app.services.locks import lock_organization, lock_users
     from app.services.org_gates import require_org_writable
     from app.services.rate_limit import enforce_rate_limit
@@ -118,8 +129,41 @@ def set_member_active(
         limit=120,
         window_sec=60,
     )
+    key = normalize_idem_key(idempotency_key)
+    fp = fingerprint({"user_id": member_id, "active": body.is_active}) if key else None
+
+    def load_replay(hit):
+        payload = loads_json(hit.response_json)
+        return MemberOut.model_validate(payload) if payload else None
+
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="team.member_active",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     require_org_writable(db, user.organization_id)
     lock_organization(db, user.organization_id)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="team.member_active",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     member = (
         db.query(User)
         .filter(User.id == member_id, User.organization_id == user.organization_id)
@@ -214,9 +258,31 @@ def set_member_active(
         if not member.must_set_password:
             member.invite_token = None
             member.invite_token_expires_at = None
-    db.commit()
+    response = MemberOut.model_validate(member)
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="team.member_active",
+            key=key,
+            resource_id=member.id,
+            response_json=dumps_json(response.model_dump(mode="json")),
+            request_hash=fp,
+        )
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="team.member_active",
+        key=key,
+        request_hash=fp,
+        load_replay=load_replay,
+    )
+    if replay is not None:
+        return replay
     db.refresh(member)
-    return MemberOut.model_validate(member)
+    return response
 
 
 @router.post("/members/{member_id}/role", response_model=MemberOut)
@@ -225,7 +291,18 @@ def set_member_role(
     body: MemberRoleIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import (
+        commit_or_replay,
+        dumps_json,
+        fingerprint,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
     from app.services.locks import lock_organization
     from app.services.org_gates import require_org_writable
     from app.services.rate_limit import enforce_rate_limit
@@ -240,8 +317,41 @@ def set_member_role(
         limit=120,
         window_sec=60,
     )
+    key = normalize_idem_key(idempotency_key)
+    fp = fingerprint({"user_id": member_id, "role": body.role.value}) if key else None
+
+    def load_replay(hit):
+        payload = loads_json(hit.response_json)
+        return MemberOut.model_validate(payload) if payload else None
+
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="team.member_role",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     require_org_writable(db, user.organization_id)
     lock_organization(db, user.organization_id)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="team.member_role",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     member = (
         db.query(User)
         .filter(User.id == member_id, User.organization_id == user.organization_id)
@@ -271,9 +381,31 @@ def set_member_role(
     if member.role != body.role:
         member.role = body.role
         bump_token_version(member)
-    db.commit()
+    response = MemberOut.model_validate(member)
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="team.member_role",
+            key=key,
+            resource_id=member.id,
+            response_json=dumps_json(response.model_dump(mode="json")),
+            request_hash=fp,
+        )
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="team.member_role",
+        key=key,
+        request_hash=fp,
+        load_replay=load_replay,
+    )
+    if replay is not None:
+        return replay
     db.refresh(member)
-    return MemberOut.model_validate(member)
+    return response
 
 
 @router.post("/members/{member_id}/password", response_model=MemberOut)
@@ -284,7 +416,18 @@ def reset_member_password(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import (
+        commit_or_replay,
+        dumps_json,
+        fingerprint,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
     from app.services.locks import lock_organization
     from app.services.org_gates import require_org_writable
     from app.services.rate_limit import enforce_rate_limit
@@ -304,8 +447,50 @@ def reset_member_password(
         limit=40,
         window_sec=60,
     )
+    key = normalize_idem_key(idempotency_key)
+    fp = (
+        fingerprint(
+            {
+                "user_id": member_id,
+                **body.model_dump(mode="json"),
+            }
+        )
+        if key
+        else None
+    )
+
+    def load_replay(hit):
+        payload = loads_json(hit.response_json)
+        return MemberOut.model_validate(payload) if payload else None
+
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="team.member_password",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     require_org_writable(db, user.organization_id)
     lock_organization(db, user.organization_id)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="team.member_password",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     member = (
         db.query(User)
         .filter(User.id == member_id, User.organization_id == user.organization_id)
@@ -321,7 +506,29 @@ def reset_member_password(
     member.must_set_password = False
     member.invite_token = None
     member.invite_token_expires_at = None
-    db.commit()
+    response = MemberOut.model_validate(member)
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="team.member_password",
+            key=key,
+            resource_id=member.id,
+            response_json=dumps_json(response.model_dump(mode="json")),
+            request_hash=fp,
+        )
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="team.member_password",
+        key=key,
+        request_hash=fp,
+        load_replay=load_replay,
+    )
+    if replay is not None:
+        return replay
     db.refresh(member)
     org = db.get(Organization, user.organization_id)
     if org:
@@ -332,7 +539,7 @@ def reset_member_password(
             org,
             f"Fos: password set by owner for {member.full_name}",
         )
-    return MemberOut.model_validate(member)
+    return response
 
 
 @router.post("/members/{member_id}/reset-token", response_model=MemberResetTokenOut)
@@ -343,8 +550,19 @@ def issue_member_reset_token(
     force: bool = Query(default=False),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Issue a one-time token; teammate sets a new password via /auth/accept-invite."""
+    from app.services.idempotency import (
+        commit_or_replay,
+        dumps_json,
+        fingerprint,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
     from app.services.invite_tokens import store_invite_token
     from app.services.rate_limit import enforce_rate_limit
 
@@ -359,6 +577,26 @@ def issue_member_reset_token(
         limit=40,
         window_sec=60,
     )
+    key = normalize_idem_key(idempotency_key)
+    fp = fingerprint({"user_id": member_id, "force": force}) if key else None
+
+    def load_replay(hit):
+        payload = loads_json(hit.response_json)
+        return MemberResetTokenOut.model_validate(payload) if payload else None
+
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="team.member_reset_token",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     from app.services.org_gates import require_org_writable
 
     require_org_writable(db, user.organization_id)
@@ -368,6 +606,19 @@ def issue_member_reset_token(
         .with_for_update()
         .first()
     )
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="team.member_reset_token",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
     if not member or member.organization_id != user.organization_id:
         raise HTTPException(404, "User not found")
     if member.id == user.id:
@@ -394,7 +645,38 @@ def issue_member_reset_token(
     member.invite_token_expires_at = _utcnow() + timedelta(days=RESET_TTL_DAYS)
     member.must_set_password = True
     bump_token_version(member)
-    db.commit()
+    response = MemberResetTokenOut(
+        id=member.id,
+        email=member.email,
+        full_name=member.full_name,
+        organization_slug=org.slug if org else "",
+        invite_token=raw_token,
+        must_set_password=True,
+        email_sent=False,
+    )
+    idem_row = None
+    if key:
+        idem_row = store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="team.member_reset_token",
+            key=key,
+            resource_id=member.id,
+            response_json=dumps_json(response.model_dump(mode="json")),
+            request_hash=fp,
+        )
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="team.member_reset_token",
+        key=key,
+        request_hash=fp,
+        load_replay=load_replay,
+    )
+    if replay is not None:
+        return replay
     db.refresh(member)
     emailed = False
     if org:
@@ -413,12 +695,8 @@ def issue_member_reset_token(
             org,
             f"Fos: password reset token issued for {member.full_name}",
         )
-    return MemberResetTokenOut(
-        id=member.id,
-        email=member.email,
-        full_name=member.full_name,
-        organization_slug=org.slug if org else "",
-        invite_token=raw_token,
-        must_set_password=True,
-        email_sent=emailed,
-    )
+    response.email_sent = emailed
+    if idem_row is not None:
+        idem_row.response_json = dumps_json(response.model_dump(mode="json"))
+        db.commit()
+    return response

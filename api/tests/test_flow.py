@@ -9363,3 +9363,226 @@ def test_v07120_early_error_headers_docs_ci_version_seal(client):
     deploy = Path("/workspace/docs/DEPLOY.md").read_text(encoding="utf-8")
     assert "record-write-org:" in deploy
     assert "finance-list-org:" in deploy
+
+
+def test_v07131_140_auth_team_and_org_idempotency(client):
+    owner = _register(client, "flow-idem-auth-team", "idem-auth-team@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    invite_payload = {
+        "email": "idem-member@example.com",
+        "full_name": "Idem Member",
+        "role": "employee",
+    }
+    invite_h = {**h, "Idempotency-Key": "invite-user-once"}
+    invited = client.post("/orgs/invite", headers=invite_h, json=invite_payload)
+    replayed_invite = client.post("/orgs/invite", headers=invite_h, json=invite_payload)
+    assert invited.status_code == replayed_invite.status_code == 200
+    assert replayed_invite.json() == invited.json()
+    assert invited.json()["invite_token"]
+    invite_mismatch = client.post(
+        "/orgs/invite",
+        headers=invite_h,
+        json={**invite_payload, "full_name": "Different Member"},
+    )
+    assert invite_mismatch.status_code == 409
+
+    token = invited.json()["invite_token"]
+    accept_payload = {
+        "token": token,
+        "password": "chosenpass1",
+        "password_confirm": "chosenpass1",
+    }
+    accept_h = {"Idempotency-Key": "accept-invite-once"}
+    accepted = client.post("/auth/accept-invite", headers=accept_h, json=accept_payload)
+    accepted_replay = client.post(
+        "/auth/accept-invite", headers=accept_h, json=accept_payload
+    )
+    assert accepted.status_code == accepted_replay.status_code == 200
+    assert accepted_replay.json()["user"]["id"] == accepted.json()["user"]["id"]
+    assert accepted_replay.json()["access_token"]
+    from app.db import SessionLocal
+    from app.models import IdempotencyKey, User
+
+    db = SessionLocal()
+    try:
+        accept_idem = (
+            db.query(IdempotencyKey)
+            .filter(
+                IdempotencyKey.scope == "auth.accept_invite",
+                IdempotencyKey.key == "accept-invite-once",
+            )
+            .one()
+        )
+        assert accept_idem.resource_id == accepted.json()["user"]["id"]
+        assert accept_idem.response_json is None
+    finally:
+        db.close()
+    without_key = client.post("/auth/accept-invite", json=accept_payload)
+    assert without_key.status_code == 400
+
+    member_id = accepted.json()["user"]["id"]
+    org_h = {**h, "Idempotency-Key": "org-update-once"}
+    org_payload = {"name": "Idempotent Company", "currency": "IDR"}
+    org = client.patch("/orgs/me", headers=org_h, json=org_payload)
+    org_replay = client.patch("/orgs/me", headers=org_h, json=org_payload)
+    assert org.status_code == org_replay.status_code == 200
+    assert org_replay.json() == org.json()
+    assert (
+        client.patch(
+            "/orgs/me",
+            headers=org_h,
+            json={"name": "Other Company", "currency": "IDR"},
+        ).status_code
+        == 409
+    )
+
+    active_h = {**h, "Idempotency-Key": "member-active-once"}
+    active_payload = {"is_active": False}
+    inactive = client.post(
+        f"/orgs/members/{member_id}/active", headers=active_h, json=active_payload
+    )
+    inactive_replay = client.post(
+        f"/orgs/members/{member_id}/active", headers=active_h, json=active_payload
+    )
+    assert inactive.status_code == inactive_replay.status_code == 200
+    assert inactive_replay.json() == inactive.json()
+    assert (
+        client.post(
+            f"/orgs/members/{member_id}/active",
+            headers=active_h,
+            json={"is_active": True},
+        ).status_code
+        == 409
+    )
+    assert (
+        client.post(
+            f"/orgs/members/{member_id}/active",
+            headers={**h, "Idempotency-Key": "member-active-again"},
+            json={"is_active": True},
+        ).status_code
+        == 200
+    )
+
+    role_h = {**h, "Idempotency-Key": "member-role-once"}
+    role_payload = {"role": "manager"}
+    role = client.post(
+        f"/orgs/members/{member_id}/role", headers=role_h, json=role_payload
+    )
+    role_replay = client.post(
+        f"/orgs/members/{member_id}/role", headers=role_h, json=role_payload
+    )
+    assert role.status_code == role_replay.status_code == 200
+    assert role_replay.json() == role.json()
+    assert (
+        client.post(
+            f"/orgs/members/{member_id}/role",
+            headers=role_h,
+            json={"role": "employee"},
+        ).status_code
+        == 409
+    )
+
+    password_h = {**h, "Idempotency-Key": "member-password-once"}
+    password_payload = {
+        "new_password": "resetpass1",
+        "password_confirm": "resetpass1",
+    }
+    reset = client.post(
+        f"/orgs/members/{member_id}/password",
+        headers=password_h,
+        json=password_payload,
+    )
+    db = SessionLocal()
+    try:
+        password_hash = db.get(User, member_id).hashed_password
+        token_version = db.get(User, member_id).token_version
+    finally:
+        db.close()
+    reset_replay = client.post(
+        f"/orgs/members/{member_id}/password",
+        headers=password_h,
+        json=password_payload,
+    )
+    assert reset.status_code == reset_replay.status_code == 200
+    assert reset_replay.json() == reset.json()
+    db = SessionLocal()
+    try:
+        replayed_member = db.get(User, member_id)
+        assert replayed_member.hashed_password == password_hash
+        assert replayed_member.token_version == token_version
+    finally:
+        db.close()
+
+    reset_token_h = {**h, "Idempotency-Key": "member-reset-token-once"}
+    reset_token = client.post(
+        f"/orgs/members/{member_id}/reset-token", headers=reset_token_h
+    )
+    reset_token_replay = client.post(
+        f"/orgs/members/{member_id}/reset-token", headers=reset_token_h
+    )
+    assert reset_token.status_code == reset_token_replay.status_code == 200
+    assert reset_token_replay.json() == reset_token.json()
+    assert reset_token.json()["invite_token"]
+    assert (
+        client.post(
+            f"/orgs/members/{member_id}/reset-token?force=true",
+            headers=reset_token_h,
+        ).status_code
+        == 409
+    )
+
+
+def test_v07131_140_billing_idempotency(client, monkeypatch):
+    from app.config import settings
+
+    owner = _register(client, "flow-idem-billing", "idem-billing@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    monkeypatch.setattr(settings, "billing_plan_switch", True)
+
+    plan_h = {**h, "Idempotency-Key": "billing-plan-once"}
+    plan = client.post("/billing/plan", headers=plan_h, json={"plan": "trial"})
+    plan_replay = client.post("/billing/plan", headers=plan_h, json={"plan": "trial"})
+    assert plan.status_code == plan_replay.status_code == 200
+    assert plan_replay.json() == plan.json()
+    assert (
+        client.post("/billing/plan", headers=plan_h, json={"plan": "free"}).status_code
+        == 409
+    )
+
+    chat_h = {**h, "Idempotency-Key": "telegram-chat-once"}
+    chat = client.post(
+        "/integrations/telegram/chat",
+        headers=chat_h,
+        json={"telegram_chat_id": "-100123456"},
+    )
+    chat_replay = client.post(
+        "/integrations/telegram/chat",
+        headers=chat_h,
+        json={"telegram_chat_id": "-100123456"},
+    )
+    assert chat.status_code == chat_replay.status_code == 200
+    assert chat_replay.json() == chat.json()
+    assert (
+        client.post(
+            "/integrations/telegram/chat",
+            headers=chat_h,
+            json={"telegram_chat_id": "-100999"},
+        ).status_code
+        == 409
+    )
+
+    sent = {"count": 0}
+
+    def fake_notify(org, message):
+        sent["count"] += 1
+        return True
+
+    monkeypatch.setattr("app.routers.billing.telegram_configured", lambda: True)
+    monkeypatch.setattr("app.routers.billing.notify_org", fake_notify)
+    test_h = {**h, "Idempotency-Key": "telegram-test-once"}
+    first = client.post("/integrations/telegram/test", headers=test_h)
+    replay = client.post("/integrations/telegram/test", headers=test_h)
+    assert first.status_code == replay.status_code == 200
+    assert replay.json() == {"ok": True}
+    assert sent["count"] == 1

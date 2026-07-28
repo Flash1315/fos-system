@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Share, View, StyleSheet } from "react-native";
-import { BILLING_READONLY_MSG, billingMe, inviteUser, isBillingReadOnly, myOrg, onResumeRefresh, type InviteResult, type User } from "../api";
+import { BILLING_READONLY_MSG, billingMe, inviteUser, isBillingReadOnly, makeIdempotencyKey, myOrg, onResumeRefresh, type InviteResult, type User } from "../api";
 import { alertFosError } from "../alertError";
 import { Btn, Chip, Field, Label, LinkText, Screen, Sub, TopBar } from "../components/ui";
 import { emailFormatError, passwordStrengthError } from "../format";
@@ -29,6 +29,7 @@ export function InviteScreen({
   const [role, setRole] = useState<"employee" | "manager" | "owner">("employee");
   const [billingReadonly, setBillingReadonly] = useState(false);
   const slugGen = useRef(0);
+  const inviteIdemRef = useRef<string | null>(null);
   const [lastInvite, setLastInvite] = useState<{
     res: InviteResult;
     email: string;
@@ -39,6 +40,10 @@ export function InviteScreen({
     currentRole === "owner"
       ? (["employee", "manager", "owner"] as const)
       : (["employee"] as const);
+
+  useEffect(() => {
+    inviteIdemRef.current = null;
+  }, [email, fullName, password, passwordConfirm, role, setTempPassword]);
 
   const loadSlug = async () => {
     const gen = ++slugGen.current;
@@ -158,14 +163,19 @@ export function InviteScreen({
         /* API will 403 if frozen */
       }
       const invitedEmail = email.trim().toLowerCase();
-      const res = await inviteUser({
-        email: invitedEmail,
-        full_name: fullName.trim(),
-        role,
-        ...(setTempPassword
-          ? { password, password_confirm: passwordConfirm }
-          : {}),
-      });
+      if (!inviteIdemRef.current) inviteIdemRef.current = makeIdempotencyKey("invite");
+      const res = await inviteUser(
+        {
+          email: invitedEmail,
+          full_name: fullName.trim(),
+          role,
+          ...(setTempPassword
+            ? { password, password_confirm: passwordConfirm }
+            : {}),
+        },
+        { idempotencyKey: inviteIdemRef.current },
+      );
+      inviteIdemRef.current = null;
       const payload = {
         res,
         email: invitedEmail,

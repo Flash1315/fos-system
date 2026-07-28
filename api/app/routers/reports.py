@@ -347,6 +347,16 @@ def export_csv(
     if len(rows) > 5000:
         raise HTTPException(400, "Export too large — narrow the date range")
 
+    name_ids = {r.created_by for r in rows}
+    names: dict[int, str] = {}
+    if name_ids:
+        names = {
+            u.id: u.full_name
+            for u in db.query(User)
+            .filter(User.organization_id == oid, User.id.in_(name_ids))
+            .all()
+        }
+
     buf = StringIO()
     writer = csv.writer(buf)
     writer.writerow(
@@ -377,8 +387,7 @@ def export_csv(
         ]
     )
     for r in rows:
-        creator = db.get(User, r.created_by)
-        name = creator.full_name if creator else ""
+        name = names.get(r.created_by, "")
         kind = r.kind.value if hasattr(r.kind, "value") else str(r.kind)
         status = r.status.value if hasattr(r.status, "value") else str(r.status)
         writer.writerow(
@@ -417,9 +426,21 @@ def export_csv(
     payouts = pq.order_by(Payout.created_at.asc(), Payout.id.asc()).limit(2001).all()
     if len(payouts) > 2000:
         raise HTTPException(400, "Export too large — narrow the date range")
+    if len(rows) + len(payouts) > 7000:
+        raise HTTPException(400, "Export too large — narrow the date range")
+    payout_ids = {p.user_id for p in payouts}
+    missing = payout_ids - names.keys()
+    if missing:
+        names.update(
+            {
+                u.id: u.full_name
+                for u in db.query(User)
+                .filter(User.organization_id == oid, User.id.in_(missing))
+                .all()
+            }
+        )
     for p in payouts:
-        u = db.get(User, p.user_id)
-        name = u.full_name if u else ""
+        name = names.get(p.user_id, "")
         pkind = p.kind.value if hasattr(p.kind, "value") else str(p.kind)
         writer.writerow(
             [
@@ -457,9 +478,21 @@ def export_csv(
     adjustments = aq.order_by(BalanceAdjustment.created_at.asc(), BalanceAdjustment.id.asc()).limit(2001).all()
     if len(adjustments) > 2000:
         raise HTTPException(400, "Export too large — narrow the date range")
+    if len(rows) + len(payouts) + len(adjustments) > 8000:
+        raise HTTPException(400, "Export too large — narrow the date range")
+    adj_ids = {a.user_id for a in adjustments}
+    missing = adj_ids - names.keys()
+    if missing:
+        names.update(
+            {
+                u.id: u.full_name
+                for u in db.query(User)
+                .filter(User.organization_id == oid, User.id.in_(missing))
+                .all()
+            }
+        )
     for a in adjustments:
-        u = db.get(User, a.user_id)
-        name = u.full_name if u else ""
+        name = names.get(a.user_id, "")
         track = a.track.value if hasattr(a.track, "value") else str(a.track)
         writer.writerow(
             [

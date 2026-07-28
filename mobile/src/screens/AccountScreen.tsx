@@ -295,9 +295,21 @@ export function AccountScreen({
         text: "Send",
         onPress: async () => {
           if (busy) return;
-          if (!requestIdemRef.current) requestIdemRef.current = makeIdempotencyKey("sreq");
           setBusy(true);
           try {
+            const bal = await myBalance();
+            const available =
+              kind === "expense_payout"
+                ? bal.available_spendings ?? bal.spendings ?? 0
+                : bal.available_cash ?? bal.cash_on_hand ?? 0;
+            if (value > available + 1e-6) {
+              Alert.alert(
+                "Fos",
+                `Only ${available.toLocaleString()} ${bal.currency || currency} available now`,
+              );
+              return;
+            }
+            if (!requestIdemRef.current) requestIdemRef.current = makeIdempotencyKey("sreq");
             await requestSettlement(
               { kind, amount: value, note },
               { idempotencyKey: requestIdemRef.current },
@@ -431,13 +443,26 @@ export function AccountScreen({
       )}
 
       <Label>Change password</Label>
-      <Field secureTextEntry value={current} onChangeText={setCurrent} placeholder="Current password" />
-      <Field secureTextEntry value={next} onChangeText={setNext} placeholder="New password" />
+      <Field
+        secureTextEntry
+        value={current}
+        onChangeText={setCurrent}
+        placeholder="Current password"
+        maxLength={128}
+      />
+      <Field
+        secureTextEntry
+        value={next}
+        onChangeText={setNext}
+        placeholder="New password"
+        maxLength={128}
+      />
       <Field
         secureTextEntry
         value={nextConfirm}
         onChangeText={setNextConfirm}
         placeholder="Confirm new password"
+        maxLength={128}
       />
       <Btn title={busy ? "…" : "Update password"} onPress={onPassword} disabled={busy} />
 

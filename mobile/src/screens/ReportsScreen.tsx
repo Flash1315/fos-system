@@ -119,6 +119,14 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
         URL.revokeObjectURL(url);
         Alert.alert("Fos", "CSV downloaded");
       } else {
+        const MAX_SHARE_CHARS = 80_000;
+        if (text.length > MAX_SHARE_CHARS) {
+          Alert.alert(
+            "Fos",
+            `Export is ~${Math.round(text.length / 1024)} KB — too large to share here. Narrow the date range or download from web.`,
+          );
+          return;
+        }
         const rows = Math.max(0, text.split("\n").length - 1);
         await Share.share({
           message: text,

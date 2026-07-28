@@ -36,18 +36,20 @@ def _utcnow() -> datetime:
 
 
 def _normalize_bike(bike: str | None) -> str:
-    cleaned = re.sub(r"\s+", " ", (bike or "").strip())
-    if _CTRL_RE.search(cleaned):
+    raw = bike or ""
+    if _CTRL_RE.search(raw):
         raise HTTPException(400, "bike contains invalid characters")
+    cleaned = re.sub(r"\s+", " ", raw.strip())
     if len(cleaned) > _BIKE_MAX:
         raise HTTPException(400, f"bike too long (max {_BIKE_MAX})")
     return cleaned
 
 
 def _normalize_spaced(value: str | None, *, field: str, max_len: int) -> str:
-    cleaned = re.sub(r"\s+", " ", (value or "").strip())
-    if _CTRL_RE.search(cleaned):
+    raw = value or ""
+    if _CTRL_RE.search(raw):
         raise HTTPException(400, f"{field} contains invalid characters")
+    cleaned = re.sub(r"\s+", " ", raw.strip())
     if len(cleaned) > max_len:
         raise HTTPException(400, f"{field} too long (max {max_len})")
     return cleaned
@@ -104,7 +106,10 @@ def _validate_occurred_at(value: datetime | None) -> datetime | None:
 
 
 def _normalize_category_purpose(kind: RecordKind, category: str, purpose: str) -> tuple[str, str]:
-    cat = re.sub(r"\s+", " ", (category or "").strip())
+    raw_cat = category or ""
+    if _CTRL_RE.search(raw_cat):
+        raise HTTPException(400, "category contains invalid characters")
+    cat = re.sub(r"\s+", " ", raw_cat.strip())
     if not cat:
         raise HTTPException(400, "category is required")
     if len(cat) > 120:

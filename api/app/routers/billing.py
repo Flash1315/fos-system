@@ -85,6 +85,14 @@ def set_plan(
 
     Even with the flag on, paid `pro` is refused until real billing exists.
     """
+    from app.services.locks import lock_organization
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"billing-plan:{user.organization_id}:{user.id}",
+        limit=10,
+        window_sec=60,
+    )
     if not settings.billing_plan_switch:
         raise HTTPException(
             400,
@@ -95,14 +103,6 @@ def set_plan(
             400,
             "Paid plans require billing integration — only free/trial available in stub mode",
         )
-    from app.services.locks import lock_organization
-    from app.services.rate_limit import enforce_rate_limit
-
-    enforce_rate_limit(
-        f"billing-plan:{user.organization_id}:{user.id}",
-        limit=10,
-        window_sec=60,
-    )
     org = lock_organization(db, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")

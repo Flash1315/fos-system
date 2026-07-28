@@ -150,6 +150,7 @@ export function InviteScreen({
             value={password}
             onChangeText={setPassword}
             placeholder="min 6 characters"
+            maxLength={128}
           />
           <Label>Confirm password</Label>
           <Field
@@ -157,6 +158,7 @@ export function InviteScreen({
             value={passwordConfirm}
             onChangeText={setPasswordConfirm}
             placeholder="repeat password"
+            maxLength={128}
           />
           <LinkText onPress={() => setShowPassword((v) => !v)}>
             {showPassword ? "Hide password" : "Show password"}

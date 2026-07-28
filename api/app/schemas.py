@@ -18,9 +18,11 @@ _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
 
 def _collapse_ws(v: str, *, max_len: int | None = None) -> str:
-    text = re.sub(r"\s+", " ", (v or "").strip())
-    if _CTRL_RE.search(text):
+    raw = v or ""
+    # Reject controls before whitespace collapse so VT/FF cannot vanish silently.
+    if _CTRL_RE.search(raw):
         raise ValueError("contains invalid control characters")
+    text = re.sub(r"\s+", " ", raw.strip())
     if max_len is not None:
         return text[:max_len]
     return text

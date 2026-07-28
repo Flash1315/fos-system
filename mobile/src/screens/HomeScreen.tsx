@@ -202,18 +202,30 @@ export function HomeScreen({
         text: "Send",
         onPress: async () => {
           if (requestBusy) return;
-          const slot = `${kind}:${amount}`;
-          if (requestSlotRef.current !== slot) {
-            requestSlotRef.current = slot;
-            requestIdemRef.current = null;
-          }
-          if (!requestIdemRef.current) requestIdemRef.current = makeIdempotencyKey("sreq");
           setRequestBusy(true);
           try {
+            const bal = await myBalance();
+            const freshAmount =
+              kind === "expense_payout"
+                ? bal.available_spendings ?? bal.spendings ?? 0
+                : bal.available_cash ?? bal.cash_on_hand ?? 0;
+            setAvailableSpend(bal.available_spendings ?? bal.spendings ?? 0);
+            setAvailableCash(bal.available_cash ?? bal.cash_on_hand ?? 0);
+            setCurrencyCode(bal.currency || currencyCode);
+            if (freshAmount <= 0) {
+              Alert.alert("Fos", "Nothing available to request now");
+              return;
+            }
+            const slot = `${kind}:${freshAmount}`;
+            if (requestSlotRef.current !== slot) {
+              requestSlotRef.current = slot;
+              requestIdemRef.current = null;
+            }
+            if (!requestIdemRef.current) requestIdemRef.current = makeIdempotencyKey("sreq");
             await requestSettlement(
               {
                 kind,
-                amount,
+                amount: freshAmount,
                 note:
                   kind === "expense_payout"
                     ? "quick request from home"

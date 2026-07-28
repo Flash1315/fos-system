@@ -790,10 +790,6 @@ export function myReport(period?: ReportPeriod | number) {
   return request<MyReport>(`/reports/me${reportQuery(period)}`);
 }
 
-export function exportReportCsv(period?: ReportPeriod | number) {
-  return `${API_URL}/reports/export.csv${reportQuery(period)}`;
-}
-
 export function downloadReportCsv(period?: ReportPeriod | number) {
   return requestText(`/reports/export.csv${reportQuery(period)}`);
 }

@@ -175,6 +175,7 @@ export function TransferScreen({
         value={email}
         onChangeText={setEmail}
         placeholder="colleague@example.com"
+        maxLength={254}
       />
       <Label>Amount</Label>
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />

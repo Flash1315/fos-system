@@ -87,7 +87,11 @@ def register_organization(body: OrgCreate, request: Request, db: Session = Depen
     currency = (body.currency or "IDR").strip().upper() or "IDR"
     org = Organization(name=body.name, slug=body.slug, currency=currency)
     db.add(org)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(400, "Organization slug already taken") from None
     owner = User(
         organization_id=org.id,
         email=body.owner_email.lower(),

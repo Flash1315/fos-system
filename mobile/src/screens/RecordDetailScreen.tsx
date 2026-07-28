@@ -629,6 +629,7 @@ export function RecordDetailScreen({
                 value={editOccurred}
                 onChangeText={setEditOccurred}
                 placeholder="leave empty = clear"
+                maxLength={10}
               />
               <Label>Receipt photo</Label>
               <Sub>{editPhotoUrl ? "Attached" : "None"}</Sub>

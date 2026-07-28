@@ -7,15 +7,26 @@ api/uploads/
 *.pyc
 
 # Secrets (never commit)
+.env
+**/.env
+!**/.env.example
 credentials.json
 **/credentials.json
 reference/**/.env
+*.pem
+google-services.json
+**/google-services.json
+GoogleService-Info.plist
+**/GoogleService-Info.plist
 
 # Node / Expo
 mobile/node_modules/
 mobile/.expo/
 mobile/dist/
 mobile/web-build/
+mobile/.env
+mobile/.env.*
+!mobile/.env.example
 *.jks
 *.p8
 *.p12

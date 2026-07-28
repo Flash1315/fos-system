@@ -17,7 +17,9 @@ USER fos
 
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
+# Single worker by default. For uvicorn --workers N set RATE_LIMIT_REDIS_URL and
+# size DB_POOL_SIZE so workers × (pool_size + max_overflow) fits your Postgres cap.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

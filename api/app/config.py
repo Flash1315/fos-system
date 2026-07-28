@@ -63,5 +63,11 @@ class Settings(BaseSettings):
     # Optional Redis for shared rate limits across workers
     rate_limit_redis_url: str = ""
 
+    # Logging / ops
+    log_format: str = "text"  # text | json
+    log_level: str = "INFO"
+    # If set, GET /metrics requires matching X-Metrics-Token (or Bearer)
+    metrics_token: str = ""
+
 
 settings = Settings()

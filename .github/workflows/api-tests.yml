@@ -72,8 +72,8 @@ jobs:
             fos-api
           ok=0
           for _ in $(seq 1 40); do
-            if curl -fsS http://127.0.0.1:8000/health | grep -q '"ok"'; then
-              curl -fsS http://127.0.0.1:8000/health
+            if curl -fsS http://127.0.0.1:8000/health/live | grep -q '"ok"'; then
+              curl -fsS http://127.0.0.1:8000/health/live
               ok=1
               break
             fi

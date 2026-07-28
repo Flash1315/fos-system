@@ -54,7 +54,9 @@ def _validate_runtime_settings() -> str:
                 "SECRET_KEY is insecure — set a strong SECRET_KEY (min 32 chars) in production"
             )
         if (settings.cors_origins or "").strip() == "*":
-            logger.warning("CORS_ORIGINS=* in production — set explicit origins")
+            raise RuntimeError(
+                "CORS_ORIGINS=* is not allowed in production — set explicit origins"
+            )
         if settings.trust_x_forwarded_for:
             cidrs = (settings.trusted_proxy_cidrs or "").strip()
             if not cidrs:
@@ -105,9 +107,42 @@ from app.routers import reports as reports_router
 from app.routers import team as team_router
 from app.routers import transfers as transfers_router
 
-Base.metadata.create_all(bind=engine)
-ensure_money_record_columns()
+# Dev/SQLite: create_all + additive migrate helpers. Production: Alembic only.
+if not _IS_PROD:
+    Base.metadata.create_all(bind=engine)
+    ensure_money_record_columns()
 run_alembic_upgrade()
+
+
+def _configure_logging() -> None:
+    level_name = (settings.log_level or "INFO").strip().upper()
+    level = getattr(logging, level_name, logging.INFO)
+    fmt = (settings.log_format or "text").strip().lower()
+    root = logging.getLogger()
+    if not root.handlers:
+        logging.basicConfig(level=level)
+    root.setLevel(level)
+    if fmt == "json":
+        class _JsonFormatter(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                import json
+                from datetime import datetime, timezone
+
+                payload = {
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "msg": record.getMessage(),
+                }
+                if record.exc_info:
+                    payload["exc_info"] = self.formatException(record.exc_info)
+                return json.dumps(payload, ensure_ascii=False)
+
+        for h in root.handlers:
+            h.setFormatter(_JsonFormatter())
+
+
+_configure_logging()
 
 app = FastAPI(
     title=settings.app_name,
@@ -174,6 +209,57 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers["X-Request-Id"] = request_id
         return response
+
+
+class RequestLogMetricsMiddleware(BaseHTTPMiddleware):
+    """Structured request log + in-process metrics (no Sentry/OTel required)."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        import json
+        import time
+
+        from app.services.metrics import observe_request
+
+        request_id = _ensure_request_id(request)
+        started = time.perf_counter()
+        status = 500
+        try:
+            response = await call_next(request)
+            status = int(response.status_code)
+            return response
+        finally:
+            duration_ms = (time.perf_counter() - started) * 1000.0
+            path = request.url.path
+            method = request.method
+            try:
+                observe_request(
+                    method=method, path=path, status=status, duration_ms=duration_ms
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            payload = {
+                "ts": __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .isoformat(),
+                "level": "INFO",
+                "msg": "request",
+                "request_id": request_id,
+                "method": method,
+                "path": path,
+                "status": status,
+                "duration_ms": round(duration_ms, 2),
+            }
+            if (settings.log_format or "text").strip().lower() == "json":
+                logger.info("%s", json.dumps(payload, ensure_ascii=False))
+            else:
+                logger.info(
+                    "request_id=%s method=%s path=%s status=%s duration_ms=%.2f",
+                    request_id,
+                    method,
+                    path,
+                    status,
+                    duration_ms,
+                )
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -267,6 +353,7 @@ class PublicAuthRateLimitMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(PublicAuthRateLimitMiddleware)
+app.add_middleware(RequestLogMetricsMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
 app.include_router(auth_router.router)
@@ -297,24 +384,32 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
-@app.get("/health")
-def health(request: Request):
+def _db_ping() -> str:
     from sqlalchemy import text
 
     from app.db import SessionLocal
-    from app.services.rate_limit import client_ip, enforce_rate_limit
-    from app.services.storage import media_backend
-    from app.version import APP_VERSION
 
-    enforce_rate_limit(f"health:{client_ip(request)}", limit=120, window_sec=60)
-
-    db_status = "ok"
     try:
         with SessionLocal() as session:
             session.execute(text("SELECT 1"))
+        return "ok"
     except Exception:  # noqa: BLE001
-        db_status = "error"
         logger.exception("health db check failed")
+        return "error"
+
+
+@app.get("/health/live")
+def health_live():
+    """Liveness — no DB, no rate limit (safe for orchestrator probes)."""
+    return {"ok": True, "app": settings.app_name, "version": APP_VERSION}
+
+
+@app.get("/health/ready")
+def health_ready(request: Request):
+    """Readiness — requires DB."""
+    from app.services.storage import media_backend
+
+    db_status = _db_ping()
     body = {
         "ok": db_status == "ok",
         "app": settings.app_name,
@@ -325,3 +420,36 @@ def health(request: Request):
     if db_status != "ok":
         return JSONResponse(status_code=503, content=body)
     return body
+
+
+@app.get("/health")
+def health(request: Request):
+    """Backward-compatible ready check (same as /health/ready)."""
+    return health_ready(request)
+
+
+@app.get("/metrics")
+def metrics(request: Request):
+    """Prometheus text metrics. Optional METRICS_TOKEN gate."""
+    from fastapi import HTTPException
+    from fastapi.responses import PlainTextResponse
+
+    from app.services.metrics import render_prometheus
+
+    expected = (settings.metrics_token or "").strip()
+    if expected:
+        got = (request.headers.get("x-metrics-token") or "").strip()
+        auth = (request.headers.get("authorization") or "").strip()
+        bearer = ""
+        if auth.lower().startswith("bearer "):
+            bearer = auth[7:].strip()
+        if got != expected and bearer != expected:
+            raise HTTPException(401, "Metrics token required")
+    limiter = "redis" if (settings.rate_limit_redis_url or "").strip() else "memory"
+    body = render_prometheus(
+        app=settings.app_name,
+        version=APP_VERSION,
+        db_ok=_db_ping() == "ok",
+        limiter=limiter,
+    )
+    return PlainTextResponse(body, media_type="text/plain; version=0.0.4")

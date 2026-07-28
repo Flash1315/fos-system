@@ -86,18 +86,33 @@ export function ApproveScreen({
 
   const approveAll = async () => {
     if (!rows.length) return;
-    setBusy(true);
-    try {
-      await decideBatch(
-        rows.map((r) => r.id),
-        true,
+    const closed = rows.filter((r) => r.is_in_closed_cycle);
+    const go = async () => {
+      setBusy(true);
+      try {
+        await decideBatch(
+          rows.map((r) => r.id),
+          true,
+        );
+        await reload();
+      } catch (e) {
+        Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      } finally {
+        setBusy(false);
+      }
+    };
+    if (closed.length > 0) {
+      Alert.alert(
+        "Fos",
+        `${closed.length} of ${rows.length} belong to a settled period and will not change current balances. Approve all anyway?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Approve all", onPress: () => void go() },
+        ],
       );
-      await reload();
-    } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-    } finally {
-      setBusy(false);
+      return;
     }
+    await go();
   };
 
   const rejectAll = async (note: string) => {

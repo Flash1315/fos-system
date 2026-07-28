@@ -36,6 +36,8 @@ export function BalancesScreen({
   const [adjFilter, setAdjFilter] = useState<"active" | "voided" | "all">("active");
   const [adjUserFilter, setAdjUserFilter] = useState<number | null>(null);
   const [adjTrackFilter, setAdjTrackFilter] = useState<"" | "cash_on_hand" | "spendings">("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const [userId, setUserId] = useState<number | null>(null);
   const [track, setTrack] = useState<"cash_on_hand" | "spendings">("spendings");
@@ -44,6 +46,7 @@ export function BalancesScreen({
 
   const reload = async () => {
     try {
+      setLoadError("");
       const voided =
         adjFilter === "voided" ? true : adjFilter === "active" ? false : undefined;
       const [list, org, adj] = await Promise.all([
@@ -60,7 +63,10 @@ export function BalancesScreen({
       setAdjustments(adj);
       if (userId == null && list[0]) setUserId(list[0].user_id);
     } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -276,7 +282,15 @@ export function BalancesScreen({
             <Sub>Tap to settle one teammate (uses available, not reserved).</Sub>
           </View>
         }
-        ListEmptyComponent={<Sub>No teammates</Sub>}
+        ListEmptyComponent={
+          <Sub>
+            {loading
+              ? "Loading..."
+              : loadError
+                ? `Could not load — ${loadError}`
+                : "No teammates"}
+          </Sub>
+        }
         renderItem={({ item }) => (
           <View style={styles.row}>
             <Text style={styles.name}>

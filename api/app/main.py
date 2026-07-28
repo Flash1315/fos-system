@@ -20,7 +20,7 @@ def _validate_runtime_settings() -> str:
         raise RuntimeError(
             f"ENVIRONMENT must be one of {sorted(_ALLOWED_ENVS)} (got {settings.environment!r})"
         )
-    secret = settings.secret_key or ""
+    secret = (settings.secret_key or "").strip()
     expire_min = int(settings.access_token_expire_minutes or 0)
     if expire_min <= 0:
         raise RuntimeError("ACCESS_TOKEN_EXPIRE_MINUTES must be > 0")
@@ -44,23 +44,30 @@ def _validate_runtime_settings() -> str:
     if media not in ("local", "s3"):
         raise RuntimeError(f"MEDIA_BACKEND must be local or s3 (got {settings.media_backend!r})")
     if env in ("prod", "production"):
-        if secret in _INSECURE_SECRETS or len(secret) < 32:
+        if not secret or secret in _INSECURE_SECRETS or len(secret) < 32:
             raise RuntimeError(
                 "SECRET_KEY is insecure — set a strong SECRET_KEY (min 32 chars) in production"
             )
         if (settings.cors_origins or "").strip() == "*":
             logger.warning("CORS_ORIGINS=* in production — set explicit origins")
-        if settings.trust_x_forwarded_for and not (settings.trusted_proxy_cidrs or "").strip():
-            logger.warning(
-                "TRUST_X_FORWARDED_FOR=true without TRUSTED_PROXY_CIDRS — "
-                "spoofable client IPs; set proxy CIDRs"
-            )
+        if settings.trust_x_forwarded_for:
+            cidrs = (settings.trusted_proxy_cidrs or "").strip()
+            if not cidrs:
+                raise RuntimeError(
+                    "TRUST_X_FORWARDED_FOR=true requires TRUSTED_PROXY_CIDRS in production"
+                )
+            from app.services.rate_limit import parse_proxy_cidrs
+
+            if not parse_proxy_cidrs(cidrs):
+                raise RuntimeError(
+                    "TRUSTED_PROXY_CIDRS has no valid CIDRs/IPs — fix before enabling XFF"
+                )
         if media == "s3" and not (settings.s3_bucket or "").strip():
             raise RuntimeError("MEDIA_BACKEND=s3 requires S3_BUCKET in production")
         db_url = (settings.database_url or "").strip().lower()
         if db_url.startswith("sqlite:"):
             logger.warning("DATABASE_URL uses SQLite in production — prefer PostgreSQL")
-    elif secret in _INSECURE_SECRETS:
+    elif not secret or secret in _INSECURE_SECRETS:
         logger.warning("SECRET_KEY is insecure — set a strong SECRET_KEY in production")
     elif media == "s3" and not (settings.s3_bucket or "").strip():
         logger.warning("MEDIA_BACKEND=s3 without S3_BUCKET — uploads may fall back to local")
@@ -89,7 +96,7 @@ run_alembic_upgrade()
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.7.43",
+    version="0.7.44",
     docs_url=None if _IS_PROD else "/docs",
     redoc_url=None if _IS_PROD else "/redoc",
     openapi_url=None if _IS_PROD else "/openapi.json",
@@ -294,7 +301,7 @@ def health(request: Request):
     body = {
         "ok": db_status == "ok",
         "app": settings.app_name,
-        "version": "0.7.43",
+        "version": "0.7.44",
         "db": db_status,
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }

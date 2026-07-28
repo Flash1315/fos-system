@@ -41,8 +41,24 @@ def require_org_member_capacity(
 
 
 def require_org_can_add_member(db: Session, org_id: int) -> int:
-    """Block invite / reactivate when the org is already at the soft ceiling."""
+    """Block invite when the org is already at the soft ceiling (all rows)."""
     count = count_org_members(db, org_id)
+    limit = org_member_limit()
+    if count >= limit:
+        raise HTTPException(
+            400,
+            f"Organization member limit reached (max {limit})",
+        )
+    return count
+
+
+def require_org_can_activate_member(db: Session, org_id: int) -> int:
+    """Block reactivate when active members are already at the soft ceiling.
+
+    Reactivation does not insert a row, so total membership may already equal the
+    limit when one seat is inactive.
+    """
+    count = count_org_members(db, org_id, active_only=True)
     limit = org_member_limit()
     if count >= limit:
         raise HTTPException(

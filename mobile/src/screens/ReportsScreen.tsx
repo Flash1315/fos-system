@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, Share, Text, StyleSheet, View } from "react-native";
 import { downloadReportCsv, orgReport, type OrgReport, type ReportPeriod } from "../api";
 import { Btn, Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
@@ -23,6 +23,7 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   const [exporting, setExporting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [refreshingPeriod, setRefreshingPeriod] = useState(false);
+  const reloadGen = useRef(0);
 
   useEffect(() => {
     const t = setTimeout(() => setDateFromDebounced(dateFrom.trim()), 400);
@@ -44,36 +45,45 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   };
 
   const reload = async () => {
+    const gen = ++reloadGen.current;
     try {
       if (custom) {
         const from = dateFromDebounced;
         const to = dateToDebounced;
         if (!from && !to) {
+          if (gen !== reloadGen.current) return;
           setLoadError("Enter from and/or to date (YYYY-MM-DD)");
           setReport(null);
           return;
         }
         if (from && !isValidYmd(from)) {
+          if (gen !== reloadGen.current) return;
           setLoadError("From date must be a real calendar day (YYYY-MM-DD)");
           return;
         }
         if (to && !isValidYmd(to)) {
+          if (gen !== reloadGen.current) return;
           setLoadError("To date must be a real calendar day (YYYY-MM-DD)");
           return;
         }
         if (from && to && from > to) {
+          if (gen !== reloadGen.current) return;
           setLoadError("From date must be on or before to date");
           return;
         }
       }
+      if (gen !== reloadGen.current) return;
       setLoadError("");
       setRefreshingPeriod(true);
-      setReport(await orgReport(period()));
+      const next = await orgReport(period());
+      if (gen !== reloadGen.current) return;
+      setReport(next);
     } catch (e) {
+      if (gen !== reloadGen.current) return;
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
-      setRefreshingPeriod(false);
+      if (gen === reloadGen.current) setRefreshingPeriod(false);
     }
   };
 

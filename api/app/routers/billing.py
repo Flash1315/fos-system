@@ -94,6 +94,9 @@ def set_plan(
         limit=10,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
     if not settings.billing_plan_switch:
         raise HTTPException(
             400,
@@ -127,6 +130,9 @@ def set_telegram_chat(
         limit=20,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
     org = lock_organization(db, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")
@@ -148,6 +154,9 @@ def test_telegram(
         limit=5,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
     if not telegram_configured():
         raise HTTPException(400, "TELEGRAM_BOT_TOKEN is not configured on the server")
     org = db.get(Organization, user.organization_id)

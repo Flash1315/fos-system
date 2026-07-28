@@ -8,7 +8,11 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 UPLOAD_ROOT = Path(__file__).resolve().parents[2] / "uploads"
-UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_upload_root() -> Path:
+    UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+    return UPLOAD_ROOT
 
 
 def media_backend() -> str:
@@ -48,7 +52,7 @@ def store_photo(org_id: int, filename: str, data: bytes, content_type: str = "im
         )
         logger.info("photo uploaded s3 bucket=%s", settings.s3_bucket)
         return f"/media/files/{org_id}/{filename}"
-    org_dir = UPLOAD_ROOT / str(org_id)
+    org_dir = ensure_upload_root() / str(org_id)
     org_dir.mkdir(parents=True, exist_ok=True)
     dest = org_dir / filename
     dest.write_bytes(data)
@@ -83,9 +87,13 @@ def load_photo(org_id: int, filename: str) -> tuple[bytes | None, str | None]:
         client = _s3_client()
         try:
             obj = client.get_object(Bucket=settings.s3_bucket, Key=key)
-            body = obj["Body"].read()
-            ctype = obj.get("ContentType") or "application/octet-stream"
-            return body, ctype
+            # Cap read to upload-sized objects; MIME from validated filename, not object meta.
+            max_bytes = 9 * 1024 * 1024
+            body = obj["Body"].read(max_bytes + 1)
+            if len(body) > max_bytes:
+                logger.warning("s3 object too large org=%s", org_id)
+                return None, None
+            return body, content_type_for(filename)
         except Exception as exc:  # noqa: BLE001
             logger.warning("s3 get failed org=%s err=%s", org_id, type(exc).__name__)
             return None, None

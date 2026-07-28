@@ -424,11 +424,11 @@ def create_record(
         if user.role not in (UserRole.owner, UserRole.manager):
             raise HTTPException(403, "Only managers can create on behalf")
         target = db.get(User, body.created_for_user_id)
+        if not target or target.organization_id != user.organization_id:
+            raise HTTPException(404, "Target user not found")
         from app.services.org_gates import require_member_ready
 
         require_member_ready(target, action="filing on their behalf")
-        if target.organization_id != user.organization_id:
-            raise HTTPException(404, "Target user not found")
         owner_id = target.id
         stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
         note = f"[filed by {user.full_name} {stamp}]"

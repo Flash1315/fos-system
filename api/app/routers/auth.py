@@ -297,12 +297,14 @@ def update_org(
     user: User = Depends(require_roles(UserRole.owner)),
 ):
     from app.services.locks import lock_organization
+    from app.services.org_gates import require_org_writable
 
     enforce_rate_limit(
         f"org-update:{user.organization_id}:{user.id}",
         limit=20,
         window_sec=60,
     )
+    require_org_writable(db, user.organization_id)
     org = lock_organization(db, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")

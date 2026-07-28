@@ -75,6 +75,10 @@ def _parse_networks(raw: str) -> list[ipaddress._BaseNetwork]:
     return nets
 
 
+def parse_proxy_cidrs(raw: str) -> list[ipaddress._BaseNetwork]:
+    """Public helper for startup validation of TRUSTED_PROXY_CIDRS."""
+    return _parse_networks(raw)
+
 def _ip_trusted(remote: str, cidrs: str) -> bool:
     try:
         addr = ipaddress.ip_address(remote)

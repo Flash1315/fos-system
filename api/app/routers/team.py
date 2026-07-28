@@ -22,7 +22,11 @@ from app.models import (
     User,
     UserRole,
 )
-from app.services.org_limits import require_org_can_add_member, require_org_member_capacity
+from app.services.org_limits import (
+    require_org_can_activate_member,
+    require_org_can_add_member,
+    require_org_member_capacity,
+)
 
 router = APIRouter(prefix="/orgs", tags=["team"])
 
@@ -101,6 +105,7 @@ def set_member_active(
     user: User = Depends(require_roles(UserRole.owner)),
 ):
     from app.services.locks import lock_organization, lock_users
+    from app.services.org_gates import require_org_writable
     from app.services.rate_limit import enforce_rate_limit
 
     enforce_rate_limit(
@@ -108,6 +113,7 @@ def set_member_active(
         limit=30,
         window_sec=60,
     )
+    require_org_writable(db, user.organization_id)
     lock_organization(db, user.organization_id)
     member = (
         db.query(User)
@@ -180,7 +186,7 @@ def set_member_active(
                 "(settle or adjust to zero first)",
             )
     if body.is_active and not member.is_active:
-        require_org_can_add_member(db, user.organization_id)
+        require_org_can_activate_member(db, user.organization_id)
         if member.must_set_password and not member.invite_token:
             raise HTTPException(
                 400,
@@ -216,6 +222,7 @@ def set_member_role(
     user: User = Depends(require_roles(UserRole.owner)),
 ):
     from app.services.locks import lock_organization
+    from app.services.org_gates import require_org_writable
     from app.services.rate_limit import enforce_rate_limit
 
     enforce_rate_limit(
@@ -223,6 +230,7 @@ def set_member_role(
         limit=30,
         window_sec=60,
     )
+    require_org_writable(db, user.organization_id)
     lock_organization(db, user.organization_id)
     member = (
         db.query(User)
@@ -267,6 +275,7 @@ def reset_member_password(
     user: User = Depends(require_roles(UserRole.owner)),
 ):
     from app.services.locks import lock_organization
+    from app.services.org_gates import require_org_writable
     from app.services.rate_limit import enforce_rate_limit
 
     enforce_rate_limit(
@@ -279,6 +288,7 @@ def reset_member_password(
         limit=5,
         window_sec=900,
     )
+    require_org_writable(db, user.organization_id)
     lock_organization(db, user.organization_id)
     member = (
         db.query(User)

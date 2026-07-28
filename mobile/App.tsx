@@ -3,6 +3,7 @@ import { Alert } from "react-native";
 import {
   clearToken,
   getToken,
+  logout,
   me,
   saveToken,
   setUnauthorizedHandler,
@@ -245,7 +246,7 @@ export default function App() {
             text: "Log out",
             style: "destructive",
             onPress: async () => {
-              await clearToken();
+              await logout();
               setUser(null);
               setScreen("auth");
             },

@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.28"
+    assert health.json()["version"] == "0.7.29"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -5160,7 +5160,7 @@ def test_login_slug_norm_telegram_and_security_headers(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.28"
+    assert health.json()["version"] == "0.7.29"
     assert health.headers.get("x-content-type-options") == "nosniff"
     assert health.headers.get("x-frame-options") == "DENY"
     assert health.headers.get("referrer-policy") == "no-referrer"
@@ -5227,7 +5227,7 @@ def test_login_bounds_password_same_and_transfer_email(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.28"
+    assert health.json()["version"] == "0.7.29"
     assert health.headers.get("cache-control") == "no-store"
 
     # Seed cash via income then transfer with mixed-case email
@@ -5330,4 +5330,72 @@ def test_idem_charset_invite_email_and_org_patch(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.28"
+    assert health.json()["version"] == "0.7.29"
+
+
+def test_logout_bike_normalize_and_register_slug(client):
+    owner = _register(client, "flow-0729", "v0729-owner@example.com")
+    token = owner["access_token"]
+    h = {"Authorization": f"Bearer {token}"}
+
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["version"] == "0.7.29"
+    assert health.json()["db"] == "ok"
+    assert health.json()["ok"] is True
+
+    # Mixed-case / spaced register slug+email already covered; bike collapse
+    fuel = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 40,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "  Scoot   One  ",
+            "liters": 3,
+            "odometer": 100,
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert fuel.status_code == 200, fuel.text
+    assert fuel.json()["bike"] == "Scoot One"
+
+    # Logout revokes prior token
+    out = client.post("/auth/logout", headers=h)
+    assert out.status_code == 200
+    assert out.json()["ok"] is True
+    me = client.get("/auth/me", headers=h)
+    assert me.status_code == 401
+
+    # Re-login works
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "v0729-owner@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-0729",
+        },
+    )
+    assert login.status_code == 200
+    h2 = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert client.get("/auth/me", headers=h2).status_code == 200
+
+    # OrgCreate slug/email normalize via register
+    reg = client.post(
+        "/orgs/register",
+        json={
+            "name": "Norm Co",
+            "slug": " Flow-0729b ",
+            "currency": "idr",
+            "owner_email": "  V0729b@Example.com ",
+            "owner_name": "Boss",
+            "owner_password": "secret12",
+            "owner_password_confirm": "secret12",
+        },
+    )
+    assert reg.status_code == 200, reg.text
+    assert reg.json()["organization_slug"] == "flow-0729b"
+    assert reg.json()["user"]["email"] == "v0729b@example.com"

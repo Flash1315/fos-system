@@ -141,6 +141,16 @@ export async function clearToken() {
   await storageDelete(TOKEN_KEY);
 }
 
+/** Revoke server-side tokens then clear local session. */
+export async function logout() {
+  try {
+    await request<{ ok: boolean }>("/auth/logout", { method: "POST" });
+  } catch {
+    /* still clear local token */
+  }
+  await clearToken();
+}
+
 export async function getToken() {
   if (cachedToken) return cachedToken;
   cachedToken = await storageGet(TOKEN_KEY);

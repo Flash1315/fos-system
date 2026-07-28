@@ -34,6 +34,13 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _normalize_bike(bike: str | None) -> str:
+    cleaned = re.sub(r"\s+", " ", (bike or "").strip())
+    if len(cleaned) > _BIKE_MAX:
+        raise HTTPException(400, f"bike too long (max {_BIKE_MAX})")
+    return cleaned
+
+
 def _append_text(existing: str | None, addition: str, *, label: str = "Comment") -> str:
     base = (existing or "").rstrip()
     add = (addition or "").strip()
@@ -361,6 +368,7 @@ def create_record(
         raise HTTPException(400, str(exc)) from exc
     photo_url = _validate_photo_url(body.photo_url, user.organization_id)
     occurred_at = _validate_occurred_at(body.occurred_at)
+    bike = _normalize_bike(body.bike)
     if body.created_for_user_id is not None:
         if user.role not in (UserRole.owner, UserRole.manager):
             raise HTTPException(403, "Only managers can create on behalf")
@@ -376,7 +384,7 @@ def create_record(
             db,
             user.organization_id,
             owner_id,
-            body.bike,
+            bike,
             body.odometer,
             at=occurred_at or _utcnow(),
         )
@@ -390,7 +398,7 @@ def create_record(
         category=category,
         purpose=purpose,
         place=body.place,
-        bike=body.bike,
+        bike=bike,
         comment=body_comment,
         photo_url=photo_url,
         liters=body.liters,
@@ -410,7 +418,7 @@ def create_record(
                 db,
                 user.organization_id,
                 owner_id,
-                body.bike,
+                bike,
                 body.odometer,
                 at=occurred_at or _utcnow(),
                 exclude_id=None,
@@ -648,9 +656,7 @@ def last_fuel_odometer(
         if not target or target.organization_id != user.organization_id:
             raise HTTPException(404, "User not found")
         owner_id = target.id
-    bike_key = (bike or "").strip()
-    if len(bike_key) > _BIKE_MAX:
-        raise HTTPException(400, f"bike too long (max {_BIKE_MAX} characters)")
+    bike_key = _normalize_bike(bike)
     when: datetime | None = None
     if (at or "").strip():
         raw = at.strip()
@@ -967,6 +973,8 @@ def update_pending_record(
         data["photo_url"] = _validate_photo_url(data["photo_url"] or "", user.organization_id)
     if "occurred_at" in data:
         data["occurred_at"] = _validate_occurred_at(data["occurred_at"])
+    if "bike" in data:
+        data["bike"] = _normalize_bike(data["bike"])
     if rec.kind == RecordKind.fuel:
         from app.services.locks import lock_users
 

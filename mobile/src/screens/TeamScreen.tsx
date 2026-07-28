@@ -227,6 +227,7 @@ export function TeamScreen({
         secureTextEntry
         confirmField
         minLength={6}
+        maxLength={128}
         label="New password"
         placeholder="min 6 characters"
         confirmLabel="Confirm password"
@@ -238,6 +239,10 @@ export function TeamScreen({
           if (id == null) return;
           if (!pwd || pwd.length < 6) {
             Alert.alert("Fos", "Password must be at least 6 characters");
+            return;
+          }
+          if (pwd.length > 128) {
+            Alert.alert("Fos", "Password is too long (max 128 characters)");
             return;
           }
           setBusy(true);

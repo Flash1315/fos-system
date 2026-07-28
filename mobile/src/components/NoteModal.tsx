@@ -17,6 +17,7 @@ export function NoteModal({
   confirmLabel = "Confirm",
   confirmPlaceholder = "repeat",
   minLength,
+  maxLength,
   confirmTitle = "Confirm",
   confirmVariant = "primary",
 }: {
@@ -33,6 +34,7 @@ export function NoteModal({
   confirmPlaceholder?: string;
   /** When required, minimum trimmed length (default 2; use 6 for passwords). */
   minLength?: number;
+  maxLength?: number;
   confirmTitle?: string;
   confirmVariant?: "primary" | "secondary" | "danger" | "ghost";
 }) {
@@ -105,6 +107,10 @@ export function NoteModal({
                       ? `Must be at least ${min} characters`
                       : `Add a short reason (min ${min} characters)`,
                   );
+                  return;
+                }
+                if (maxLength != null && trimmed.length > maxLength) {
+                  setError(`Must be at most ${maxLength} characters`);
                   return;
                 }
                 if (confirmField && trimmed !== confirmTrimmed) {

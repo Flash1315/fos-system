@@ -145,6 +145,13 @@ def create_adjustment(
         store_idem,
     )
     from app.services.money import round_money
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"adjustment-create:{manager.organization_id}:{manager.id}",
+        limit=60,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None

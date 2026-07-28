@@ -31,6 +31,16 @@ class OrgCreate(BaseModel):
     owner_password: str = Field(min_length=6, max_length=128)
     owner_password_confirm: str = Field(min_length=6, max_length=128)
 
+    @field_validator("slug", mode="before")
+    @classmethod
+    def slug_norm(cls, v):
+        return str(v or "").strip().lower()
+
+    @field_validator("owner_email", mode="before")
+    @classmethod
+    def owner_email_norm(cls, v):
+        return str(v or "").strip().lower()
+
     @field_validator("name", "owner_name")
     @classmethod
     def strip_required_name(cls, v: str) -> str:

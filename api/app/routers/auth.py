@@ -164,6 +164,20 @@ def me(user: User = Depends(get_current_user)):
     return UserOut.model_validate(user)
 
 
+@router.post("/auth/logout")
+def logout(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Revoke this account's access tokens on this device family (bumps token_version)."""
+    locked = db.query(User).filter(User.id == user.id).with_for_update().first()
+    if not locked:
+        raise HTTPException(404, "User not found")
+    bump_token_version(locked)
+    db.commit()
+    return {"ok": True}
+
+
 @router.post("/auth/password", response_model=TokenOut)
 def change_password(
     body: PasswordChangeIn,

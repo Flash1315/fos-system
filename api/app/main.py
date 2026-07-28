@@ -23,7 +23,7 @@ Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.7.28")
+app = FastAPI(title=settings.app_name, version="0.7.29")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 # Bearer-token auth does not use cookies; credentials+wildcard is unnecessary.
@@ -67,10 +67,22 @@ app.include_router(billing_router.router)
 
 @app.get("/health")
 def health():
+    from sqlalchemy import text
+
+    from app.db import SessionLocal
+
+    db_status = "ok"
+    try:
+        with SessionLocal() as session:
+            session.execute(text("SELECT 1"))
+    except Exception:  # noqa: BLE001
+        db_status = "error"
+        logger.exception("health db check failed")
     return {
-        "ok": True,
+        "ok": db_status == "ok",
         "app": settings.app_name,
-        "version": "0.7.28",
+        "version": "0.7.29",
+        "db": db_status,
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }
 

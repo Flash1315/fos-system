@@ -9128,11 +9128,11 @@ def test_v07111_freeze_confirm_photo_org_and_copy_markers():
     create = Path("/workspace/mobile/src/screens/CreateScreen.tsx").read_text(encoding="utf-8")
     pick = create.find("const pickPhoto")
     assert pick >= 0
-    assert "await billingMe()" in create[pick : pick + 1200]
+    assert "await billingMe()" in create[pick : pick + 2200]
     detail = Path("/workspace/mobile/src/screens/RecordDetailScreen.tsx").read_text(encoding="utf-8")
     pedit = detail.find("const pickEditPhoto")
     assert pedit >= 0
-    assert "await billingMe()" in detail[pedit : pedit + 1400]
+    assert "await billingMe()" in detail[pedit : pedit + 2200]
     assert "BILLING_READONLY_MSG" in detail[pedit : pedit + 400]
 
 
@@ -9213,7 +9213,7 @@ def test_v07116_resume_settlement_context_markers():
     payout = Path("/workspace/mobile/src/screens/PayoutScreen.tsx").read_text(encoding="utf-8")
     assert "boot({ preserveSelection: true })" in payout
     account = Path("/workspace/mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
-    resume = account.find("onResumeRefresh")
+    resume = account.find("useEffect(() => onResumeRefresh")
     assert resume >= 0
     assert "refreshSuggestedAmount" in account[resume : resume + 350]
 

@@ -549,6 +549,7 @@ export type BalanceAdjustment = {
   created_by: number;
   created_at: string;
   is_voided: boolean;
+  can_void?: boolean;
 };
 
 export function listAdjustments() {

@@ -7,9 +7,11 @@ import {
   listAdjustments,
   myOrg,
   teamBalances,
+  voidAdjustment,
   type BalanceAdjustment,
   type TeamBalance,
 } from "../api";
+import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney } from "../format";
 import { colors } from "../theme";
@@ -30,6 +32,7 @@ export function BalancesScreen({
   const [localBusy, setLocalBusy] = useState(false);
   const isBusy = busy ?? localBusy;
   const markBusy = setBusy ?? setLocalBusy;
+  const [voidId, setVoidId] = useState<number | null>(null);
 
   const [userId, setUserId] = useState<number | null>(null);
   const [track, setTrack] = useState<"cash_on_hand" | "spendings">("spendings");
@@ -122,7 +125,8 @@ export function BalancesScreen({
             <Text style={styles.title}>Team balances</Text>
             <Sub>
               Spendings = my pocket owed. Cash = held cash on hand. Opening/corrections change the
-              track without hitting P&L.
+              track without hitting P&L. Settled-period adjustments stay locked until that payout is
+              voided.
             </Sub>
             <Label>Opening / correction</Label>
             <View style={styles.chips}>
@@ -161,9 +165,20 @@ export function BalancesScreen({
               <>
                 <Label>Recent adjustments</Label>
                 {adjustments.map((a) => (
-                  <Text key={a.id} style={styles.adj}>
-                    {a.user_name} · {a.track} · {formatMoney(a.amount, currency)} — {a.note}
-                  </Text>
+                  <View key={a.id} style={styles.adjRow}>
+                    <Text style={styles.adj}>
+                      {a.user_name} · {a.track} · {formatMoney(a.amount, currency)} — {a.note}
+                      {!a.can_void ? " · locked" : ""}
+                    </Text>
+                    {!!a.can_void && (
+                      <Btn
+                        title="Void"
+                        variant="ghost"
+                        disabled={isBusy}
+                        onPress={() => setVoidId(a.id)}
+                      />
+                    )}
+                  </View>
                 ))}
               </>
             )}
@@ -199,6 +214,25 @@ export function BalancesScreen({
           </View>
         )}
       />
+      <NoteModal
+        visible={voidId != null}
+        title="Void adjustment"
+        onCancel={() => setVoidId(null)}
+        onSubmit={async (voidNote) => {
+          const id = voidId;
+          setVoidId(null);
+          if (id == null) return;
+          markBusy(true);
+          try {
+            await voidAdjustment(id, voidNote || "voided");
+            await reload();
+          } catch (e) {
+            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+          } finally {
+            markBusy(false);
+          }
+        }}
+      />
     </Screen>
   );
 }
@@ -206,7 +240,8 @@ export function BalancesScreen({
 const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 26, fontWeight: "700", marginVertical: 8 },
   chips: { flexDirection: "row", gap: 8, marginBottom: 8, flexWrap: "wrap" },
-  adj: { color: colors.muted, marginBottom: 4, fontSize: 13 },
+  adjRow: { marginBottom: 6 },
+  adj: { color: colors.muted, fontSize: 13 },
   row: {
     backgroundColor: colors.card,
     borderRadius: 12,

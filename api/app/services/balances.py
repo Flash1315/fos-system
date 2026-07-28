@@ -87,6 +87,32 @@ def can_void_record(db: Session, rec: MoneyRecord) -> bool:
     return not record_locked_by_settlement(db, rec)
 
 
+def settlement_kind_for_adjustment(track: AdjustmentTrack) -> PayoutKind:
+    if track == AdjustmentTrack.spendings:
+        return PayoutKind.expense_payout
+    return PayoutKind.income_handover
+
+
+def adjustment_locked_by_settlement(db: Session, adj: BalanceAdjustment) -> bool:
+    """True if a non-voided payout cutoff already includes this adjustment."""
+    if adj.is_voided:
+        return False
+    kind = settlement_kind_for_adjustment(adj.track)
+    cut = last_payout(db, adj.organization_id, adj.user_id, kind)
+    if cut is None:
+        return False
+    eff = adj.occurred_at or adj.created_at
+    if eff is None:
+        return False
+    return eff <= cut.created_at
+
+
+def can_void_adjustment(db: Session, adj: BalanceAdjustment) -> bool:
+    if adj.is_voided:
+        return False
+    return not adjustment_locked_by_settlement(db, adj)
+
+
 def _sum_adjustments(db: Session, org_id: int, user_id: int, track: AdjustmentTrack, since) -> float:
     q = db.query(func.coalesce(func.sum(BalanceAdjustment.amount), 0.0)).filter(
         BalanceAdjustment.organization_id == org_id,

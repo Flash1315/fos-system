@@ -1378,7 +1378,20 @@ def test_balance_adjustments_and_atomic_approve(client):
     bal = client.get("/records/balance/me", headers=h).json()
     assert bal["spendings"] == 0
 
-    # Void adjustment restores? (cash still open — void cash adj)
+    # Spendings adjustment is locked by the expense payout cycle
+    listed = client.get("/adjustments", headers=h).json()
+    spend_row = next(x for x in listed if x["id"] == adj.json()["id"])
+    assert spend_row["can_void"] is False
+    locked = client.post(
+        f"/adjustments/{adj.json()['id']}/void",
+        headers=h,
+        json={"note": "should fail"},
+    )
+    assert locked.status_code == 400
+
+    # Cash adjustment still open (no income_handover yet) — void restores float
+    cash_listed = next(x for x in listed if x["id"] == cash_adj.json()["id"])
+    assert cash_listed["can_void"] is True
     voided = client.post(
         f"/adjustments/{cash_adj.json()['id']}/void",
         headers=h,

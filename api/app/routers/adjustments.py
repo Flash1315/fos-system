@@ -10,6 +10,7 @@ from app.auth import get_current_user, require_roles
 from app.db import get_db
 from app.models import AdjustmentTrack, BalanceAdjustment, User, UserRole
 from app.routers.records import _utcnow
+from app.services.balances import can_void_adjustment
 
 router = APIRouter(prefix="/adjustments", tags=["adjustments"])
 
@@ -33,6 +34,7 @@ class AdjustmentOut(BaseModel):
     created_by: int
     created_at: datetime
     is_voided: bool = False
+    can_void: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -41,7 +43,7 @@ class VoidIn(BaseModel):
     note: str = Field(min_length=1, max_length=2000)
 
 
-def _out(row: BalanceAdjustment, user_name: str) -> AdjustmentOut:
+def _out(row: BalanceAdjustment, user_name: str, db: Session | None = None) -> AdjustmentOut:
     return AdjustmentOut(
         id=row.id,
         user_id=row.user_id,
@@ -53,6 +55,7 @@ def _out(row: BalanceAdjustment, user_name: str) -> AdjustmentOut:
         created_by=row.created_by,
         created_at=row.created_at,
         is_voided=bool(row.is_voided),
+        can_void=can_void_adjustment(db, row) if db is not None else False,
     )
 
 
@@ -71,7 +74,7 @@ def list_adjustments(
     out = []
     for r in rows:
         u = db.get(User, r.user_id)
-        out.append(_out(r, u.full_name if u else ""))
+        out.append(_out(r, u.full_name if u else "", db))
     return out
 
 
@@ -99,7 +102,7 @@ def create_adjustment(
     db.add(row)
     db.commit()
     db.refresh(row)
-    return _out(row, target.full_name)
+    return _out(row, target.full_name, db)
 
 
 @router.post("/{adjustment_id}/void", response_model=AdjustmentOut)
@@ -114,6 +117,11 @@ def void_adjustment(
         raise HTTPException(404, "Adjustment not found")
     if row.is_voided:
         raise HTTPException(400, "Already voided")
+    if not can_void_adjustment(db, row):
+        raise HTTPException(
+            400,
+            "Adjustment is locked by a later settlement. Void that payout first.",
+        )
     row.is_voided = True
     row.voided_at = _utcnow()
     row.voided_by = manager.id
@@ -121,4 +129,4 @@ def void_adjustment(
     db.commit()
     db.refresh(row)
     u = db.get(User, row.user_id)
-    return _out(row, u.full_name if u else "")
+    return _out(row, u.full_name if u else "", db)

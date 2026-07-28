@@ -1,7 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Share, Text, StyleSheet, View } from "react-native";
-import { useFocusEffect } from "../useFocus";
-import { exportReportCsv, getToken, orgReport, type OrgReport, type ReportPeriod } from "../api";
+import { downloadReportCsv, orgReport, type OrgReport, type ReportPeriod } from "../api";
 import { Btn, Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { colors } from "../theme";
 
@@ -17,13 +16,27 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   const [days, setDays] = useState<number | undefined>(undefined);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [dateFromDebounced, setDateFromDebounced] = useState("");
+  const [dateToDebounced, setDateToDebounced] = useState("");
   const [custom, setCustom] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [loadError, setLoadError] = useState("");
 
+  useEffect(() => {
+    const t = setTimeout(() => setDateFromDebounced(dateFrom.trim()), 400);
+    return () => clearTimeout(t);
+  }, [dateFrom]);
+  useEffect(() => {
+    const t = setTimeout(() => setDateToDebounced(dateTo.trim()), 400);
+    return () => clearTimeout(t);
+  }, [dateTo]);
+
   const period = (): ReportPeriod | undefined => {
-    if (custom && (dateFrom.trim() || dateTo.trim())) {
-      return { date_from: dateFrom.trim() || undefined, date_to: dateTo.trim() || undefined };
+    if (custom && (dateFromDebounced || dateToDebounced)) {
+      return {
+        date_from: dateFromDebounced || undefined,
+        date_to: dateToDebounced || undefined,
+      };
     }
     return days != null ? { days } : undefined;
   };
@@ -31,14 +44,18 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   const reload = async () => {
     try {
       if (custom) {
-        const from = dateFrom.trim();
-        const to = dateTo.trim();
+        const from = dateFromDebounced;
+        const to = dateToDebounced;
         if (from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) {
           setLoadError("From date must be YYYY-MM-DD");
           return;
         }
         if (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
           setLoadError("To date must be YYYY-MM-DD");
+          return;
+        }
+        if (from && to && from > to) {
+          setLoadError("From date must be on or before to date");
           return;
         }
       }
@@ -50,20 +67,14 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
     }
   };
 
-  useFocusEffect(reload);
-  React.useEffect(() => {
+  useEffect(() => {
     void reload();
-  }, [days, custom, dateFrom, dateTo]);
+  }, [days, custom, dateFromDebounced, dateToDebounced]);
 
   const onExport = async () => {
     setExporting(true);
     try {
-      const token = await getToken();
-      const res = await fetch(exportReportCsv(period()), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error(`Export failed (${res.status})`);
-      const text = await res.text();
+      const text = await downloadReportCsv(period());
       if (typeof document !== "undefined") {
         const blob = new Blob([text], { type: "text/csv" });
         const url = URL.createObjectURL(blob);
@@ -100,6 +111,12 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   } else if (report) {
     body = (
       <>
+        {!!loadError && (
+          <>
+            <Sub>Refresh failed — {loadError}</Sub>
+            <Btn title="Retry" variant="ghost" onPress={reload} />
+          </>
+        )}
         <Card>
           <Label>Net result (period)</Label>
           <Text style={styles.big}>
@@ -163,6 +180,7 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
             ))
           )}
         </Card>
+        <Btn title={exporting ? "…" : "Export CSV"} onPress={onExport} disabled={exporting} />
       </>
     );
   }
@@ -170,7 +188,7 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   return (
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
-      <Text style={styles.title}>Org report</Text>
+      <Label>Org reports</Label>
       <View style={styles.kinds}>
         {PERIODS.map((p) => (
           <Chip
@@ -193,22 +211,30 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
         />
       </View>
       {custom && (
-        <>
-          <Label>From (YYYY-MM-DD)</Label>
-          <Field autoCapitalize="none" value={dateFrom} onChangeText={setDateFrom} placeholder="optional" />
-          <Label>To (YYYY-MM-DD)</Label>
-          <Field autoCapitalize="none" value={dateTo} onChangeText={setDateTo} placeholder="optional" />
-        </>
+        <View style={styles.kinds}>
+          <Field
+            style={{ flex: 1 }}
+            value={dateFrom}
+            onChangeText={setDateFrom}
+            placeholder="From YYYY-MM-DD"
+            autoCapitalize="none"
+          />
+          <Field
+            style={{ flex: 1 }}
+            value={dateTo}
+            onChangeText={setDateTo}
+            placeholder="To YYYY-MM-DD"
+            autoCapitalize="none"
+          />
+        </View>
       )}
-      <Btn title={exporting ? "..." : "Export CSV"} variant="ghost" onPress={onExport} disabled={exporting} />
       {body}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.text, fontSize: 26, fontWeight: "700", marginVertical: 8 },
-  big: { color: colors.text, fontSize: 24, fontWeight: "700" },
-  line: { color: colors.text, marginTop: 6 },
   kinds: { flexDirection: "row", gap: 8, marginBottom: 8, flexWrap: "wrap" },
+  big: { color: colors.text, fontSize: 28, fontWeight: "700", marginBottom: 4 },
+  line: { color: colors.text, marginBottom: 4 },
 });

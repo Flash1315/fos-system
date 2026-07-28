@@ -49,6 +49,7 @@ export function AccountScreen({
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
   const [currency, setCurrency] = useState("IDR");
+  const [currencyLocked, setCurrencyLocked] = useState(false);
   const [cancelId, setCancelId] = useState<number | null>(null);
   const [teamReqFilter, setTeamReqFilter] = useState<"pending" | "approved" | "cancelled" | "all">(
     "pending",
@@ -64,6 +65,7 @@ export function AccountScreen({
       setOrgName(org.name);
       setOrgSlug(org.slug);
       setCurrency(org.currency || "IDR");
+      setCurrencyLocked(!!org.currency_locked);
     } catch {
       /* ignore */
     }
@@ -139,6 +141,7 @@ export function AccountScreen({
       const org = await updateOrg({ name: orgName.trim(), currency: currency.trim() || "IDR" });
       setOrgName(org.name);
       setCurrency(org.currency);
+      setCurrencyLocked(!!org.currency_locked);
       Alert.alert("Fos", "Company updated");
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -216,7 +219,11 @@ export function AccountScreen({
             onChangeText={setCurrency}
             placeholder="Currency (IDR)"
             autoCapitalize="characters"
+            editable={!currencyLocked}
           />
+          {currencyLocked ? (
+            <Sub>Currency locked after money activity — rename only.</Sub>
+          ) : null}
           <Btn title={busy ? "…" : "Save company"} onPress={onSaveOrg} disabled={busy} />
         </>
       )}
@@ -276,17 +283,26 @@ export function AccountScreen({
                 title="Cancel request"
                 variant="ghost"
                 disabled={busy}
-                onPress={async () => {
-                  setBusy(true);
-                  try {
-                    await cancelSettlementRequest(r.id);
-                    await refreshSuggestedAmount();
-                    await reloadRequests();
-                  } catch (e) {
-                    Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-                  } finally {
-                    setBusy(false);
-                  }
+                onPress={() => {
+                  Alert.alert("Fos", "Cancel this settlement request?", [
+                    { text: "Keep", style: "cancel" },
+                    {
+                      text: "Cancel request",
+                      style: "destructive",
+                      onPress: async () => {
+                        setBusy(true);
+                        try {
+                          await cancelSettlementRequest(r.id);
+                          await refreshSuggestedAmount();
+                          await reloadRequests();
+                        } catch (e) {
+                          Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+                        } finally {
+                          setBusy(false);
+                        }
+                      },
+                    },
+                  ]);
                 }}
               />
             )}

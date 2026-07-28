@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, View, StyleSheet } from "react-native";
-import { useFocusEffect } from "../useFocus";
 import { decideBatch, decideRecord, pendingRecords, type MoneyRecord } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Row, Screen, Sub, TopBar } from "../components/ui";
@@ -44,7 +43,6 @@ export function ApproveScreen({
     }
   };
 
-  useFocusEffect(reload);
   useEffect(() => {
     void reload();
   }, [purpose, kind]);
@@ -95,10 +93,16 @@ export function ApproveScreen({
     const go = async () => {
       setBusy(true);
       try {
-        await decideBatch(
+        const res = await decideBatch(
           rows.map((r) => r.id),
           true,
         );
+        if (res.skipped > 0) {
+          Alert.alert(
+            "Fos",
+            `Approved ${res.decided.length}; skipped ${res.skipped} (already decided or missing)`,
+          );
+        }
         await reload();
       } catch (e) {
         Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -127,11 +131,17 @@ export function ApproveScreen({
     if (!rows.length) return;
     setBusy(true);
     try {
-      await decideBatch(
+      const res = await decideBatch(
         rows.map((r) => r.id),
         false,
         note || "batch reject",
       );
+      if (res.skipped > 0) {
+        Alert.alert(
+          "Fos",
+          `Rejected ${res.decided.length}; skipped ${res.skipped} (already decided or missing)`,
+        );
+      }
       await reload();
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");

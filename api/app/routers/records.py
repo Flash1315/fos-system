@@ -13,6 +13,7 @@ from app.schemas import (
     CategoriesOut,
     CommentIn,
     DecideBatchIn,
+    DecideBatchOut,
     DecideIn,
     RecordCreate,
     RecordOut,
@@ -25,6 +26,23 @@ router = APIRouter(prefix="/records", tags=["records"])
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _normalize_category_purpose(kind: RecordKind, category: str, purpose: str) -> tuple[str, str]:
+    cat = (category or "").strip()
+    if not cat:
+        raise HTTPException(400, "category is required")
+    pur = (purpose or "").strip()
+    if kind in (RecordKind.expense, RecordKind.fuel):
+        if not pur:
+            pur = "Other"
+        if pur not in PURPOSES:
+            raise HTTPException(400, f"purpose must be one of {PURPOSES}")
+    elif kind == RecordKind.income:
+        # Income may omit purpose; keep empty or validate when set
+        if pur and pur not in PURPOSES:
+            raise HTTPException(400, f"purpose must be one of {PURPOSES}")
+    return cat, pur
 
 
 def _normalize_payment_fields(kind: RecordKind, source: str, method: str) -> tuple[str, str]:
@@ -163,6 +181,7 @@ def create_record(
     if body.approve_now and user.role not in (UserRole.owner, UserRole.manager):
         raise HTTPException(403, "Only managers can approve on create")
     source, method = _normalize_payment_fields(body.kind, body.payment_source, body.payment_method)
+    category, purpose = _normalize_category_purpose(body.kind, body.category, body.purpose)
     owner_id = user.id
     body_comment = body.comment
     if body.created_for_user_id is not None:
@@ -190,8 +209,8 @@ def create_record(
         status=RecordStatus.pending,
         amount=body.amount,
         currency=org.currency if org else "IDR",
-        category=body.category,
-        purpose=body.purpose,
+        category=category,
+        purpose=purpose,
         place=body.place,
         bike=body.bike,
         comment=body_comment,
@@ -376,7 +395,7 @@ def last_fuel_odometer(
     }
 
 
-@router.post("/decide-batch", response_model=list[RecordOut])
+@router.post("/decide-batch", response_model=DecideBatchOut)
 def decide_batch(
     body: DecideBatchIn,
     db: Session = Depends(get_db),
@@ -386,11 +405,14 @@ def decide_batch(
     if not body.approve and not (body.note or "").strip():
         raise HTTPException(400, "Reject requires a note")
     out = []
+    skipped = 0
     for rid in body.ids:
         rec = db.get(MoneyRecord, rid)
         if not rec or rec.organization_id != user.organization_id:
+            skipped += 1
             continue
         if rec.status != RecordStatus.pending:
+            skipped += 1
             continue
         if body.approve:
             _assert_cash_for_approve(db, rec)
@@ -400,10 +422,12 @@ def decide_batch(
         if body.note:
             rec.comment = (rec.comment + f"\n[review] {body.note}").strip()
         out.append(rec)
+    if not out:
+        raise HTTPException(400, "No pending records matched the given ids")
     db.commit()
     for rec in out:
         db.refresh(rec)
-    return [_record_out(db, r) for r in out]
+    return DecideBatchOut(decided=[_record_out(db, r) for r in out], skipped=skipped)
 
 
 @router.get("/{record_id}", response_model=RecordOut)
@@ -449,6 +473,12 @@ def update_pending_record(
             next_odo,
             exclude_id=rec.id,
         )
+    if "category" in data or "purpose" in data:
+        next_cat = data["category"] if "category" in data else rec.category
+        next_pur = data["purpose"] if "purpose" in data else rec.purpose
+        cat, pur = _normalize_category_purpose(rec.kind, next_cat or "", next_pur or "")
+        data["category"] = cat
+        data["purpose"] = pur
     for key, value in data.items():
         setattr(rec, key, value)
     # Re-normalize money fields after edit (create path already validates)

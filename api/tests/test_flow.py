@@ -1934,3 +1934,73 @@ def test_settlement_approve_payment_method(client):
     assert approved.status_code == 200, approved.text
     assert approved.json()["payment_method"] == "transfer"
 
+def test_category_required_and_purpose_default(client):
+    owner = _register(client, "flow-cat-req", "cat-req-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    bad = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 10, "category": "  "},
+    )
+    assert bad.status_code == 400
+    ok = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 10, "category": "Taxi"},
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["purpose"] == "Other"
+    bad_pur = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 10, "category": "Taxi", "purpose": "Nope"},
+    )
+    assert bad_pur.status_code == 400
+
+
+def test_decide_batch_reports_skipped(client):
+    owner = _register(client, "flow-batch-skip", "batch-skip-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    a = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 10, "category": "Taxi", "purpose": "Office"},
+    ).json()["id"]
+    b = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 20, "category": "Food", "purpose": "Office"},
+    ).json()["id"]
+    client.post(f"/records/{b}/decide", headers=h, json={"approve": True})
+    res = client.post(
+        "/records/decide-batch",
+        headers=h,
+        json={"ids": [a, b, 999999], "approve": True},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert len(body["decided"]) == 1
+    assert body["decided"][0]["id"] == a
+    assert body["skipped"] == 2
+    empty = client.post(
+        "/records/decide-batch",
+        headers=h,
+        json={"ids": [b, 999999], "approve": True},
+    )
+    assert empty.status_code == 400
+
+
+def test_org_currency_locked_flag(client):
+    owner = _register(client, "flow-cur-lock-flag", "cur-lock-flag@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    org = client.get("/orgs/me", headers=h).json()
+    assert org["currency_locked"] is False
+    assert org["currency"] == "IDR"
+    client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 5, "category": "Taxi", "purpose": "Other"},
+    )
+    org2 = client.get("/orgs/me", headers=h).json()
+    assert org2["currency_locked"] is True
+

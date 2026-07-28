@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
-import { useFocusEffect } from "../useFocus";
 import {
   createAdjustment,
   createPayout,
@@ -70,7 +69,6 @@ export function BalancesScreen({
     }
   };
 
-  useFocusEffect(reload);
   React.useEffect(() => {
     void reload();
   }, [adjFilter, adjUserFilter, adjTrackFilter]);

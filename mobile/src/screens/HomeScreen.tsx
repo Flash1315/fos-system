@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
-import { useFocusEffect } from "../useFocus";
 import { listMySettlementRequests, listSettlementRequests, myBalance, myOrg, myRecords, pendingRecords, requestSettlement, type MoneyRecord, type User } from "../api";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
@@ -136,7 +135,6 @@ export function HomeScreen({
     }
   };
 
-  useFocusEffect(reload);
   useEffect(() => {
     void reload();
   }, [status, purpose, searchDebounced]);

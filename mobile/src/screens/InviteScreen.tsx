@@ -21,24 +21,33 @@ export function InviteScreen({
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [orgSlug, setOrgSlug] = useState("");
+  const [slugError, setSlugError] = useState("");
   const [role, setRole] = useState<"employee" | "manager" | "owner">("employee");
   const roles =
     currentRole === "owner"
       ? (["employee", "manager", "owner"] as const)
       : (["employee", "manager"] as const);
 
+  const loadSlug = async () => {
+    try {
+      setSlugError("");
+      const org = await myOrg();
+      setOrgSlug(org.slug);
+    } catch (e) {
+      setOrgSlug("");
+      setSlugError(e instanceof Error ? e.message : "Could not load company slug");
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        const org = await myOrg();
-        setOrgSlug(org.slug);
-      } catch {
-        /* ignore */
-      }
-    })();
+    void loadSlug();
   }, []);
 
   const submit = async () => {
+    if (!orgSlug) {
+      Alert.alert("Fos", "Company slug not loaded — tap Retry first");
+      return;
+    }
     if (!email.trim() || !fullName.trim() || password.length < 6) {
       Alert.alert("Fos", "Name, email, and password (6+) required");
       return;
@@ -53,7 +62,7 @@ export function InviteScreen({
       });
       Alert.alert(
         "Fos",
-        `Teammate invited.\n\nShare login:\nSlug: ${orgSlug || "(your company slug)"}\nEmail: ${email.trim()}\nPassword: (the one you set)`,
+        `Teammate invited.\n\nShare login:\nSlug: ${orgSlug}\nEmail: ${email.trim()}\nPassword: (the one you set)`,
       );
       onDone();
     } catch (e) {
@@ -71,6 +80,12 @@ export function InviteScreen({
         They log in with company slug{orgSlug ? ` /${orgSlug}` : ""}, the email below, and the
         temporary password you set.
       </Sub>
+      {!!slugError && (
+        <>
+          <Sub>Could not load slug — {slugError}</Sub>
+          <Btn title="Retry" variant="ghost" onPress={loadSlug} />
+        </>
+      )}
       <Label>Full name</Label>
       <Field value={fullName} onChangeText={setFullName} />
       <Label>Email</Label>
@@ -91,7 +106,11 @@ export function InviteScreen({
           <Chip key={r} label={r} on={role === r} onPress={() => setRole(r)} />
         ))}
       </View>
-      <Btn title={busy ? "…" : "Send invite"} onPress={submit} disabled={busy} />
+      <Btn
+        title={busy ? "…" : "Send invite"}
+        onPress={submit}
+        disabled={busy || !orgSlug}
+      />
     </Screen>
   );
 }

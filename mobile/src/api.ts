@@ -5,6 +5,7 @@ export const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000
 
 const TOKEN_KEY = "fos_token";
 let cachedToken: string | null = null;
+const REQUEST_TIMEOUT_MS = 30000;
 
 export type User = {
   id: number;
@@ -106,7 +107,23 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...(await authHeaders()),
     ...((init.headers as Record<string, string>) || {}),
   };
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers,
+      signal: init.signal || controller.signal,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error("Request timed out — check connection and try again");
+    }
+    throw new Error(e instanceof Error ? e.message : "Network request failed");
+  } finally {
+    clearTimeout(timer);
+  }
   const text = await res.text();
   let data: unknown = null;
   try {
@@ -125,6 +142,49 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new Error(formatApiError(data, res.statusText || `HTTP ${res.status}`));
   }
   return data as T;
+}
+
+async function requestText(path: string, init: RequestInit = {}): Promise<string> {
+  const headers: Record<string, string> = {
+    ...(await authHeaders()),
+    ...((init.headers as Record<string, string>) || {}),
+  };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers,
+      signal: init.signal || controller.signal,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error("Request timed out — check connection and try again");
+    }
+    throw new Error(e instanceof Error ? e.message : "Network request failed");
+  } finally {
+    clearTimeout(timer);
+  }
+  const text = await res.text();
+  if (!res.ok) {
+    if (res.status === 401) {
+      try {
+        await clearToken();
+      } catch {
+        /* ignore */
+      }
+    }
+    let detail = text;
+    try {
+      const data = JSON.parse(text);
+      detail = formatApiError(data, res.statusText || `HTTP ${res.status}`);
+    } catch {
+      detail = res.statusText || `HTTP ${res.status}`;
+    }
+    throw new Error(detail);
+  }
+  return text;
 }
 
 function formatApiError(data: unknown, fallback: string): string {
@@ -186,11 +246,23 @@ export function changePassword(current_password: string, new_password: string) {
 }
 
 export function myOrg() {
-  return request<{ id: number; name: string; slug: string; currency: string }>("/orgs/me");
+  return request<{
+    id: number;
+    name: string;
+    slug: string;
+    currency: string;
+    currency_locked?: boolean;
+  }>("/orgs/me");
 }
 
 export function updateOrg(body: { name?: string; currency?: string }) {
-  return request<{ id: number; name: string; slug: string; currency: string }>("/orgs/me", {
+  return request<{
+    id: number;
+    name: string;
+    slug: string;
+    currency: string;
+    currency_locked?: boolean;
+  }>("/orgs/me", {
     method: "PATCH",
     body: JSON.stringify(body),
   });
@@ -401,7 +473,7 @@ export function decideRecord(id: number, approve: boolean, note = "") {
 }
 
 export function decideBatch(ids: number[], approve: boolean, note = "") {
-  return request<MoneyRecord[]>("/records/decide-batch", {
+  return request<{ decided: MoneyRecord[]; skipped: number }>("/records/decide-batch", {
     method: "POST",
     body: JSON.stringify({ ids, approve, note }),
   });
@@ -436,6 +508,10 @@ export function myReport(period?: ReportPeriod | number) {
 
 export function exportReportCsv(period?: ReportPeriod | number) {
   return `${API_URL}/reports/export.csv${reportQuery(period)}`;
+}
+
+export function downloadReportCsv(period?: ReportPeriod | number) {
+  return requestText(`/reports/export.csv${reportQuery(period)}`);
 }
 
 export function commentRecord(id: number, note: string) {

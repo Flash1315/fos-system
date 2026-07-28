@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
-import { useFocusEffect } from "../useFocus";
 import { listMembers, listMyPayouts, listOrgPayouts, voidPayout, type User } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Screen, Sub, TopBar } from "../components/ui";
@@ -44,14 +43,17 @@ export function PayoutHistoryScreen({
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [membersError, setMembersError] = useState("");
 
   useEffect(() => {
     if (!isManager) return;
     (async () => {
       try {
+        setMembersError("");
         setMembers(await listMembers());
-      } catch {
-        /* optional */
+      } catch (e) {
+        setMembers([]);
+        setMembersError(e instanceof Error ? e.message : "Failed to load teammates");
       }
     })();
   }, [isManager]);
@@ -81,8 +83,7 @@ export function PayoutHistoryScreen({
     }
   };
 
-  useFocusEffect(reload);
-  React.useEffect(() => {
+  useEffect(() => {
     void reload();
   }, [scope, voidFilter, kindFilter, userFilter]);
 
@@ -114,6 +115,9 @@ export function PayoutHistoryScreen({
           onPress={() => setKindFilter("income_handover")}
         />
       </View>
+      {isManager && scope === "org" && membersError ? (
+        <Sub>Teammate filter unavailable — {membersError}</Sub>
+      ) : null}
       {isManager && scope === "org" && members.length > 0 && (
         <View style={styles.kinds}>
           <Chip label="Anyone" on={userFilter == null} onPress={() => setUserFilter(null)} />

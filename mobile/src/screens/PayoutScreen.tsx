@@ -29,23 +29,31 @@ export function PayoutScreen({
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<"cash" | "transfer">("cash");
   const [note, setNote] = useState("");
+  const [booting, setBooting] = useState(true);
+  const [bootError, setBootError] = useState("");
 
   const reloadBalances = async () => {
     setBalances(await teamBalances());
   };
 
+  const boot = async () => {
+    try {
+      setBootError("");
+      const rows = await listMembers();
+      const active = rows.filter((m) => m.is_active !== false);
+      setMembers(active);
+      if (active[0]) setUserId(active[0].id);
+      await reloadBalances();
+    } catch (e) {
+      setBootError(e instanceof Error ? e.message : "Failed");
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBooting(false);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        const rows = await listMembers();
-        const active = rows.filter((m) => m.is_active !== false);
-        setMembers(active);
-        if (active[0]) setUserId(active[0].id);
-        await reloadBalances();
-      } catch (e) {
-        Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-      }
-    })();
+    void boot();
   }, []);
 
   const selectedBal = balances.find((b) => b.user_id === userId);
@@ -191,6 +199,24 @@ export function PayoutScreen({
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Settlements</Label>
+      {booting ? (
+        <Sub>Loading teammates…</Sub>
+      ) : bootError ? (
+        <>
+          <Sub>Could not load — {bootError}</Sub>
+          <Btn
+            title="Retry"
+            variant="ghost"
+            onPress={() => {
+              setBooting(true);
+              void boot();
+            }}
+          />
+        </>
+      ) : members.length === 0 ? (
+        <Sub>No active teammates to settle</Sub>
+      ) : (
+        <>
       <Sub>
         Amount defaults to available (track minus pending requests). Overpayment is allowed only for
         expense reimbursement when nothing is reserved. Cash handover cannot exceed available cash.
@@ -256,6 +282,8 @@ export function PayoutScreen({
       <Label>Note</Label>
       <Field value={note} onChangeText={setNote} />
       <Btn title={busy ? "…" : "Record settlement"} onPress={submit} disabled={busy} />
+        </>
+      )}
     </Screen>
   );
 }

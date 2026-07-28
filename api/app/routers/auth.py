@@ -12,11 +12,32 @@ from app.schemas import InviteIn, LoginIn, OrgCreate, OrgOut, OrgUpdate, Passwor
 router = APIRouter(tags=["auth"])
 
 
+def _currency_locked(db: Session, org_id: int) -> bool:
+    if db.query(MoneyRecord.id).filter(MoneyRecord.organization_id == org_id).first():
+        return True
+    if db.query(Payout.id).filter(Payout.organization_id == org_id).first():
+        return True
+    if db.query(BalanceAdjustment.id).filter(BalanceAdjustment.organization_id == org_id).first():
+        return True
+    return False
+
+
+def _org_out(db: Session, org: Organization) -> OrgOut:
+    return OrgOut(
+        id=org.id,
+        name=org.name,
+        slug=org.slug,
+        currency=org.currency,
+        currency_locked=_currency_locked(db, org.id),
+    )
+
+
 @router.post("/orgs/register", response_model=TokenOut)
 def register_organization(body: OrgCreate, db: Session = Depends(get_db)):
     if db.query(Organization).filter(Organization.slug == body.slug).first():
         raise HTTPException(400, "Organization slug already taken")
-    org = Organization(name=body.name, slug=body.slug, currency=body.currency)
+    currency = (body.currency or "IDR").strip().upper() or "IDR"
+    org = Organization(name=body.name, slug=body.slug, currency=currency)
     db.add(org)
     db.flush()
     owner = User(
@@ -85,7 +106,7 @@ def my_org(user: User = Depends(get_current_user), db: Session = Depends(get_db)
     org = db.get(Organization, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")
-    return OrgOut.model_validate(org)
+    return _org_out(db, org)
 
 
 @router.patch("/orgs/me", response_model=OrgOut)
@@ -102,23 +123,10 @@ def update_org(
         org.name = data["name"].strip()
     if "currency" in data and data["currency"] is not None:
         new_currency = data["currency"].strip().upper()
+        if not new_currency:
+            raise HTTPException(400, "currency is required")
         if new_currency != org.currency:
-            has_records = (
-                db.query(MoneyRecord.id)
-                .filter(MoneyRecord.organization_id == org.id)
-                .first()
-                is not None
-            )
-            has_payouts = (
-                db.query(Payout.id).filter(Payout.organization_id == org.id).first() is not None
-            )
-            has_adjustments = (
-                db.query(BalanceAdjustment.id)
-                .filter(BalanceAdjustment.organization_id == org.id)
-                .first()
-                is not None
-            )
-            if has_records or has_payouts or has_adjustments:
+            if _currency_locked(db, org.id):
                 raise HTTPException(
                     400,
                     "Currency cannot change after money activity exists",
@@ -126,7 +134,7 @@ def update_org(
             org.currency = new_currency
     db.commit()
     db.refresh(org)
-    return OrgOut.model_validate(org)
+    return _org_out(db, org)
 
 
 @router.post("/orgs/invite", response_model=UserOut)

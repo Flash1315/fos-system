@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, StyleSheet, View } from "react-native";
-import { useFocusEffect } from "../useFocus";
 import { listMembers, orgRecords, type MoneyRecord, type User } from "../api";
 import { Chip, Field, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
@@ -61,7 +60,6 @@ export function LedgerScreen({
     }
   };
 
-  useFocusEffect(reload);
   useEffect(() => {
     void reload();
   }, [status, kind, purpose, memberId, searchDebounced]);

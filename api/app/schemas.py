@@ -20,6 +20,7 @@ class OrgOut(BaseModel):
     name: str
     slug: str
     currency: str
+    currency_locked: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -162,6 +163,11 @@ class DecideBatchIn(BaseModel):
     ids: list[int] = Field(min_length=1)
     approve: bool
     note: str = ""
+
+
+class DecideBatchOut(BaseModel):
+    decided: list[RecordOut]
+    skipped: int = 0
 
 
 class CommentIn(BaseModel):

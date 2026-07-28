@@ -14,9 +14,11 @@ import {
   type User,
 } from "../api";
 import { NoteModal } from "../components/NoteModal";
-import { Btn, Card, Field, Label, Row, Screen, Sub, TopBar } from "../components/ui";
+import { Btn, Card, Chip, Field, Label, Row, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
+
+const PURPOSES = ["Rental", "Lesson", "Office", "Other"] as const;
 
 export function RecordDetailScreen({
   id,
@@ -39,10 +41,36 @@ export function RecordDetailScreen({
   const [editAmount, setEditAmount] = useState("");
   const [editPlace, setEditPlace] = useState("");
   const [editComment, setEditComment] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editPurpose, setEditPurpose] = useState("Other");
+  const [editPaymentSource, setEditPaymentSource] = useState<"my_pocket" | "cash_on_hand">(
+    "my_pocket",
+  );
+  const [editPaymentMethod, setEditPaymentMethod] = useState<"cash" | "transfer">("cash");
+  const [editClient, setEditClient] = useState("");
+  const [editLiters, setEditLiters] = useState("");
+  const [editOdometer, setEditOdometer] = useState("");
+  const [editBike, setEditBike] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const isManager = user.role === "owner" || user.role === "manager";
+
+  const applyEditFields = (row: MoneyRecord) => {
+    setEditAmount(String(row.amount));
+    setEditPlace(row.place || "");
+    setEditComment(row.comment || "");
+    setEditCategory(row.category || "");
+    setEditPurpose(row.purpose || "Other");
+    setEditPaymentSource(
+      row.payment_source === "cash_on_hand" ? "cash_on_hand" : "my_pocket",
+    );
+    setEditPaymentMethod(row.payment_method === "transfer" ? "transfer" : "cash");
+    setEditClient(row.client_name || "");
+    setEditLiters(row.liters != null ? String(row.liters) : "");
+    setEditOdometer(row.odometer != null ? String(row.odometer) : "");
+    setEditBike(row.bike || "");
+  };
 
   const reload = async () => {
     try {
@@ -50,9 +78,7 @@ export function RecordDetailScreen({
       const [row, t] = await Promise.all([getRecord(id), getToken()]);
       setToken(t);
       setRec(row);
-      setEditAmount(String(row.amount));
-      setEditPlace(row.place || "");
-      setEditComment(row.comment || "");
+      applyEditFields(row);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -78,6 +104,13 @@ export function RecordDetailScreen({
           },
         ],
       );
+      return;
+    }
+    if (approve) {
+      Alert.alert("Fos", "Approve this record?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Approve", onPress: () => void doDecide(true, note) },
+      ]);
       return;
     }
     await doDecide(approve, note);
@@ -144,14 +177,49 @@ export function RecordDetailScreen({
       Alert.alert("Fos", "Enter a valid amount");
       return;
     }
+    if (!editCategory.trim()) {
+      Alert.alert("Fos", "Category is required");
+      return;
+    }
+    const body: Parameters<typeof updateRecord>[1] = {
+      amount: value,
+      place: editPlace,
+      comment: editComment,
+      category: editCategory.trim(),
+    };
+    if (rec?.kind === "expense" || rec?.kind === "fuel") {
+      body.purpose = editPurpose;
+      body.payment_source = editPaymentSource;
+    }
+    if (rec?.kind === "income") {
+      body.payment_method = editPaymentMethod;
+      body.client_name = editClient;
+      if (editPurpose) body.purpose = editPurpose;
+    }
+    if (rec?.kind === "fuel") {
+      body.bike = editBike;
+      const liters = Number(editLiters.replace(",", "."));
+      const odo = Number(editOdometer.replace(",", "."));
+      if (editLiters.trim()) {
+        if (!liters || liters <= 0) {
+          Alert.alert("Fos", "Liters must be a positive number");
+          return;
+        }
+        body.liters = liters;
+      }
+      if (editOdometer.trim()) {
+        if (Number.isNaN(odo) || odo < 0) {
+          Alert.alert("Fos", "Odometer must be a number");
+          return;
+        }
+        body.odometer = odo;
+      }
+    }
     setBusy(true);
     try {
-      const updated = await updateRecord(id, {
-        amount: value,
-        place: editPlace,
-        comment: editComment,
-      });
+      const updated = await updateRecord(id, body);
       setRec(updated);
+      applyEditFields(updated);
       setEditing(false);
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -298,6 +366,64 @@ export function RecordDetailScreen({
             <Card>
               <Label>Edit amount</Label>
               <Field keyboardType="decimal-pad" value={editAmount} onChangeText={setEditAmount} />
+              <Label>Category</Label>
+              <Field value={editCategory} onChangeText={setEditCategory} />
+              {(rec.kind === "expense" || rec.kind === "fuel") && (
+                <>
+                  <Label>Purpose</Label>
+                  <Row>
+                    {PURPOSES.map((p) => (
+                      <Chip key={p} label={p} on={editPurpose === p} onPress={() => setEditPurpose(p)} />
+                    ))}
+                  </Row>
+                  <Label>Payment source</Label>
+                  <Row>
+                    <Chip
+                      label="My pocket"
+                      on={editPaymentSource === "my_pocket"}
+                      onPress={() => setEditPaymentSource("my_pocket")}
+                    />
+                    <Chip
+                      label="Cash on hand"
+                      on={editPaymentSource === "cash_on_hand"}
+                      onPress={() => setEditPaymentSource("cash_on_hand")}
+                    />
+                  </Row>
+                </>
+              )}
+              {rec.kind === "income" && (
+                <>
+                  <Label>Payment method</Label>
+                  <Row>
+                    <Chip
+                      label="Cash"
+                      on={editPaymentMethod === "cash"}
+                      onPress={() => setEditPaymentMethod("cash")}
+                    />
+                    <Chip
+                      label="Transfer"
+                      on={editPaymentMethod === "transfer"}
+                      onPress={() => setEditPaymentMethod("transfer")}
+                    />
+                  </Row>
+                  <Label>Client</Label>
+                  <Field value={editClient} onChangeText={setEditClient} />
+                </>
+              )}
+              {rec.kind === "fuel" && (
+                <>
+                  <Label>Bike</Label>
+                  <Field value={editBike} onChangeText={setEditBike} />
+                  <Label>Liters</Label>
+                  <Field keyboardType="decimal-pad" value={editLiters} onChangeText={setEditLiters} />
+                  <Label>Odometer</Label>
+                  <Field
+                    keyboardType="decimal-pad"
+                    value={editOdometer}
+                    onChangeText={setEditOdometer}
+                  />
+                </>
+              )}
               <Label>Place</Label>
               <Field value={editPlace} onChangeText={setEditPlace} />
               <Label>Comment</Label>

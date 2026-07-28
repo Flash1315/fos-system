@@ -1,6 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Text, StyleSheet, View } from "react-native";
-import { useFocusEffect } from "../useFocus";
 import { myReport, type MyReport, type ReportPeriod } from "../api";
 import { Btn, Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { colors } from "../theme";
@@ -17,12 +16,26 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
   const [days, setDays] = useState<number | undefined>(undefined);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [dateFromDebounced, setDateFromDebounced] = useState("");
+  const [dateToDebounced, setDateToDebounced] = useState("");
   const [custom, setCustom] = useState(false);
   const [loadError, setLoadError] = useState("");
 
+  useEffect(() => {
+    const t = setTimeout(() => setDateFromDebounced(dateFrom.trim()), 400);
+    return () => clearTimeout(t);
+  }, [dateFrom]);
+  useEffect(() => {
+    const t = setTimeout(() => setDateToDebounced(dateTo.trim()), 400);
+    return () => clearTimeout(t);
+  }, [dateTo]);
+
   const period = (): ReportPeriod | undefined => {
-    if (custom && (dateFrom.trim() || dateTo.trim())) {
-      return { date_from: dateFrom.trim() || undefined, date_to: dateTo.trim() || undefined };
+    if (custom && (dateFromDebounced || dateToDebounced)) {
+      return {
+        date_from: dateFromDebounced || undefined,
+        date_to: dateToDebounced || undefined,
+      };
     }
     return days != null ? { days } : undefined;
   };
@@ -30,14 +43,18 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
   const reload = async () => {
     try {
       if (custom) {
-        const from = dateFrom.trim();
-        const to = dateTo.trim();
+        const from = dateFromDebounced;
+        const to = dateToDebounced;
         if (from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) {
           setLoadError("From date must be YYYY-MM-DD");
           return;
         }
         if (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
           setLoadError("To date must be YYYY-MM-DD");
+          return;
+        }
+        if (from && to && from > to) {
+          setLoadError("From date must be on or before to date");
           return;
         }
       }
@@ -49,10 +66,9 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
     }
   };
 
-  useFocusEffect(reload);
-  React.useEffect(() => {
+  useEffect(() => {
     void reload();
-  }, [days, custom, dateFrom, dateTo]);
+  }, [days, custom, dateFromDebounced, dateToDebounced]);
 
   let body: React.ReactNode = null;
   if (!report && !loadError) {
@@ -67,6 +83,12 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
   } else if (report) {
     body = (
       <>
+        {!!loadError && (
+          <>
+            <Sub>Refresh failed — {loadError}</Sub>
+            <Btn title="Retry" variant="ghost" onPress={reload} />
+          </>
+        )}
         <Card>
           <Label>Cash on hand</Label>
           <Text style={styles.big}>

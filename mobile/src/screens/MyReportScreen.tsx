@@ -29,6 +29,18 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
 
   const reload = async () => {
     try {
+      if (custom) {
+        const from = dateFrom.trim();
+        const to = dateTo.trim();
+        if (from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+          setLoadError("From date must be YYYY-MM-DD");
+          return;
+        }
+        if (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+          setLoadError("To date must be YYYY-MM-DD");
+          return;
+        }
+      }
       setLoadError("");
       setReport(await myReport(period()));
     } catch (e) {

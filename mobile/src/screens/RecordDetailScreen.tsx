@@ -278,8 +278,12 @@ export function RecordDetailScreen({
         title="Reject record"
         onCancel={() => setRejectOpen(false)}
         onSubmit={async (note) => {
+          if (!note.trim()) {
+            Alert.alert("Fos", "Reject requires a note");
+            return;
+          }
           setRejectOpen(false);
-          await decide(false, note);
+          await decide(false, note.trim());
         }}
       />
       <NoteModal

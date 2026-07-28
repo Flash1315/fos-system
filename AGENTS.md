@@ -13,7 +13,7 @@ Stack: **FastAPI API** + **Expo mobile**. Built to sell to any small team.
 ## Layout
 ```
 api/                         Fos FastAPI app (ship this)
-api/app/routers/             auth, records, team, reports, media
+api/app/routers/             auth, records, team, reports, media, transfers, payouts, adjustments
 mobile/                      Fos Expo app (ship this)
 docs/                        Fos product + how to use RJ reference
 docs/PRODUCT.md              Product logic and domain rules

@@ -1151,6 +1151,10 @@ def test_safe_payout_void_and_transfer_pair(client):
         json={"user_id": uid, "kind": "expense_payout", "amount": 500},
     ).json()
     assert p2["can_void"] is True
+    listed = client.get("/payouts/org", headers=h).json()
+    older_row = next(x for x in listed if x["id"] == p1["id"])
+    assert older_row["can_void"] is False
+    assert older_row["void_blocked_reason"]
     older = client.post(f"/payouts/{p1['id']}/void", headers=h, json={"note": "old"})
     assert older.status_code == 400
     latest = client.post(f"/payouts/{p2['id']}/void", headers=h, json={"note": "latest ok"})

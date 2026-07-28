@@ -21,6 +21,7 @@ type PayoutRow = {
   is_voided?: boolean;
   void_note?: string;
   can_void?: boolean;
+  void_blocked_reason?: string | null;
   created_at: string;
 };
 
@@ -101,6 +102,12 @@ export function PayoutHistoryScreen({
                 onPress={() => setVoidId(item.id)}
               />
             )}
+            {isManager &&
+              !item.is_voided &&
+              !item.can_void &&
+              !!item.void_blocked_reason && (
+                <Text style={styles.rowMeta}>{item.void_blocked_reason}</Text>
+              )}
           </View>
         )}
       />

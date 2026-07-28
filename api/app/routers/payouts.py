@@ -46,6 +46,7 @@ class PayoutOut(BaseModel):
     voided_at: datetime | None = None
     void_note: str = ""
     can_void: bool = False
+    void_blocked_reason: str | None = None
     created_by: int
     created_at: datetime
 
@@ -84,6 +85,12 @@ def _can_void_payout(db: Session, row: Payout) -> bool:
     return latest is not None and latest.id == row.id
 
 
+def _payout_void_blocked_reason(db: Session, row: Payout) -> str | None:
+    if row.is_voided or _can_void_payout(db, row):
+        return None
+    return "Only the latest settlement of this kind can be voided."
+
+
 def _payout_out(db: Session, row: Payout, user_name: str) -> PayoutOut:
     return PayoutOut(
         id=row.id,
@@ -100,6 +107,7 @@ def _payout_out(db: Session, row: Payout, user_name: str) -> PayoutOut:
         voided_at=row.voided_at,
         void_note=row.void_note or "",
         can_void=_can_void_payout(db, row),
+        void_blocked_reason=_payout_void_blocked_reason(db, row),
         created_by=row.created_by,
         created_at=row.created_at,
     )

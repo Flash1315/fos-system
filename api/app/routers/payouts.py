@@ -639,6 +639,9 @@ def batch_pay_all_spendings(
                 cached = loads_json(hit.response_json)
                 if isinstance(cached, list):
                     return [PayoutOut.model_validate(item) for item in cached]
+    from app.services.org_limits import require_org_member_capacity
+
+    require_org_member_capacity(db, manager.organization_id, active_only=True)
     members = (
         db.query(User)
         .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
@@ -749,6 +752,9 @@ def batch_take_all_cash(
                 cached = loads_json(hit.response_json)
                 if isinstance(cached, list):
                     return [PayoutOut.model_validate(item) for item in cached]
+    from app.services.org_limits import require_org_member_capacity
+
+    require_org_member_capacity(db, manager.organization_id, active_only=True)
     members = (
         db.query(User)
         .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))

@@ -12,8 +12,9 @@ from fastapi import HTTPException, Request
 from app.config import settings
 
 # Drop keys with no recent hits once the map grows.
-_PRUNE_AFTER_KEYS = 2048
-_PRUNE_IDLE_SEC = 900
+# Process-local only — under N workers effective limit is ~N× configured.
+_PRUNE_AFTER_KEYS = 512
+_PRUNE_IDLE_SEC = 600
 
 
 class FixedWindowLimiter:

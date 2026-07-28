@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -5160,7 +5160,7 @@ def test_login_slug_norm_telegram_and_security_headers(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
     assert health.headers.get("x-content-type-options") == "nosniff"
     assert health.headers.get("x-frame-options") == "DENY"
     assert health.headers.get("referrer-policy") == "no-referrer"
@@ -5227,7 +5227,7 @@ def test_login_bounds_password_same_and_transfer_email(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
     assert health.headers.get("cache-control") == "no-store"
 
     # Seed cash via income then transfer with mixed-case email
@@ -5330,7 +5330,7 @@ def test_idem_charset_invite_email_and_org_patch(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
 
 
 def test_logout_bike_normalize_and_register_slug(client):
@@ -5340,7 +5340,7 @@ def test_logout_bike_normalize_and_register_slug(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
     assert health.json()["db"] == "ok"
     assert health.json()["ok"] is True
 
@@ -5407,7 +5407,7 @@ def test_place_client_normalize_and_coop_header(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
     assert health.headers.get("cross-origin-opener-policy") == "same-origin"
 
     rec = client.post(
@@ -5462,7 +5462,7 @@ def test_slug_shape_category_collapse(client):
     owner = _register(client, "flow-0731", "v0731-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
 
     rec = client.post(
         "/records",
@@ -5493,7 +5493,7 @@ def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
     """v0.7.32: X-Request-Id, note whitespace collapse, team mutation rate limit."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
     assert "X-Request-Id" in health.headers
     rid = health.headers["X-Request-Id"]
     assert len(rid) >= 8
@@ -5617,7 +5617,7 @@ def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
 def test_list_rate_limits_comment_collapse_batch_method(client, monkeypatch):
     """v0.7.33: list GET rate limits, decide/comment collapse, batch payment_method."""
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
     assert "X-Request-Id" in health.headers
 
     owner = _register(client, "flow-0733", "v0733-owner@example.com")
@@ -5681,7 +5681,7 @@ def test_list_rate_limits_comment_collapse_batch_method(client, monkeypatch):
 def test_control_chars_read_limits_and_request_id_header(client, monkeypatch):
     """v0.7.34: reject control chars, rate-limit remaining reads."""
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
     assert health.headers.get("X-Request-Id")
 
     owner = _register(client, "flow-0734", "v0734-owner@example.com")
@@ -5754,7 +5754,7 @@ def test_health_controls_before_collapse_and_export_names(client, monkeypatch):
     """v0.7.35: health readiness, control-char order, CSV export still works."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
     assert health.json()["ok"] is True
     assert health.json()["db"] == "ok"
 
@@ -5816,7 +5816,7 @@ def test_login_timing_media_token_bound_and_export_cap(client):
     """v0.7.36: dummy-hash login path, media token bound, health version."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
 
     # Missing account still 401 (dummy hash path)
     missing = client.post(
@@ -5845,7 +5845,7 @@ def test_preauth_429_body_limit_purpose_and_settings(client, monkeypatch, tmp_pa
     """v0.7.37: middleware 429 JSON, body size, purpose reject, settings guard."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.37"
+    assert health.json()["version"] == "0.7.38"
 
     from app.config import settings
     from app.services.rate_limit import reset_limiter_for_tests
@@ -5899,3 +5899,127 @@ def test_preauth_429_body_limit_purpose_and_settings(client, monkeypatch, tmp_pa
     finally:
         monkeypatch.setattr(settings, "environment", "development")
         monkeypatch.setattr(settings, "secret_key", "test-secret")
+
+
+def test_org_cap_jwt_bind_pagination_csv_and_plaintext_invite(client, monkeypatch):
+    """v0.7.38: invite ceiling, JWT org bind, pagination, CSV defaults, hashed-only invites."""
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["version"] == "0.7.38"
+
+    from app.config import settings
+    from app.db import SessionLocal
+    from app.models import User
+    from app.auth import create_access_token, user_from_token
+    from app.main import _validate_runtime_settings
+    from app.routers.reports import _csv_text
+
+    owner = _register(client, "flow-0738", "v0738-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    page = client.get("/orgs/members?limit=1&offset=0", headers=h)
+    assert page.status_code == 200
+    assert len(page.json()) == 1
+
+    monkeypatch.setattr(settings, "max_org_members", 1)
+    try:
+        blocked = client.post(
+            "/orgs/invite",
+            headers=h,
+            json={
+                "email": "blocked-0738@example.com",
+                "full_name": "Blocked",
+                "role": "employee",
+            },
+        )
+        assert blocked.status_code == 400
+        assert "limit" in blocked.json()["detail"].lower()
+    finally:
+        monkeypatch.setattr(settings, "max_org_members", 300)
+
+    # JWT org claim must match user.organization_id
+    uid = owner["user"]["id"]
+    wrong = create_access_token(uid, org_id=999999, role="owner", token_version=0)
+    db = SessionLocal()
+    try:
+        u = db.get(User, uid)
+        assert u is not None
+        # Align token_version with freshly created user
+        wrong = create_access_token(
+            uid,
+            org_id=999999,
+            role=u.role.value if hasattr(u.role, "value") else str(u.role),
+            token_version=int(getattr(u, "token_version", 0) or 0),
+        )
+        raised = False
+        try:
+            user_from_token(wrong, db)
+        except Exception:
+            raised = True
+        assert raised
+        me_bad = client.get("/orgs/me", headers={"Authorization": f"Bearer {wrong}"})
+        assert me_bad.status_code == 401
+    finally:
+        db.close()
+
+    # Plaintext invite tokens are no longer accepted
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "plain-0738@example.com",
+            "full_name": "Plain",
+            "role": "employee",
+        },
+    )
+    assert inv.status_code == 200, inv.text
+    raw = inv.json()["invite_token"]
+    db = SessionLocal()
+    try:
+        u = db.query(User).filter(User.email == "plain-0738@example.com").one()
+        u.invite_token = raw  # force legacy plaintext storage
+        db.commit()
+    finally:
+        db.close()
+    rejected = client.post(
+        "/auth/accept-invite",
+        json={"token": raw, "password": "chosen99", "password_confirm": "chosen99"},
+    )
+    assert rejected.status_code == 400
+
+    long = "x" * 2500
+    assert len(_csv_text(long)) <= 2000
+    assert _csv_text(long).endswith("…")
+
+    csv = client.get("/reports/export.csv", headers=h)
+    assert csv.status_code == 200
+    assert "Content-Disposition" in csv.headers
+    assert "365d" in csv.headers.get("Content-Disposition", "") or "record" in csv.text
+
+    monkeypatch.setattr(settings, "max_org_members", 0)
+    try:
+        raised = False
+        try:
+            _validate_runtime_settings()
+        except RuntimeError:
+            raised = True
+        assert raised
+    finally:
+        monkeypatch.setattr(settings, "max_org_members", 300)
+
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "secret_key", "a" * 40)
+    monkeypatch.setattr(settings, "media_backend", "s3")
+    monkeypatch.setattr(settings, "s3_bucket", "")
+    try:
+        raised = False
+        try:
+            _validate_runtime_settings()
+        except RuntimeError:
+            raised = True
+        assert raised
+    finally:
+        monkeypatch.setattr(settings, "environment", "development")
+        monkeypatch.setattr(settings, "secret_key", "test-secret")
+        monkeypatch.setattr(settings, "media_backend", "local")
+        monkeypatch.setattr(settings, "s3_bucket", "")

@@ -46,6 +46,8 @@ def _window(
     days: int | None,
     date_from: str | None,
     date_to: str | None,
+    *,
+    default_days: int | None = None,
 ) -> tuple[datetime | None, datetime | None]:
     if date_from or date_to:
         since = _parse_day(date_from)
@@ -58,7 +60,13 @@ def _window(
     if days:
         since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
         return since, None
+    if default_days:
+        since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=default_days)
+        return since, None
     return None, None
+
+
+_CSV_CELL_MAX = 2000
 
 
 def _csv_text(value) -> str:
@@ -66,6 +74,8 @@ def _csv_text(value) -> str:
     if value is None:
         return ""
     s = str(value).replace("\r", " ").replace("\n", " ").strip()
+    if len(s) > _CSV_CELL_MAX:
+        s = s[: _CSV_CELL_MAX - 1] + "…"
     if s and s[0] in ("=", "+", "-", "@", "\t"):
         return "'" + s
     return s
@@ -337,7 +347,8 @@ def export_csv(
     )
 
     oid = user.organization_id
-    since, until = _window(days, date_from, date_to)
+    # Unbounded export is expensive — default to last 365 days when no window given.
+    since, until = _window(days, date_from, date_to, default_days=365)
     eff = _effective_at()
 
     q = db.query(MoneyRecord).filter(MoneyRecord.organization_id == oid)
@@ -577,7 +588,7 @@ def export_csv(
             ]
         )
 
-    stamp = (date_from or date_to or (f"{days}d" if days else "all"))
+    stamp = (date_from or date_to or (f"{days}d" if days else "365d"))
     safe = "".join(ch if ch.isalnum() or ch in "-_." else "-" for ch in str(stamp))[:48] or "all"
     filename = f"fos-export-{safe}.csv"
     # ASCII filename + RFC 5987 UTF-8 fallback for clients that support it

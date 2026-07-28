@@ -21,6 +21,16 @@ def _validate_runtime_settings() -> str:
             f"ENVIRONMENT must be one of {sorted(_ALLOWED_ENVS)} (got {settings.environment!r})"
         )
     secret = settings.secret_key or ""
+    if int(settings.access_token_expire_minutes or 0) <= 0:
+        raise RuntimeError("ACCESS_TOKEN_EXPIRE_MINUTES must be > 0")
+    if not (1 <= int(settings.max_org_members or 0) <= 10_000):
+        raise RuntimeError("MAX_ORG_MEMBERS must be between 1 and 10000")
+    algo = (settings.algorithm or "").strip()
+    if algo and algo != "HS256":
+        raise RuntimeError(f"ALGORITHM must be HS256 (got {algo!r})")
+    media = (settings.media_backend or "local").strip().lower()
+    if media not in ("local", "s3"):
+        raise RuntimeError(f"MEDIA_BACKEND must be local or s3 (got {settings.media_backend!r})")
     if env in ("prod", "production"):
         if secret in _INSECURE_SECRETS or len(secret) < 32:
             raise RuntimeError(
@@ -33,8 +43,15 @@ def _validate_runtime_settings() -> str:
                 "TRUST_X_FORWARDED_FOR=true without TRUSTED_PROXY_CIDRS — "
                 "spoofable client IPs; set proxy CIDRs"
             )
+        if media == "s3" and not (settings.s3_bucket or "").strip():
+            raise RuntimeError("MEDIA_BACKEND=s3 requires S3_BUCKET in production")
+        db_url = (settings.database_url or "").strip().lower()
+        if db_url.startswith("sqlite:"):
+            logger.warning("DATABASE_URL uses SQLite in production — prefer PostgreSQL")
     elif secret in _INSECURE_SECRETS:
         logger.warning("SECRET_KEY is insecure — set a strong SECRET_KEY in production")
+    elif media == "s3" and not (settings.s3_bucket or "").strip():
+        logger.warning("MEDIA_BACKEND=s3 without S3_BUCKET — uploads may fall back to local")
     return env
 
 
@@ -57,7 +74,7 @@ Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.7.37")
+app = FastAPI(title=settings.app_name, version="0.7.38")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 # Bearer-token auth does not use cookies; credentials+wildcard is unnecessary.
@@ -233,7 +250,7 @@ def health(request: Request):
     body = {
         "ok": db_status == "ok",
         "app": settings.app_name,
-        "version": "0.7.37",
+        "version": "0.7.38",
         "db": db_status,
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }

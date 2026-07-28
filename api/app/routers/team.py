@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.schemas import (
@@ -22,11 +22,13 @@ from app.models import (
     User,
     UserRole,
 )
-from app.services.org_limits import require_org_member_capacity
+from app.services.org_limits import require_org_can_add_member, require_org_member_capacity
 
 router = APIRouter(prefix="/orgs", tags=["team"])
 
 RESET_TTL_DAYS = 2
+_LIST_LIMIT_DEFAULT = 200
+_LIST_LIMIT_MAX = 200
 
 
 def _utcnow() -> datetime:
@@ -35,6 +37,8 @@ def _utcnow() -> datetime:
 
 @router.get("/members", response_model=list[MemberOut])
 def list_members(
+    limit: int = Query(default=_LIST_LIMIT_DEFAULT, ge=1, le=_LIST_LIMIT_MAX),
+    offset: int = Query(default=0, ge=0, le=100_000),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -50,6 +54,8 @@ def list_members(
         db.query(User)
         .filter(User.organization_id == user.organization_id)
         .order_by(User.role.asc(), User.full_name.asc(), User.id.asc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [MemberOut.model_validate(r) for r in rows]
@@ -57,6 +63,8 @@ def list_members(
 
 @router.get("/directory", response_model=list[MemberOut])
 def org_directory(
+    limit: int = Query(default=_LIST_LIMIT_DEFAULT, ge=1, le=_LIST_LIMIT_MAX),
+    offset: int = Query(default=0, ge=0, le=100_000),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -73,6 +81,8 @@ def org_directory(
         db.query(User)
         .filter(User.organization_id == user.organization_id, User.is_active.is_(True))
         .order_by(User.full_name.asc(), User.id.asc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [MemberOut.model_validate(r) for r in rows]
@@ -165,6 +175,7 @@ def set_member_active(
                 "(settle or adjust to zero first)",
             )
     if body.is_active and not member.is_active:
+        require_org_can_add_member(db, user.organization_id)
         if member.must_set_password and not member.invite_token:
             raise HTTPException(
                 400,
@@ -289,6 +300,11 @@ def issue_member_reset_token(
     from app.services.rate_limit import enforce_rate_limit
 
     enforce_rate_limit(f"reset-token:{user.organization_id}:{user.id}", limit=20, window_sec=60)
+    enforce_rate_limit(
+        f"reset-token-member:{user.organization_id}:{member_id}",
+        limit=3,
+        window_sec=900,
+    )
     member = (
         db.query(User)
         .filter(User.id == member_id, User.organization_id == user.organization_id)

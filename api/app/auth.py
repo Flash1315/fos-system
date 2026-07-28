@@ -101,6 +101,12 @@ def user_from_token(
         raise credentials_exc
     if int(getattr(user, "token_version", 0) or 0) != token_ver:
         raise credentials_exc
+    try:
+        claim_org = int(payload.get("org", 0) or 0)
+    except (TypeError, ValueError):
+        raise credentials_exc
+    if claim_org != int(user.organization_id):
+        raise credentials_exc
     return user
 
 

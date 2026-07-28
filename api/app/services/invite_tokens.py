@@ -1,4 +1,4 @@
-"""Hash invite/reset tokens at rest; keep transitional plaintext lookup."""
+"""Hash invite/reset tokens at rest (SHA-256 hex only)."""
 
 from __future__ import annotations
 
@@ -23,8 +23,4 @@ def find_user_by_invite_token(db: Session, raw: str) -> User | None:
     if not token:
         return None
     digest = hash_invite_token(token)
-    user = db.query(User).filter(User.invite_token == digest).first()
-    if user:
-        return user
-    # Transitional: tokens issued before hashing were stored plaintext
-    return db.query(User).filter(User.invite_token == token).first()
+    return db.query(User).filter(User.invite_token == digest).first()

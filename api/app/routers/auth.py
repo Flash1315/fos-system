@@ -251,7 +251,7 @@ def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(
     if not user or not user.is_active or not getattr(user, "must_set_password", False):
         raise HTTPException(400, "Invalid or expired invite token")
     stored = user.invite_token or ""
-    if stored != digest and stored != token:
+    if stored != digest:
         raise HTTPException(400, "Invalid or expired invite token")
     expires = getattr(user, "invite_token_expires_at", None)
     if expires is not None and expires < _utcnow():
@@ -327,10 +327,19 @@ def invite_user(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    from app.services.org_limits import require_org_can_add_member
+
     enforce_rate_limit(f"invite:{user.organization_id}:{user.id}", limit=30, window_sec=60)
+    email = body.email.lower().strip()
+    enforce_rate_limit(
+        f"invite-email:{user.organization_id}:{email}",
+        limit=5,
+        window_sec=3600,
+    )
+    require_org_can_add_member(db, user.organization_id)
     exists = (
         db.query(User)
-        .filter(User.organization_id == user.organization_id, User.email == body.email.lower())
+        .filter(User.organization_id == user.organization_id, User.email == email)
         .first()
     )
     if exists:
@@ -362,7 +371,7 @@ def invite_user(
         invite_expires = _invite_expiry()
     invited = User(
         organization_id=user.organization_id,
-        email=body.email.lower(),
+        email=email,
         full_name=body.full_name,
         hashed_password=hashed,
         role=body.role,

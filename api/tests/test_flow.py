@@ -1874,7 +1874,7 @@ def test_settlement_request_status_filter(client):
     assert any(x["id"] == rid for x in mine)
 
 def test_report_rejects_reversed_dates(client):
-    owner = _register(client, "flow-dates", "dates-owner@example.com")
+    owner = _register(client, "flow-date-order", "date-order-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
     bad = client.get("/reports/org?date_from=2026-12-31&date_to=2026-01-01", headers=h)
     assert bad.status_code == 400
@@ -1884,7 +1884,7 @@ def test_report_rejects_reversed_dates(client):
 
 
 def test_media_auth_bearer_and_query_token(client):
-    owner = _register(client, "flow-media", "media-owner@example.com")
+    owner = _register(client, "flow-media-auth", "media-auth-owner@example.com")
     token = owner["access_token"]
     h = {"Authorization": f"Bearer {token}"}
     files = {"file": ("receipt.jpg", b"\xff\xd8\xff" + b"0" * 64, "image/jpeg")}
@@ -1898,14 +1898,14 @@ def test_media_auth_bearer_and_query_token(client):
     assert ok_bearer.status_code == 200
     ok_q = client.get(f"{url}?token={token}")
     assert ok_q.status_code == 200
-    other = _register(client, "flow-media2", "media2-owner@example.com")
+    other = _register(client, "flow-media-auth2", "media-auth2-owner@example.com")
     other_h = {"Authorization": f"Bearer {other['access_token']}"}
     forbidden = client.get(url, headers=other_h)
     assert forbidden.status_code == 403
 
 
 def test_settlement_approve_payment_method(client):
-    owner = _register(client, "flow-paymethod", "paymethod-owner@example.com")
+    owner = _register(client, "flow-pay-method", "pay-method-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
     income = client.post(
         "/records",

@@ -236,6 +236,15 @@ def create_record(
     )
     db.add(rec)
     if body.approve_now:
+        if body.kind == RecordKind.fuel:
+            _assert_odometer(
+                db,
+                user.organization_id,
+                owner_id,
+                body.bike,
+                body.odometer,
+                exclude_id=None,
+            )
         _assert_cash_for_approve(db, rec)
         rec.status = RecordStatus.approved
         rec.decided_by = user.id
@@ -431,6 +440,19 @@ def decide_batch(
             continue
         if body.approve:
             spent = extra_cash_spent.get(rec.created_by, 0.0)
+            if rec.kind == RecordKind.fuel:
+                try:
+                    _assert_odometer(
+                        db,
+                        rec.organization_id,
+                        rec.created_by,
+                        rec.bike or "",
+                        float(rec.odometer) if rec.odometer is not None else None,
+                        exclude_id=rec.id,
+                    )
+                except HTTPException:
+                    skipped += 1
+                    continue
             try:
                 _assert_cash_for_approve(db, rec, extra_spent=spent)
             except HTTPException:
@@ -538,6 +560,15 @@ def decide_record(
     if rec.status != RecordStatus.pending:
         raise HTTPException(400, "Already decided")
     if body.approve:
+        if rec.kind == RecordKind.fuel:
+            _assert_odometer(
+                db,
+                rec.organization_id,
+                rec.created_by,
+                rec.bike or "",
+                float(rec.odometer) if rec.odometer is not None else None,
+                exclude_id=rec.id,
+            )
         _assert_cash_for_approve(db, rec)
     else:
         if not (body.note or "").strip():

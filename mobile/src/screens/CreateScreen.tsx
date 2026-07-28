@@ -297,8 +297,14 @@ export function CreateScreen({
               `${msg} Amount exceeds available — continue anyway on confirm if intentional.`,
             );
           }
-        } catch {
-          /* ignore balance check */
+        } catch (e) {
+          if (isManager && approveNow) {
+            Alert.alert(
+              "Fos",
+              e instanceof Error ? e.message : "Could not verify cash balance",
+            );
+            return;
+          }
         }
       }
       if (isManager && approveNow && closedCycleHint) {
@@ -314,6 +320,56 @@ export function CreateScreen({
       }
       setConfirming(true);
       return;
+    }
+    if (busy) return;
+    // Re-check cash right before submit (approve_now must not use stale Review numbers)
+    if (kind !== "income" && paymentSource === "cash_on_hand" && isManager && approveNow) {
+      try {
+        let available = 0;
+        let currency = myCurrency;
+        if (forUserId != null) {
+          const bals = await teamBalances();
+          setTeamBals(bals);
+          const row = bals.find((b) => b.user_id === forUserId);
+          available = row?.available_cash ?? row?.cash_on_hand ?? 0;
+          if (row?.currency) currency = row.currency;
+        } else {
+          const bal = await myBalance();
+          available = bal.available_cash ?? bal.cash_on_hand;
+          currency = bal.currency;
+          setMyCurrency(bal.currency);
+        }
+        if (value > available + 1e-6) {
+          Alert.alert(
+            "Fos",
+            `Only ${available.toLocaleString()} ${currency} available now — cannot approve from cash.`,
+          );
+          return;
+        }
+      } catch (e) {
+        Alert.alert("Fos", e instanceof Error ? e.message : "Could not verify cash balance");
+        return;
+      }
+    }
+    if (kind === "fuel" && odometer) {
+      try {
+        const last = await lastFuelOdometer({
+          bike: bike.trim() || undefined,
+          user_id: forUserId ?? undefined,
+        });
+        const lastVal = last.odometer;
+        setLastOdo(lastVal);
+        if (lastVal != null && Number(odometer.replace(",", ".")) < lastVal) {
+          Alert.alert(
+            "Fos",
+            `Odometer cannot decrease (last ${lastVal}). Enter a higher reading.`,
+          );
+          return;
+        }
+      } catch (e) {
+        Alert.alert("Fos", e instanceof Error ? e.message : "Could not verify odometer");
+        return;
+      }
     }
     setBusy(true);
     try {

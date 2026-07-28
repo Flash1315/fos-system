@@ -117,6 +117,7 @@ export function RecordDetailScreen({
   };
 
   const doDecide = async (approve: boolean, note = "") => {
+    if (busy) return;
     setBusy(true);
     try {
       setRec(await decideRecord(id, approve, note));
@@ -128,6 +129,7 @@ export function RecordDetailScreen({
   };
 
   const onCancel = async () => {
+    if (busy) return;
     Alert.alert("Fos", "Cancel this pending record? It will be removed from approvals.", [
       { text: "Keep", style: "cancel" },
       {
@@ -136,6 +138,13 @@ export function RecordDetailScreen({
         onPress: async () => {
           setBusy(true);
           try {
+            const fresh = await getRecord(id);
+            setRec(fresh);
+            applyEditFields(fresh);
+            if (fresh.status !== "pending") {
+              Alert.alert("Fos", `Record is already ${fresh.is_voided ? "voided" : fresh.status}`);
+              return;
+            }
             setRec(await cancelRecord(id));
             Alert.alert("Fos", "Record cancelled");
           } catch (e) {
@@ -149,8 +158,20 @@ export function RecordDetailScreen({
   };
 
   const onVoid = async (note: string) => {
+    if (busy) return;
     setBusy(true);
     try {
+      const fresh = await getRecord(id);
+      setRec(fresh);
+      applyEditFields(fresh);
+      if (fresh.is_voided) {
+        Alert.alert("Fos", "Record is already voided");
+        return;
+      }
+      if (!fresh.can_void) {
+        Alert.alert("Fos", fresh.void_blocked_reason || "This record cannot be voided now");
+        return;
+      }
       setRec(await voidRecord(id, note));
       Alert.alert("Fos", "Record voided");
     } catch (e) {

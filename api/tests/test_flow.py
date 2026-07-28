@@ -2226,3 +2226,111 @@ def test_void_payout_reopen_vs_cancel_when_blocked(client):
     # Original request should be reopened (fits) OR cancelled — with available 5000 it reopens.
     assert any(x["id"] == rid for x in pending)
 
+def test_overpayment_ignores_client_value(client):
+    owner = _register(client, "flow-overpay-force", "overpay-force@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 10000,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    pay = client.post(
+        "/payouts",
+        headers=h,
+        json={
+            "user_id": uid,
+            "kind": "expense_payout",
+            "amount": 12000,
+            "payment_method": "cash",
+            "overpayment": 999999,
+            "note": "client lied",
+        },
+    )
+    assert pay.status_code == 200, pay.text
+    assert pay.json()["overpayment"] == 2000
+
+
+def test_fuel_odometer_checked_on_approve(client):
+    owner = _register(client, "flow-odo-approve", "odo-approve@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    first = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 50,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "B1",
+            "odometer": 1000,
+            "liters": 5,
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert first.status_code == 200, first.text
+    pending = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 40,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "B1",
+            "odometer": 900,
+            "liters": 4,
+            "payment_source": "my_pocket",
+        },
+    )
+    # create may already block decrease — if so, create a pending with high odo then
+    # approve a second concurrent lower one by creating before first approve... 
+    # First was approve_now. Pending with 900 should fail on create.
+    assert pending.status_code == 400
+    # Create two pending in order: low then high without approving, then approve high then low
+    low = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 40,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "B1",
+            "odometer": 1100,
+            "liters": 4,
+            "payment_source": "my_pocket",
+        },
+    )
+    assert low.status_code == 200, low.text
+    high = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 40,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "B1",
+            "odometer": 1200,
+            "liters": 4,
+            "payment_source": "my_pocket",
+        },
+    )
+    assert high.status_code == 200, high.text
+    # Approve higher first
+    ok = client.post(f"/records/{high.json()['id']}/decide", headers=h, json={"approve": True})
+    assert ok.status_code == 200, ok.text
+    # Approving lower must fail
+    denied = client.post(f"/records/{low.json()['id']}/decide", headers=h, json={"approve": True})
+    assert denied.status_code == 400
+    assert "odometer" in denied.json()["detail"].lower()
+

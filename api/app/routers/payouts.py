@@ -163,7 +163,7 @@ def _create_payout_row(
     method = (body.payment_method or "cash").strip().lower()
     if method not in PAYMENT_METHODS:
         raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
-    overpayment = float(body.overpayment or 0)
+    overpayment = 0.0
     balance_after = 0.0
     if body.kind == PayoutKind.expense_payout:
         owed = float(bal.get("spendings") or 0)
@@ -173,8 +173,7 @@ def _create_payout_row(
         available = max(0.0, owed - reserved)
         if body.amount > available + 1e-6:
             if reserved <= 1e-9 and body.amount > owed + 1e-6:
-                if overpayment <= 0:
-                    overpayment = body.amount - owed
+                overpayment = body.amount - owed
                 balance_after = 0.0
             else:
                 raise HTTPException(

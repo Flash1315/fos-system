@@ -137,18 +137,34 @@ export function AccountScreen({
   };
 
   const onSaveOrg = async () => {
+    if (busy) return;
     if (!orgName.trim()) {
       Alert.alert("Fos", "Company name required");
       return;
     }
     setBusy(true);
     try {
-      const org = await updateOrg({ name: orgName.trim(), currency: currency.trim() || "IDR" });
+      const fresh = await myOrg();
+      setCurrencyLocked(!!fresh.currency_locked);
+      const payload: { name: string; currency?: string } = { name: orgName.trim() };
+      if (!fresh.currency_locked) {
+        payload.currency = currency.trim() || "IDR";
+      } else {
+        setCurrency(fresh.currency || currency);
+      }
+      const org = await updateOrg(payload);
       setOrgName(org.name);
       setCurrency(org.currency);
       setCurrencyLocked(!!org.currency_locked);
       Alert.alert("Fos", "Company updated");
     } catch (e) {
+      try {
+        const fresh = await myOrg();
+        setCurrency(fresh.currency);
+        setCurrencyLocked(!!fresh.currency_locked);
+      } catch {
+        /* ignore */
+      }
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
       setBusy(false);
@@ -188,10 +204,13 @@ export function AccountScreen({
   };
 
   const doApproveRequest = async (id: number, paymentMethod: "cash" | "transfer") => {
+    if (busy) return;
     setBusy(true);
     try {
+      await reloadRequests();
       await approveSettlementRequest(id, paymentMethod);
       await reloadRequests();
+      await refreshSuggestedAmount();
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {

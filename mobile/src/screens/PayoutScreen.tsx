@@ -72,6 +72,7 @@ export function PayoutScreen({
   }, [userId, kind, suggested]);
 
   const submit = async () => {
+    if (busy) return;
     const value = Number(amount.replace(",", "."));
     if (!userId || !value || value <= 0) {
       Alert.alert("Fos", "Select teammate and amount");
@@ -106,10 +107,11 @@ export function PayoutScreen({
           (value - total).toLocaleString()
         } will be recorded as overpayment. Continue?`,
         [
-          { text: "Cancel", style: "cancel" },
+          { text: "Cancel", style: "cancel", onPress: () => setBusy(false) },
           { text: "Continue", onPress: () => void doSubmit(value) },
         ],
       );
+      setBusy(true);
       return;
     }
     const who = members.find((m) => m.id === userId)?.full_name || "teammate";
@@ -117,14 +119,14 @@ export function PayoutScreen({
       kind === "expense_payout"
         ? `Pay ${who} expense reimbursement ${value.toLocaleString()} via ${method}?`
         : `Take cash handover ${value.toLocaleString()} from ${who} via ${method}?`;
+    setBusy(true);
     Alert.alert("Fos", label, [
-      { text: "Cancel", style: "cancel" },
+      { text: "Cancel", style: "cancel", onPress: () => setBusy(false) },
       { text: "Confirm", onPress: () => void doSubmit(value) },
     ]);
   };
 
   const doSubmit = async (value: number) => {
-    setBusy(true);
     try {
       const bals = await teamBalances();
       setBalances(bals);
@@ -177,53 +179,95 @@ export function PayoutScreen({
   };
 
   const payAllSpendings = async () => {
-    Alert.alert("Fos", "Pay available spendings for all teammates?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Pay all",
-        onPress: async () => {
-          setBusy(true);
-          try {
-            const rows = (await batchPaySpendings(method)) as unknown[];
-            Alert.alert(
-              "Fos",
-              `Paid spendings for ${Array.isArray(rows) ? rows.length : 0} teammate(s)`,
-            );
-            await reloadBalances();
-            onDone();
-          } catch (e) {
-            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-          } finally {
-            setBusy(false);
-          }
-        },
-      },
-    ]);
+    if (busy) return;
+    setBusy(true);
+    try {
+      const bals = await teamBalances();
+      setBalances(bals);
+      const payable = bals.filter((b) => (b.available_spendings ?? b.spendings) > 1e-6);
+      const total = payable.reduce(
+        (s, b) => s + (b.available_spendings ?? b.spendings ?? 0),
+        0,
+      );
+      if (!payable.length) {
+        Alert.alert("Fos", "No available spendings to pay");
+        return;
+      }
+      Alert.alert(
+        "Fos",
+        `Pay available spendings for ${payable.length} teammate(s) · ${total.toLocaleString()} via ${method}?`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => setBusy(false) },
+          {
+            text: "Pay all",
+            onPress: async () => {
+              try {
+                const rows = (await batchPaySpendings(method)) as unknown[];
+                Alert.alert(
+                  "Fos",
+                  `Paid spendings for ${Array.isArray(rows) ? rows.length : 0} teammate(s)`,
+                );
+                await reloadBalances();
+                onDone();
+              } catch (e) {
+                Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+              } finally {
+                setBusy(false);
+              }
+            },
+          },
+        ],
+      );
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      setBusy(false);
+    }
   };
 
   const takeAllCash = async () => {
-    Alert.alert("Fos", "Take available cash from all teammates?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Take all",
-        onPress: async () => {
-          setBusy(true);
-          try {
-            const rows = (await batchTakeCash(method)) as unknown[];
-            Alert.alert(
-              "Fos",
-              `Took cash from ${Array.isArray(rows) ? rows.length : 0} teammate(s)`,
-            );
-            await reloadBalances();
-            onDone();
-          } catch (e) {
-            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-          } finally {
-            setBusy(false);
-          }
-        },
-      },
-    ]);
+    if (busy) return;
+    setBusy(true);
+    try {
+      const bals = await teamBalances();
+      setBalances(bals);
+      const payable = bals.filter((b) => (b.available_cash ?? b.cash_on_hand) > 1e-6);
+      const total = payable.reduce(
+        (s, b) => s + (b.available_cash ?? b.cash_on_hand ?? 0),
+        0,
+      );
+      if (!payable.length) {
+        Alert.alert("Fos", "No available cash to take");
+        return;
+      }
+      Alert.alert(
+        "Fos",
+        `Take available cash from ${payable.length} teammate(s) · ${total.toLocaleString()} via ${method}?`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => setBusy(false) },
+          {
+            text: "Take all",
+            onPress: async () => {
+              try {
+                const rows = (await batchTakeCash(method)) as unknown[];
+                Alert.alert(
+                  "Fos",
+                  `Took cash from ${Array.isArray(rows) ? rows.length : 0} teammate(s)`,
+                );
+                await reloadBalances();
+                onDone();
+              } catch (e) {
+                Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+              } finally {
+                setBusy(false);
+              }
+            },
+          },
+        ],
+      );
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      setBusy(false);
+    }
   };
 
   return (

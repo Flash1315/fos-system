@@ -49,8 +49,8 @@ export function TransferScreen({
   }, []);
 
   const submit = async () => {
-    if (bootError || booting) {
-      Alert.alert("Fos", bootError || "Still loading balances");
+    if (busy || bootError || booting) {
+      if (bootError || booting) Alert.alert("Fos", bootError || "Still loading balances");
       return;
     }
     const value = Number(amount.replace(",", "."));
@@ -66,15 +66,19 @@ export function TransferScreen({
       );
       return;
     }
+    setBusy(true);
     Alert.alert(
       "Fos",
       `Transfer ${value.toLocaleString()} ${currency} to ${email.trim()}?`,
       [
-        { text: "Cancel", style: "cancel" },
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => setBusy(false),
+        },
         {
           text: "Transfer",
           onPress: async () => {
-            setBusy(true);
             try {
               const bal = await myBalance();
               const freshAvailable = bal.available_cash ?? bal.cash_on_hand;

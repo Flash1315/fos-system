@@ -26,6 +26,7 @@ export function InviteScreen({
   const [setTempPassword, setSetTempPassword] = useState(false);
   const [orgSlug, setOrgSlug] = useState("");
   const [slugError, setSlugError] = useState("");
+  const [formError, setFormError] = useState("");
   const [role, setRole] = useState<"employee" | "manager" | "owner">("employee");
   const [billingReadonly, setBillingReadonly] = useState(false);
   const slugGen = useRef(0);
@@ -106,27 +107,28 @@ export function InviteScreen({
 
   const submit = async () => {
     if (busy || billingReadonly) return;
+    setFormError("");
     if (!orgSlug) {
-      Alert.alert("Fos", "Company slug not loaded — tap Retry first");
+      setFormError("Company slug not loaded — tap Retry first");
       return;
     }
     if (!email.trim() || !fullName.trim()) {
-      Alert.alert("Fos", "Name and email required");
+      setFormError("Name and email required");
       return;
     }
     const mailErr = emailFormatError(email);
     if (mailErr) {
-      Alert.alert("Fos", mailErr);
+      setFormError(mailErr);
       return;
     }
     if (setTempPassword) {
       const pwErr = passwordStrengthError(password);
       if (pwErr) {
-        Alert.alert("Fos", pwErr);
+        setFormError(pwErr);
         return;
       }
       if (password !== passwordConfirm) {
-        Alert.alert("Fos", "Passwords do not match");
+        setFormError("Passwords do not match");
         return;
       }
     }
@@ -146,9 +148,10 @@ export function InviteScreen({
 
   const doInvite = async () => {
     if (busy || billingReadonly) {
-      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      if (billingReadonly) setFormError(BILLING_READONLY_MSG);
       return;
     }
+    setFormError("");
     setBusy(true);
     try {
       try {
@@ -156,7 +159,7 @@ export function InviteScreen({
         const frozen = isBillingReadOnly(b.billing_status);
         setBillingReadonly(frozen);
         if (frozen) {
-          Alert.alert("Fos", BILLING_READONLY_MSG);
+          setFormError(BILLING_READONLY_MSG);
           return;
         }
       } catch {
@@ -204,7 +207,7 @@ export function InviteScreen({
         ],
       );
     } catch (e) {
-      alertFosError(e);
+      setFormError(e instanceof Error ? e.message : "Invite failed");
     } finally {
       setBusy(false);
     }
@@ -219,6 +222,7 @@ export function InviteScreen({
         Default: share an invite token — they set their own password. Optional: set a temporary
         password yourself.
       </Sub>
+      {!!formError && <Sub>{formError}</Sub>}
       {!!slugError && (
         <>
           <Sub>Could not load slug — {slugError}</Sub>

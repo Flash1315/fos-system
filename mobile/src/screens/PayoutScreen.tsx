@@ -14,9 +14,8 @@ import {
   type TeamBalance,
   type User,
 } from "../api";
-import { alertFosError } from "../alertError";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
-import { parseFiniteMoney } from "../format";
+import { formatMoney, parseFiniteMoney } from "../format";
 
 export function PayoutScreen({
   busy,
@@ -39,6 +38,7 @@ export function PayoutScreen({
   const [booting, setBooting] = useState(true);
   const [bootError, setBootError] = useState("");
   const [billingReadonly, setBillingReadonly] = useState(false);
+  const [actionError, setActionError] = useState("");
   const payoutIdemRef = useRef<string | null>(null);
   const batchSpendIdemRef = useRef<string | null>(null);
   const batchCashIdemRef = useRef<string | null>(null);
@@ -139,9 +139,10 @@ export function PayoutScreen({
 
   const submit = async () => {
     if (busy || billingReadonly) return;
+    setActionError("");
     const value = parseFiniteMoney(amount);
     if (!userId || value == null) {
-      Alert.alert("Fos", "Select teammate and amount");
+      setActionError("Select teammate and amount");
       return;
     }
     const total =
@@ -150,27 +151,25 @@ export function PayoutScreen({
         : selectedBal?.cash_on_hand ?? 0;
     if (value > suggested + 1e-6) {
       if (kind === "income_handover") {
-        Alert.alert(
-          "Fos",
-          `Only ${suggested.toLocaleString()} available to take` +
-            ` (${total.toLocaleString()} held` +
-            `${reserved > 0 ? `, ${reserved.toLocaleString()} reserved` : ""}).`,
+        setActionError(
+          `Only ${formatMoney(suggested, selectedBal?.currency || "IDR")} available to take` +
+            ` (${formatMoney(total, selectedBal?.currency || "IDR")} held` +
+            `${reserved > 0 ? `, ${formatMoney(reserved, selectedBal?.currency || "IDR")} reserved` : ""}).`,
         );
         return;
       }
       // expense_payout: overpayment only when nothing is reserved
       if (reserved > 1e-9) {
-        Alert.alert(
-          "Fos",
-          `Only ${suggested.toLocaleString()} available to pay` +
-            ` (${total.toLocaleString()} owed, ${reserved.toLocaleString()} reserved by pending requests).`,
+        setActionError(
+          `Only ${formatMoney(suggested, selectedBal?.currency || "IDR")} available to pay` +
+            ` (${formatMoney(total, selectedBal?.currency || "IDR")} owed, ${formatMoney(reserved, selectedBal?.currency || "IDR")} reserved by pending requests).`,
         );
         return;
       }
       Alert.alert(
         "Fos",
-        `Amount exceeds spendings owed (${total.toLocaleString()}). Extra ${
-          (value - total).toLocaleString()
+        `Amount exceeds spendings owed (${formatMoney(total, selectedBal?.currency || "IDR")}). Extra ${
+          formatMoney(value - total, selectedBal?.currency || "IDR")
         } will be recorded as overpayment. Continue?`,
         [
           { text: "Cancel", style: "cancel", onPress: () => setBusy(false) },
@@ -183,8 +182,8 @@ export function PayoutScreen({
     const who = members.find((m) => m.id === userId)?.full_name || "teammate";
     const label =
       kind === "expense_payout"
-        ? `Pay ${who} expense reimbursement ${value.toLocaleString()} via ${method}?`
-        : `Take cash handover ${value.toLocaleString()} from ${who} via ${method}?`;
+        ? `Pay ${who} expense reimbursement ${formatMoney(value, selectedBal?.currency || "IDR")} via ${method}?`
+        : `Take cash handover ${formatMoney(value, selectedBal?.currency || "IDR")} from ${who} via ${method}?`;
     setBusy(true);
     Alert.alert("Fos", label, [
       { text: "Cancel", style: "cancel", onPress: () => setBusy(false) },
@@ -194,16 +193,17 @@ export function PayoutScreen({
 
   const doSubmit = async (value: number) => {
     if (busy || billingReadonly) {
-      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      if (billingReadonly) setActionError(BILLING_READONLY_MSG);
       return;
     }
+    setActionError("");
     try {
       try {
         const b = await billingMe();
         const frozen = isBillingReadOnly(b.billing_status);
         setBillingReadonly(frozen);
         if (frozen) {
-          Alert.alert("Fos", BILLING_READONLY_MSG);
+          setActionError(BILLING_READONLY_MSG);
           return;
         }
       } catch { /* API 403 if frozen */ }
@@ -219,10 +219,9 @@ export function PayoutScreen({
           ? fresh?.reserved_spendings ?? 0
           : fresh?.reserved_cash ?? 0;
       if (kind === "income_handover" && value > freshSuggested + 1e-6) {
-        Alert.alert(
-          "Fos",
-          `Only ${freshSuggested.toLocaleString()} available now` +
-            `${freshReserved > 0 ? ` (${freshReserved.toLocaleString()} reserved)` : ""}.`,
+        setActionError(
+          `Only ${formatMoney(freshSuggested, fresh?.currency || selectedBal?.currency || "IDR")} available now` +
+            `${freshReserved > 0 ? ` (${formatMoney(freshReserved, fresh?.currency || selectedBal?.currency || "IDR")} reserved)` : ""}.`,
         );
         return;
       }
@@ -231,10 +230,9 @@ export function PayoutScreen({
         value > freshSuggested + 1e-6 &&
         freshReserved > 1e-9
       ) {
-        Alert.alert(
-          "Fos",
-          `Only ${freshSuggested.toLocaleString()} available now ` +
-            `(${freshReserved.toLocaleString()} reserved by pending requests).`,
+        setActionError(
+          `Only ${formatMoney(freshSuggested, fresh?.currency || selectedBal?.currency || "IDR")} available now ` +
+            `(${formatMoney(freshReserved, fresh?.currency || selectedBal?.currency || "IDR")} reserved by pending requests).`,
         );
         return;
       }
@@ -256,7 +254,7 @@ export function PayoutScreen({
       );
       onDone();
     } catch (e) {
-      alertFosError(e);
+      setActionError(e instanceof Error ? e.message : "Settlement failed");
     } finally {
       setBusy(false);
     }
@@ -264,9 +262,10 @@ export function PayoutScreen({
 
   const payAllSpendings = async () => {
     if (busy || billingReadonly) {
-      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      if (billingReadonly) setActionError(BILLING_READONLY_MSG);
       return;
     }
+    setActionError("");
     setBusy(true);
     try {
       const bals = await teamBalances();
@@ -277,13 +276,13 @@ export function PayoutScreen({
         0,
       );
       if (!payable.length) {
-        Alert.alert("Fos", "No available spendings to pay");
+        setActionError("No available spendings to pay");
         setBusy(false);
         return;
       }
       Alert.alert(
         "Fos",
-        `Pay available spendings for ${payable.length} teammate(s) · ${total.toLocaleString()} via ${method}?`,
+        `Pay available spendings for ${payable.length} teammate(s) · ${formatMoney(total, payable[0]?.currency || selectedBal?.currency || "IDR")} via ${method}?`,
         [
           { text: "Cancel", style: "cancel", onPress: () => setBusy(false) },
           {
@@ -295,7 +294,7 @@ export function PayoutScreen({
                   const frozen = isBillingReadOnly(b.billing_status);
                   setBillingReadonly(frozen);
                   if (frozen) {
-                    Alert.alert("Fos", BILLING_READONLY_MSG);
+                    setActionError(BILLING_READONLY_MSG);
                     return;
                   }
                 } catch { /* API 403 if frozen */ }
@@ -313,7 +312,7 @@ export function PayoutScreen({
                 await reloadBalances();
                 onDone();
               } catch (e) {
-                alertFosError(e);
+                setActionError(e instanceof Error ? e.message : "Could not pay spendings");
               } finally {
                 setBusy(false);
               }
@@ -322,16 +321,17 @@ export function PayoutScreen({
         ],
       );
     } catch (e) {
-      alertFosError(e);
+      setActionError(e instanceof Error ? e.message : "Could not load spendings");
       setBusy(false);
     }
   };
 
   const takeAllCash = async () => {
     if (busy || billingReadonly) {
-      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      if (billingReadonly) setActionError(BILLING_READONLY_MSG);
       return;
     }
+    setActionError("");
     setBusy(true);
     try {
       const bals = await teamBalances();
@@ -342,13 +342,13 @@ export function PayoutScreen({
         0,
       );
       if (!payable.length) {
-        Alert.alert("Fos", "No available cash to take");
+        setActionError("No available cash to take");
         setBusy(false);
         return;
       }
       Alert.alert(
         "Fos",
-        `Take available cash from ${payable.length} teammate(s) · ${total.toLocaleString()} via ${method}?`,
+        `Take available cash from ${payable.length} teammate(s) · ${formatMoney(total, payable[0]?.currency || selectedBal?.currency || "IDR")} via ${method}?`,
         [
           { text: "Cancel", style: "cancel", onPress: () => setBusy(false) },
           {
@@ -360,7 +360,7 @@ export function PayoutScreen({
                   const frozen = isBillingReadOnly(b.billing_status);
                   setBillingReadonly(frozen);
                   if (frozen) {
-                    Alert.alert("Fos", BILLING_READONLY_MSG);
+                    setActionError(BILLING_READONLY_MSG);
                     return;
                   }
                 } catch { /* API 403 if frozen */ }
@@ -378,7 +378,7 @@ export function PayoutScreen({
                 await reloadBalances();
                 onDone();
               } catch (e) {
-                alertFosError(e);
+                setActionError(e instanceof Error ? e.message : "Could not take cash");
               } finally {
                 setBusy(false);
               }
@@ -387,7 +387,7 @@ export function PayoutScreen({
         ],
       );
     } catch (e) {
-      alertFosError(e);
+      setActionError(e instanceof Error ? e.message : "Could not load cash");
       setBusy(false);
     }
   };
@@ -397,6 +397,7 @@ export function PayoutScreen({
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Settlements</Label>
       {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
+      {!!actionError && <Sub>{actionError}</Sub>}
       {booting ? (
         <Sub>Loading teammates…</Sub>
       ) : bootError ? (
@@ -452,12 +453,20 @@ export function PayoutScreen({
       </View>
       {selectedBal && (
         <Sub>
-          Spendings {selectedBal.spendings.toLocaleString()} · available{" "}
-          {(selectedBal.available_spendings ?? selectedBal.spendings).toLocaleString()}
+          Spendings {formatMoney(selectedBal.spendings, selectedBal.currency || "IDR")} · available{" "}
+          {formatMoney(
+            selectedBal.available_spendings ?? selectedBal.spendings,
+            selectedBal.currency || "IDR",
+          )}
           {" · "}
-          Cash {selectedBal.cash_on_hand.toLocaleString()} · available{" "}
-          {(selectedBal.available_cash ?? selectedBal.cash_on_hand).toLocaleString()}
-          {reserved > 0 ? ` · reserved ${reserved.toLocaleString()}` : ""}
+          Cash {formatMoney(selectedBal.cash_on_hand, selectedBal.currency || "IDR")} · available{" "}
+          {formatMoney(
+            selectedBal.available_cash ?? selectedBal.cash_on_hand,
+            selectedBal.currency || "IDR",
+          )}
+          {reserved > 0
+            ? ` · reserved ${formatMoney(reserved, selectedBal.currency || "IDR")}`
+            : ""}
         </Sub>
       )}
       <Label>Amount</Label>

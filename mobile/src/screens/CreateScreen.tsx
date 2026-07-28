@@ -57,6 +57,7 @@ export function CreateScreen({
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer">("cash");
   const [paymentSource, setPaymentSource] = useState<"my_pocket" | "cash_on_hand">("my_pocket");
   const [photoUrl, setPhotoUrl] = useState("");
+  const [photoError, setPhotoError] = useState("");
   const [members, setMembers] = useState<User[]>([]);
   const [forUserId, setForUserId] = useState<number | null>(null);
   const [occurredDate, setOccurredDate] = useState("");
@@ -301,6 +302,7 @@ export function CreateScreen({
       return;
     }
     setBusy(true);
+    setPhotoError("");
     try {
       const live = await billingMe();
       setBillingReadonly(isBillingReadOnly(live.billing_status));
@@ -316,8 +318,9 @@ export function CreateScreen({
       });
       photoIdemRef.current = null;
       setPhotoUrl(up.photo_url);
+      setPhotoError("");
     } catch (e) {
-      alertFosError(e, "Upload failed");
+      setPhotoError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setBusy(false);
     }
@@ -775,6 +778,7 @@ export function CreateScreen({
         disabled={busy || billingReadonly}
       />
       <Btn title="Photo from camera" onPress={() => pickPhoto(true)} variant="ghost" disabled={busy || billingReadonly} />
+      {!!photoError && <Sub>{photoError}</Sub>}
       <Btn title={busy ? "…" : "Review"} onPress={submit} disabled={busy || billingReadonly} />
     </Screen>
   );

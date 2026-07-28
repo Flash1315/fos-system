@@ -61,6 +61,7 @@ export function BalancesScreen({
   const [track, setTrack] = useState<"cash_on_hand" | "spendings">("spendings");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [formError, setFormError] = useState("");
 
   const adjParams = () => {
     const voided =
@@ -258,9 +259,10 @@ export function BalancesScreen({
 
   const postAdjustment = async () => {
     if (isBusy || billingReadonly) return;
+    setFormError("");
     const value = parseFiniteSignedMoney(amount);
     if (!userId || value == null || !note.trim()) {
-      Alert.alert("Fos", "Pick teammate, signed amount, and note");
+      setFormError("Pick teammate, signed amount, and note");
       return;
     }
     const who = rows.find((r) => r.user_id === userId)?.full_name || "teammate";
@@ -300,9 +302,10 @@ export function BalancesScreen({
               adjustIdemRef.current = null;
               setAmount("");
               setNote("");
+              setFormError("");
               await reload();
             } catch (e) {
-              alertFosError(e);
+              setFormError(e instanceof Error ? e.message : "Could not post adjustment");
             } finally {
               markBusy(false);
             }
@@ -383,6 +386,7 @@ export function BalancesScreen({
             <Label>Note</Label>
             <Field value={note} onChangeText={setNote} placeholder="Opening balance / correction" maxLength={2000} />
             <Btn title={isBusy ? "…" : "Post adjustment"} onPress={postAdjustment} disabled={isBusy || billingReadonly} />
+            {!!formError && <Sub>{formError}</Sub>}
             <Label>Adjustments</Label>
             {adjLoadError ? <Sub>Adjustments refresh failed — {adjLoadError}</Sub> : null}
             <View style={styles.chips}>

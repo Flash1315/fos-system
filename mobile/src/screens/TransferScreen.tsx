@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import { BILLING_READONLY_MSG, billingMe, isBillingReadOnly, makeIdempotencyKey, me, myBalance, onResumeRefresh, orgDirectory, transferCash, type User } from "../api";
-import { alertFosError } from "../alertError";
 import { formatMoney, parseFiniteMoney } from "../format";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
@@ -27,6 +26,7 @@ export function TransferScreen({
   const [bootError, setBootError] = useState("");
   const [booting, setBooting] = useState(true);
   const [billingReadonly, setBillingReadonly] = useState(false);
+  const [formError, setFormError] = useState("");
   const submitLock = useRef(false);
   const idemKeyRef = useRef<string | null>(null);
   const bootstrapGen = useRef(0);
@@ -79,24 +79,24 @@ export function TransferScreen({
   const submit = async () => {
     if (busy || billingReadonly || submitLock.current || bootError || booting) {
       if (billingReadonly) {
-        Alert.alert("Fos", BILLING_READONLY_MSG);
+        setFormError(BILLING_READONLY_MSG);
         return;
       }
-      if (bootError || booting) Alert.alert("Fos", bootError || "Still loading balances");
+      if (bootError || booting) setFormError(bootError || "Still loading balances");
       return;
     }
+    setFormError("");
     const value = parseFiniteMoney(amount);
     if (!email.trim() || value == null) {
-      Alert.alert("Fos", "Recipient and amount (at least 0.01) required");
+      setFormError("Recipient and amount (at least 0.01) required");
       return;
     }
     if (comment.trim().length > 2000) {
-      Alert.alert("Fos", "Comment is too long (max 2000 characters)");
+      setFormError("Comment is too long (max 2000 characters)");
       return;
     }
     if (value > available) {
-      Alert.alert(
-        "Fos",
+      setFormError(
         `Only ${formatMoney(available, currency)} available ` +
           `(${formatMoney(held, currency)} held, ${formatMoney(reserved, currency)} reserved).`,
       );
@@ -126,7 +126,7 @@ export function TransferScreen({
                 const frozen = isBillingReadOnly(b.billing_status);
                 setBillingReadonly(frozen);
                 if (frozen) {
-                  Alert.alert("Fos", BILLING_READONLY_MSG);
+                  setFormError(BILLING_READONLY_MSG);
                   return;
                 }
               } catch {
@@ -139,8 +139,7 @@ export function TransferScreen({
                 setReserved(bal.reserved_cash ?? 0);
                 setAvailable(freshAvailable);
                 setCurrency(bal.currency);
-                Alert.alert(
-                  "Fos",
+                setFormError(
                   `Only ${formatMoney(freshAvailable, bal.currency)} available now ` +
                     `(${formatMoney(bal.cash_on_hand, bal.currency)} held, ${formatMoney(bal.reserved_cash ?? 0, bal.currency)} reserved).`,
                 );
@@ -158,7 +157,7 @@ export function TransferScreen({
               Alert.alert("Fos", "Transfer recorded — cash balances updated");
               onDone();
             } catch (e) {
-              alertFosError(e);
+              setFormError(e instanceof Error ? e.message : "Transfer failed");
             } finally {
               submitLock.current = false;
               setBusy(false);
@@ -184,10 +183,10 @@ export function TransferScreen({
         </>
       ) : (
         <Sub>
-          Held {held.toLocaleString()} {currency}
-          {reserved > 0 ? ` · reserved ${reserved.toLocaleString()}` : ""}
+          Held {formatMoney(held, currency)}
+          {reserved > 0 ? ` · reserved ${formatMoney(reserved, currency)}` : ""}
           {" · "}
-          available {available.toLocaleString()}
+          available {formatMoney(available, currency)}
         </Sub>
       )}
       {members.length > 0 && (
@@ -223,6 +222,7 @@ export function TransferScreen({
         onPress={submit}
         disabled={busy || billingReadonly || booting || !!bootError}
       />
+      {!!formError && <Sub>{formError}</Sub>}
     </Screen>
   );
 }

@@ -25,7 +25,7 @@ import {
 import { alertFosError } from "../alertError";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
-import { parseFiniteMoney, passwordStrengthError } from "../format";
+import { formatMoney, parseFiniteMoney, passwordStrengthError } from "../format";
 import { hasMorePage, mergeById } from "../listUtil";
 
 type ReqRow = {
@@ -82,6 +82,7 @@ export function AccountScreen({
   const [loadingMoreMine, setLoadingMoreMine] = useState(false);
   const [loadingMoreTeam, setLoadingMoreTeam] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [actionError, setActionError] = useState("");
   const PAGE = 40;
   const requestIdemRef = useRef<string | null>(null);
   const approveIdemRef = useRef<string | null>(null);
@@ -252,6 +253,7 @@ export function AccountScreen({
 
   const onPassword = async () => {
     if (busy) return;
+    setActionError("");
     if (!current) {
       Alert.alert("Fos", "Enter current password and new password (min 8, letter + digit)");
       return;
@@ -282,7 +284,7 @@ export function AccountScreen({
       setNextConfirm("");
       Alert.alert("Fos", "Password updated — other sessions signed out");
     } catch (e) {
-      alertFosError(e);
+      setActionError(e instanceof Error ? e.message : "Could not update password");
     } finally {
       setBusy(false);
     }
@@ -290,6 +292,7 @@ export function AccountScreen({
 
   const onSaveOrg = async () => {
     if (busy || billingReadonly) return;
+    setActionError("");
     if (!orgName.trim() || orgName.trim().length < 2) {
       Alert.alert("Fos", "Company name must be at least 2 characters");
       return;
@@ -332,7 +335,7 @@ export function AccountScreen({
       } catch {
         /* ignore */
       }
-      alertFosError(e);
+      setActionError(e instanceof Error ? e.message : "Could not update company");
     } finally {
       setBusy(false);
     }
@@ -340,6 +343,7 @@ export function AccountScreen({
 
   const onRequest = async () => {
     if (busy || billingReadonly) return;
+    setActionError("");
     const value = parseFiniteMoney(amount);
     if (value == null) {
       Alert.alert("Fos", "Enter amount");
@@ -347,8 +351,8 @@ export function AccountScreen({
     }
     const label =
       kind === "expense_payout"
-        ? `Request expense reimbursement ${value.toLocaleString()} ${currency}?`
-        : `Request cash handover ${value.toLocaleString()} ${currency}?`;
+        ? `Request expense reimbursement ${formatMoney(value, currency)}?`
+        : `Request cash handover ${formatMoney(value, currency)}?`;
     Alert.alert("Fos", label, [
       { text: "Cancel", style: "cancel" },
       {
@@ -379,7 +383,7 @@ export function AccountScreen({
             if (value > available + 1e-6) {
               Alert.alert(
                 "Fos",
-                `Only ${available.toLocaleString()} ${bal.currency || currency} available now`,
+                `Only ${formatMoney(available, bal.currency || currency)} available now`,
               );
               return;
             }
@@ -394,7 +398,7 @@ export function AccountScreen({
             await refreshSuggestedAmount();
             await reloadRequests();
           } catch (e) {
-            alertFosError(e);
+            setActionError(e instanceof Error ? e.message : "Could not send settlement request");
           } finally {
             setBusy(false);
           }
@@ -408,6 +412,7 @@ export function AccountScreen({
       if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
       return;
     }
+    setActionError("");
     if (approveSlotRef.current !== id) {
       approveSlotRef.current = id;
       approveIdemRef.current = null;
@@ -435,7 +440,7 @@ export function AccountScreen({
       await reloadRequests();
       await refreshSuggestedAmount();
     } catch (e) {
-      alertFosError(e);
+      setActionError(e instanceof Error ? e.message : "Could not approve request");
     } finally {
       setBusy(false);
     }
@@ -449,6 +454,7 @@ export function AccountScreen({
         {user.full_name} · {user.email} · {user.role}
       </Sub>
       {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
+      {!!actionError && <Sub>{actionError}</Sub>}
       <Sub>
         {orgName || "…"}
         {orgSlug ? ` · /${orgSlug}` : ""}
@@ -509,6 +515,7 @@ export function AccountScreen({
                 if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
                 return;
               }
+              setActionError("");
               setBusy(true);
               try {
                 try {
@@ -535,7 +542,7 @@ export function AccountScreen({
                 setBilling(b);
                 Alert.alert("Fos", "Telegram chat saved");
               } catch (e) {
-                alertFosError(e);
+                setActionError(e instanceof Error ? e.message : "Could not save Telegram chat");
               } finally {
                 setBusy(false);
               }
@@ -550,6 +557,7 @@ export function AccountScreen({
                 if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
                 return;
               }
+              setActionError("");
               setBusy(true);
               try {
                 try {
@@ -570,7 +578,7 @@ export function AccountScreen({
                 telegramTestIdemRef.current = null;
                 Alert.alert("Fos", "Test message sent");
               } catch (e) {
-                alertFosError(e);
+                setActionError(e instanceof Error ? e.message : "Could not send Telegram test");
               } finally {
                 setBusy(false);
               }
@@ -645,9 +653,9 @@ export function AccountScreen({
         mine.map((r) => (
           <View key={r.id} style={styles.card}>
             <Sub>
-              {r.kind} · {r.amount.toLocaleString()} {currency} · {r.status || "pending"}
+              {r.kind} · {formatMoney(r.amount, currency)} · {r.status || "pending"}
               {r.settled_amount != null
-                ? ` · settled ${r.settled_amount.toLocaleString()} ${currency}`
+                ? ` · settled ${formatMoney(r.settled_amount, currency)}`
                 : ""}
               {r.note ? ` · ${r.note}` : ""}
             </Sub>
@@ -680,7 +688,7 @@ export function AccountScreen({
                           await refreshSuggestedAmount();
                           await reloadRequests();
                         } catch (e) {
-                          alertFosError(e);
+                          setActionError(e instanceof Error ? e.message : "Could not cancel request");
                         } finally {
                           setBusy(false);
                         }
@@ -721,7 +729,7 @@ export function AccountScreen({
             requests.map((r) => (
               <View key={r.id} style={styles.card}>
                 <Sub>
-                  {r.user_name} · {r.kind} · {r.amount.toLocaleString()} {currency} ·{" "}
+                  {r.user_name} · {r.kind} · {formatMoney(r.amount, currency)} ·{" "}
                   {r.status || "pending"}
                   {r.note ? ` · ${r.note}` : ""}
                 </Sub>
@@ -737,7 +745,7 @@ export function AccountScreen({
                             : "cash handover";
                         Alert.alert(
                           "Fos",
-                          `Approve ${label} ${r.amount.toLocaleString()} ${currency} for ${r.user_name}? Choose payment method:`,
+                          `Approve ${label} ${formatMoney(r.amount, currency)} for ${r.user_name}? Choose payment method:`,
                           [
                             { text: "Cancel", style: "cancel" },
                             {

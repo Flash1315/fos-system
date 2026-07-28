@@ -68,6 +68,7 @@ export function RecordDetailScreen({
   const [loadError, setLoadError] = useState("");
   const [photoUri, setPhotoUri] = useState("");
   const [photoError, setPhotoError] = useState("");
+  const [photoStatus, setPhotoStatus] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const cancelIdemRef = useRef<string | null>(null);
   const commentIdemRef = useRef<string | null>(null);
@@ -292,6 +293,7 @@ export function RecordDetailScreen({
       return false;
     }
     setBusy(true);
+    setPhotoStatus("");
     try {
       try {
         const b = await billingMe();
@@ -536,9 +538,9 @@ export function RecordDetailScreen({
       photoIdemRef.current = null;
       setEditPhotoUrl(up.photo_url);
       setPhotoUri(await mediaUrlWithMediaToken(up.photo_url));
-      Alert.alert("Fos", "Receipt photo ready — tap Save to apply");
+      setPhotoStatus("Receipt photo ready — tap Save to apply");
     } catch (e) {
-      alertFosError(e, "Upload failed");
+      setPhotoStatus(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setBusy(false);
     }
@@ -777,6 +779,7 @@ export function RecordDetailScreen({
                   />
                 )}
               </Row>
+              {!!photoStatus && <Sub>{photoStatus}</Sub>}
               <Label>Comment</Label>
               <Field value={editComment} onChangeText={setEditComment} maxLength={4000} />
               <Row>

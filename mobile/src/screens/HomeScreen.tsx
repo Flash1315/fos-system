@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { BILLING_READONLY_MSG, makeIdempotencyKey, billingMe, isBillingReadOnly, me, myBalance, myOrg, myPendingSettlementCount, myRecords, onResumeRefresh, pendingCount as fetchPendingCount, pendingSettlementCount, requestSettlement, type MoneyRecord, type User } from "../api";
-import { alertFosError } from "../alertError";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { hasMorePage, mergeById } from "../listUtil";
@@ -49,6 +48,7 @@ export function HomeScreen({
   const [availableCash, setAvailableCash] = useState(0);
   const [currencyCode, setCurrencyCode] = useState("IDR");
   const [requestBusy, setRequestBusy] = useState(false);
+  const [quickMsg, setQuickMsg] = useState("");
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
@@ -198,9 +198,10 @@ export function HomeScreen({
 
   const quickRequest = async (kind: "expense_payout" | "income_handover") => {
     if (requestBusy || billingCanceled) return;
+    setQuickMsg("");
     const amount = kind === "expense_payout" ? availableSpend : availableCash;
     if (amount <= 0) {
-      Alert.alert("Fos", "Nothing available to request");
+      setQuickMsg("Nothing available to request");
       return;
     }
     const label =
@@ -220,7 +221,7 @@ export function HomeScreen({
               const frozen = isBillingReadOnly(b.billing_status);
               setBillingCanceled(frozen);
               if (frozen) {
-                Alert.alert("Fos", BILLING_READONLY_MSG);
+                setQuickMsg(BILLING_READONLY_MSG);
                 return;
               }
             } catch {
@@ -235,7 +236,7 @@ export function HomeScreen({
             setAvailableCash(bal.available_cash ?? bal.cash_on_hand ?? 0);
             setCurrencyCode(bal.currency || currencyCode);
             if (freshAmount <= 0) {
-              Alert.alert("Fos", "Nothing available to request now");
+              setQuickMsg("Nothing available to request now");
               return;
             }
             const slot = `${kind}:${freshAmount}`;
@@ -257,10 +258,10 @@ export function HomeScreen({
             );
             requestIdemRef.current = null;
             requestSlotRef.current = null;
-            Alert.alert("Fos", "Settlement request sent to managers");
+            setQuickMsg("Settlement request sent to managers");
             await reload();
           } catch (e) {
-            alertFosError(e);
+            setQuickMsg(e instanceof Error ? e.message : "Could not send settlement request");
           } finally {
             setRequestBusy(false);
           }
@@ -310,6 +311,7 @@ export function HomeScreen({
             )}
           </Row>
         )}
+        {!!quickMsg && <Sub>{quickMsg}</Sub>}
       </Card>
       <Row>
         <Btn title="New record" onPress={onCreate} disabled={billingCanceled} />

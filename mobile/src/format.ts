@@ -49,9 +49,22 @@ export function formatMoney(amount: number, currency: string) {
   }
 }
 
+function asUtcDate(iso: string): Date {
+  const s = iso.trim();
+  if (
+    /Z$/i.test(s) ||
+    /[+-]\d{2}:\d{2}$/.test(s) ||
+    /[+-]\d{4}$/.test(s)
+  ) {
+    return new Date(s);
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s);
+  return new Date(`${s}Z`);
+}
+
 export function formatWhen(iso: string | null | undefined) {
   if (!iso) return "—";
-  const d = new Date(iso);
+  const d = asUtcDate(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;

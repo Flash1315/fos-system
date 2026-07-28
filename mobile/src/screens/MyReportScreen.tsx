@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Text, StyleSheet, View } from "react-native";
+import { Text, StyleSheet, View } from "react-native";
 import { myReport, onResumeRefresh, type MyReport, type ReportPeriod } from "../api";
 import { Btn, Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { isValidYmd } from "../dates";
+import { formatMoney } from "../format";
 import { colors } from "../theme";
 
 const PERIODS: { label: string; days?: number }[] = [
@@ -115,17 +116,23 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
         <Card>
           <Label>Cash on hand</Label>
           <Text style={styles.big}>
-            {report.cash_on_hand.toLocaleString()} {report.currency}
+            {formatMoney(report.cash_on_hand, report.currency)}
           </Text>
           <Label>Spendings owed</Label>
-          <Text style={styles.line}>{report.spendings.toLocaleString()}</Text>
+          <Text style={styles.line}>{formatMoney(report.spendings, report.currency)}</Text>
           <Sub>{report.pending_count} pending</Sub>
         </Card>
         <Card>
           <Label>Approved totals</Label>
-          <Text style={styles.line}>Expense: {report.approved_expense_total.toLocaleString()}</Text>
-          <Text style={styles.line}>Fuel: {report.approved_fuel_total.toLocaleString()}</Text>
-          <Text style={styles.line}>Income cash: {report.approved_income_cash.toLocaleString()}</Text>
+          <Text style={styles.line}>
+            Expense: {formatMoney(report.approved_expense_total, report.currency)}
+          </Text>
+          <Text style={styles.line}>
+            Fuel: {formatMoney(report.approved_fuel_total, report.currency)}
+          </Text>
+          <Text style={styles.line}>
+            Income cash: {formatMoney(report.approved_income_cash, report.currency)}
+          </Text>
         </Card>
         <Card>
           <Label>By purpose</Label>
@@ -134,7 +141,7 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
           ) : (
             (report.by_purpose ?? []).map((p) => (
               <Text key={p.purpose} style={styles.line}>
-                {p.purpose}: {p.total.toLocaleString()}
+                {p.purpose}: {formatMoney(p.total, report.currency)}
               </Text>
             ))
           )}
@@ -146,7 +153,7 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
           ) : (
             (report.by_category ?? []).map((c) => (
               <Text key={`${c.kind}-${c.category}`} style={styles.line}>
-                {c.kind}/{c.category}: {c.total.toLocaleString()}
+                {c.kind}/{c.category}: {formatMoney(c.total, report.currency)}
               </Text>
             ))
           )}

@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Share, Text, StyleSheet, View } from "react-native";
+import { Share, Text, StyleSheet, View } from "react-native";
 import { downloadReportCsv, onResumeRefresh, orgReport, type OrgReport, type ReportPeriod } from "../api";
-import { alertFosError } from "../alertError";
 import { Btn, Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { isValidYmd } from "../dates";
+import { formatMoney } from "../format";
 import { colors } from "../theme";
 
 const PERIODS: { label: string; days?: number }[] = [
@@ -22,6 +22,8 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   const [dateToDebounced, setDateToDebounced] = useState("");
   const [custom, setCustom] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [exportStatus, setExportStatus] = useState("");
   const [loadError, setLoadError] = useState("");
   const [refreshingPeriod, setRefreshingPeriod] = useState(false);
   const reloadGen = useRef(0);
@@ -95,33 +97,40 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   }), []);
 
   const onExport = async () => {
+    setExportError("");
+    setExportStatus("");
+    const from = dateFrom.trim();
+    const to = dateTo.trim();
     if (custom) {
-      const from = dateFromDebounced;
-      const to = dateToDebounced;
       if (!from && !to) {
-        Alert.alert("Fos", "Enter from and/or to date before export");
+        setExportError("Enter from and/or to date before export");
         return;
       }
       if (from && !isValidYmd(from)) {
-        Alert.alert("Fos", "From date must be a real calendar day (YYYY-MM-DD)");
+        setExportError("From date must be a real calendar day (YYYY-MM-DD)");
         return;
       }
       if (to && !isValidYmd(to)) {
-        Alert.alert("Fos", "To date must be a real calendar day (YYYY-MM-DD)");
+        setExportError("To date must be a real calendar day (YYYY-MM-DD)");
         return;
       }
       if (from && to && from > to) {
-        Alert.alert("Fos", "From date must be on or before to date");
+        setExportError("From date must be on or before to date");
         return;
       }
     }
     if (loadError && !report) {
-      Alert.alert("Fos", "Fix the period error before export");
+      setExportError("Fix the period error before export");
       return;
     }
+    const exportPeriod: ReportPeriod | undefined = custom
+      ? { date_from: from || undefined, date_to: to || undefined }
+      : days != null
+        ? { days }
+        : undefined;
     setExporting(true);
     try {
-      const text = await downloadReportCsv(period());
+      const text = await downloadReportCsv(exportPeriod);
       if (typeof document !== "undefined") {
         const blob = new Blob([text], { type: "text/csv" });
         const url = URL.createObjectURL(blob);
@@ -130,12 +139,11 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
         a.download = "fos-export.csv";
         a.click();
         URL.revokeObjectURL(url);
-        Alert.alert("Fos", "CSV downloaded");
+        setExportStatus("CSV downloaded");
       } else {
         const MAX_SHARE_CHARS = 80_000;
         if (text.length > MAX_SHARE_CHARS) {
-          Alert.alert(
-            "Fos",
+          setExportError(
             `Export is ~${Math.round(text.length / 1024)} KB — too large to share here. Narrow the date range or download from web.`,
           );
           return;
@@ -145,9 +153,10 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
           message: text,
           title: `fos-export.csv (${rows} rows)`,
         });
+        setExportStatus("CSV export ready");
       }
     } catch (e) {
-      alertFosError(e, "Export failed");
+      setExportError(e instanceof Error ? e.message : "Export failed");
     } finally {
       setExporting(false);
     }
@@ -176,12 +185,12 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
         <Card>
           <Label>Net result (period)</Label>
           <Text style={styles.big}>
-            {(report.net_result ?? report.cash_position).toLocaleString()} {report.currency}
+            {formatMoney(report.net_result ?? report.cash_position, report.currency)}
           </Text>
           <Sub>All income - all approved spend</Sub>
           <Label>Cash movement (period)</Label>
           <Text style={styles.line}>
-            {report.cash_position.toLocaleString()} {report.currency}
+            {formatMoney(report.cash_position, report.currency)}
           </Text>
           <Sub>Cash income - spend paid from cash on hand</Sub>
           <Sub>
@@ -189,27 +198,39 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
           </Sub>
           <Label>Spend from cash / my pocket</Label>
           <Text style={styles.line}>
-            {(report.spend_from_cash ?? 0).toLocaleString()} /{" "}
-            {(report.spend_from_pocket ?? 0).toLocaleString()}
+            {formatMoney(report.spend_from_cash ?? 0, report.currency)} /{" "}
+            {formatMoney(report.spend_from_pocket ?? 0, report.currency)}
           </Text>
           {(report.internal_transfer_total ?? 0) > 0 && (
             <>
               <Label>Internal transfers (excluded from totals)</Label>
-              <Text style={styles.line}>{(report.internal_transfer_total ?? 0).toLocaleString()}</Text>
+              <Text style={styles.line}>
+                {formatMoney(report.internal_transfer_total ?? 0, report.currency)}
+              </Text>
             </>
           )}
           <Label>Team held cash</Label>
-          <Text style={styles.line}>{(report.total_cash_held ?? 0).toLocaleString()}</Text>
+          <Text style={styles.line}>
+            {formatMoney(report.total_cash_held ?? 0, report.currency)}
+          </Text>
           <Label>Team spendings owed</Label>
-          <Text style={styles.line}>{(report.total_spendings ?? 0).toLocaleString()}</Text>
+          <Text style={styles.line}>
+            {formatMoney(report.total_spendings ?? 0, report.currency)}
+          </Text>
         </Card>
         <Card>
           <Label>Approved totals</Label>
-          <Text style={styles.line}>Expense: {report.approved_expense_total.toLocaleString()}</Text>
-          <Text style={styles.line}>Fuel: {report.approved_fuel_total.toLocaleString()}</Text>
-          <Text style={styles.line}>Income cash: {report.approved_income_cash.toLocaleString()}</Text>
           <Text style={styles.line}>
-            Income transfer: {report.approved_income_transfer.toLocaleString()}
+            Expense: {formatMoney(report.approved_expense_total, report.currency)}
+          </Text>
+          <Text style={styles.line}>
+            Fuel: {formatMoney(report.approved_fuel_total, report.currency)}
+          </Text>
+          <Text style={styles.line}>
+            Income cash: {formatMoney(report.approved_income_cash, report.currency)}
+          </Text>
+          <Text style={styles.line}>
+            Income transfer: {formatMoney(report.approved_income_transfer, report.currency)}
           </Text>
         </Card>
         <Card>
@@ -219,7 +240,7 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
           ) : (
             report.by_category.map((c) => (
               <Text key={`${c.kind}-${c.category}`} style={styles.line}>
-                {c.kind}/{c.category}: {c.total.toLocaleString()}
+                {c.kind}/{c.category}: {formatMoney(c.total, report.currency)}
               </Text>
             ))
           )}
@@ -231,12 +252,14 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
           ) : (
             (report.by_purpose ?? []).map((p) => (
               <Text key={p.purpose} style={styles.line}>
-                {p.purpose}: {p.total.toLocaleString()}
+                {p.purpose}: {formatMoney(p.total, report.currency)}
               </Text>
             ))
           )}
         </Card>
         <Btn title={exporting ? "…" : "Export CSV"} onPress={onExport} disabled={exporting} />
+        {!!exportError && <Sub>{exportError}</Sub>}
+        {!!exportStatus && <Sub>{exportStatus}</Sub>}
       </>
     );
   }

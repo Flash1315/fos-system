@@ -38,6 +38,7 @@ export function TeamScreen({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [shareError, setShareError] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const reloadGen = useRef(0);
   const activeIdemRef = useRef<string | null>(null);
@@ -189,6 +190,7 @@ export function TeamScreen({
     <Screen>
       <TopBar onBack={onBack} onCancel={onBack} />
       {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
+      {!!shareError && <Sub>{shareError}</Sub>}
       <Text style={styles.title}>Team</Text>
       {currentUser.role === "owner" ? (
         <View style={styles.kinds}>
@@ -355,9 +357,10 @@ export function TeamScreen({
                                     onPress: () => {
                                       void (async () => {
                                         try {
+                                          setShareError("");
                                           await Share.share({ message: shareMsg });
                                         } catch (e) {
-                                          alertFosError(e, "Share failed");
+                                          setShareError(e instanceof Error ? e.message : "Share failed");
                                         }
                                       })();
                                     },
@@ -401,13 +404,14 @@ export function TeamScreen({
             variant="secondary"
             onPress={async () => {
               try {
+                setShareError("");
                 await Share.share({
                   message:
                     `Fos password reset\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\n` +
                     `Reset token: ${lastReset.token}\n\nOpen Accept invite and set a new password.`,
                 });
               } catch (e) {
-                alertFosError(e, "Share failed");
+                setShareError(e instanceof Error ? e.message : "Share failed");
               }
             }}
           />

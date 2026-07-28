@@ -54,12 +54,11 @@ export function PayoutHistoryScreen({
               voided,
               kind: kindFilter || undefined,
             })
-          : await listMyPayouts({ voided });
-      setRows(
-        scope === "mine" && kindFilter
-          ? data.filter((r) => r.kind === kindFilter)
-          : data,
-      );
+          : await listMyPayouts({
+              voided,
+              kind: kindFilter || undefined,
+            });
+      setRows(data);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");

@@ -443,9 +443,13 @@ export function voidRecord(id: number, note: string) {
   });
 }
 
-export function listMyPayouts(params?: { voided?: boolean }) {
+export function listMyPayouts(params?: {
+  voided?: boolean;
+  kind?: "expense_payout" | "income_handover";
+}) {
   const q = new URLSearchParams();
   if (params?.voided != null) q.set("voided", String(params.voided));
+  if (params?.kind) q.set("kind", params.kind);
   const suffix = q.toString() ? `?${q}` : "";
   return request<
     {

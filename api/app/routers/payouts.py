@@ -236,6 +236,7 @@ def create_payout(
 @router.get("/mine", response_model=list[PayoutOut])
 def my_payouts(
     voided: bool | None = None,
+    kind: PayoutKind | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -246,6 +247,8 @@ def my_payouts(
         q = q.filter(Payout.is_voided.is_(True))
     elif voided is False:
         q = q.filter(Payout.is_voided.is_(False))
+    if kind is not None:
+        q = q.filter(Payout.kind == kind)
     rows = q.order_by(Payout.created_at.desc()).limit(50).all()
     return [_payout_out(db, r, user.full_name) for r in rows]
 

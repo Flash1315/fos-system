@@ -205,12 +205,12 @@ export function AccountScreen({
       </Sub>
       <View style={styles.kinds}>
         <Chip
-          label="Pay my spendings"
+          label="Expense reimbursement"
           on={kind === "expense_payout"}
           onPress={() => setKind("expense_payout")}
         />
         <Chip
-          label="Hand over cash"
+          label="Cash handover"
           on={kind === "income_handover"}
           onPress={() => setKind("income_handover")}
         />

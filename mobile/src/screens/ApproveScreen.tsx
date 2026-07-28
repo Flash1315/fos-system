@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, View, StyleSheet } from "react-native";
-import { decideBatch, decideRecord, pendingRecords, type MoneyRecord } from "../api";
+import {
+  decideBatch,
+  decideRecord,
+  pendingRecords,
+  pendingSettlementCount,
+  type MoneyRecord,
+} from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Row, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
@@ -11,11 +17,13 @@ export function ApproveScreen({
   setBusy,
   onBack,
   onRecord,
+  onAccount,
 }: {
   busy: boolean;
   setBusy: (v: boolean) => void;
   onBack: () => void;
   onRecord: (id: number) => void;
+  onAccount?: () => void;
 }) {
   const [rows, setRows] = useState<MoneyRecord[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -27,6 +35,7 @@ export function ApproveScreen({
   const [rejectAllOpen, setRejectAllOpen] = useState(false);
   const [purpose, setPurpose] = useState("");
   const [kind, setKind] = useState<"" | "expense" | "fuel" | "income">("");
+  const [settlementPending, setSettlementPending] = useState(0);
   const reloadGen = useRef(0);
   const PAGE = 40;
 
@@ -44,6 +53,13 @@ export function ApproveScreen({
       if (gen !== reloadGen.current) return;
       setRows(list);
       setHasMore(list.length >= PAGE);
+      try {
+        const settle = await pendingSettlementCount();
+        if (gen !== reloadGen.current) return;
+        setSettlementPending(settle.count);
+      } catch {
+        /* keep previous */
+      }
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setRows([]);
@@ -195,6 +211,19 @@ export function ApproveScreen({
     <Screen>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Text style={styles.title}>Approvals</Text>
+      <Sub>
+        Pending records{rows.length ? ` · showing ${rows.length}${hasMore ? "+" : ""}` : ""}
+      </Sub>
+      {settlementPending > 0 && (
+        <Btn
+          title={`Settlement requests (${settlementPending})`}
+          variant="secondary"
+          onPress={() => {
+            if (onAccount) onAccount();
+            else Alert.alert("Fos", "Open Account to review settlement requests");
+          }}
+        />
+      )}
       <View style={styles.kinds}>
         {(["", "expense", "fuel", "income"] as const).map((k) => (
           <Chip key={k || "any"} label={k || "any"} on={kind === k} onPress={() => setKind(k)} />

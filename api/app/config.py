@@ -35,5 +35,8 @@ class Settings(BaseSettings):
     # Allow POST /billing/plan stub switches (off by default)
     billing_plan_switch: bool = False
 
+    # Process-local auth rate limits (disable in pytest)
+    rate_limit_enabled: bool = True
+
 
 settings = Settings()

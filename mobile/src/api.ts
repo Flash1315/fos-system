@@ -253,6 +253,13 @@ function formatApiError(data: unknown, fallback: string): string {
   return fallback;
 }
 
+export type AuthToken = {
+  access_token: string;
+  token_type?: string;
+  user: User;
+  organization_slug: string;
+};
+
 export function registerOrg(body: {
   name: string;
   slug: string;
@@ -261,7 +268,7 @@ export function registerOrg(body: {
   owner_name: string;
   owner_password: string;
 }) {
-  return request<{ access_token: string; user: User }>("/orgs/register", {
+  return request<AuthToken>("/orgs/register", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -272,7 +279,7 @@ export function login(body: {
   password: string;
   organization_slug: string;
 }) {
-  return request<{ access_token: string; user: User }>("/auth/login", {
+  return request<AuthToken>("/auth/login", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -287,31 +294,25 @@ export function changePassword(
   new_password: string,
   password_confirm?: string,
 ) {
-  return request<{ access_token: string; user: User; organization_slug?: string }>(
-    "/auth/password",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        current_password,
-        new_password,
-        password_confirm: password_confirm ?? new_password,
-      }),
-    },
-  );
+  return request<AuthToken>("/auth/password", {
+    method: "POST",
+    body: JSON.stringify({
+      current_password,
+      new_password,
+      password_confirm: password_confirm ?? new_password,
+    }),
+  });
 }
 
 export function acceptInvite(token: string, password: string, password_confirm?: string) {
-  return request<{ access_token: string; user: User; organization_slug?: string }>(
-    "/auth/accept-invite",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        token,
-        password,
-        password_confirm: password_confirm ?? password,
-      }),
-    },
-  );
+  return request<AuthToken>("/auth/accept-invite", {
+    method: "POST",
+    body: JSON.stringify({
+      token,
+      password,
+      password_confirm: password_confirm ?? password,
+    }),
+  });
 }
 
 export function myOrg() {
@@ -959,12 +960,17 @@ export function voidAdjustment(id: number, note: string) {
   });
 }
 
-export async function uploadPhoto(uri: string, name = "receipt.jpg") {
+export async function uploadPhoto(
+  uri: string,
+  opts?: { name?: string; type?: string },
+) {
   const form = new FormData();
+  const name = opts?.name || "receipt.jpg";
+  const type = opts?.type || "image/jpeg";
   form.append("file", {
     uri,
     name,
-    type: "image/jpeg",
+    type,
   } as unknown as Blob);
   return request<{ photo_url: string }>(
     "/media/photo",

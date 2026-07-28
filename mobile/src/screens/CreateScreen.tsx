@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import {
@@ -30,6 +30,7 @@ export function CreateScreen({
   onCreated: () => void;
 }) {
   const isManager = user.role === "owner" || user.role === "manager";
+  const submitLock = useRef(false);
   const [kind, setKind] = useState<"expense" | "fuel" | "income">("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
@@ -205,9 +206,13 @@ export function CreateScreen({
           quality: 0.7,
         });
     if (shot.canceled || !shot.assets[0]) return;
+    const asset = shot.assets[0];
     setBusy(true);
     try {
-      const up = await uploadPhoto(shot.assets[0].uri);
+      const up = await uploadPhoto(asset.uri, {
+        name: asset.fileName || undefined,
+        type: asset.mimeType || undefined,
+      });
       setPhotoUrl(up.photo_url);
       Alert.alert("Fos", "Receipt photo attached");
     } catch (e) {
@@ -321,7 +326,7 @@ export function CreateScreen({
       setConfirming(true);
       return;
     }
-    if (busy) return;
+    if (busy || submitLock.current) return;
     // Re-check cash right before submit (approve_now must not use stale Review numbers)
     if (kind !== "income" && paymentSource === "cash_on_hand" && isManager && approveNow) {
       try {
@@ -371,6 +376,8 @@ export function CreateScreen({
         return;
       }
     }
+    if (submitLock.current) return;
+    submitLock.current = true;
     setBusy(true);
     try {
       await createRecord({
@@ -395,6 +402,7 @@ export function CreateScreen({
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
+      submitLock.current = false;
       setBusy(false);
     }
   };

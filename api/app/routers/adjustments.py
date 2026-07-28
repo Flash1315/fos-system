@@ -190,7 +190,8 @@ def void_adjustment(
     if not row or row.organization_id != manager.organization_id:
         raise HTTPException(404, "Adjustment not found")
     if row.is_voided:
-        raise HTTPException(400, "Already voided")
+        u = db.get(User, row.user_id)
+        return _out(row, u.full_name if u else "", db)
     if not can_void_adjustment(db, row):
         raise HTTPException(
             400,

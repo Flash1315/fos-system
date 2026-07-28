@@ -34,6 +34,18 @@ def detect_image(data: bytes) -> tuple[str, str]:
         return ".webp", "image/webp"
     if len(data) >= 12 and data[4:8] == b"ftyp":
         brand = data[8:12].lower()
-        if brand in (b"heic", b"heif", b"mif1", b"msf1") or b"heic" in data[8:24].lower():
+        heic_brands = {
+            b"heic",
+            b"heif",
+            b"mif1",
+            b"msf1",
+            b"heix",
+            b"hevc",
+            b"heim",
+            b"hevx",
+        }
+        if brand in heic_brands or any(
+            b in data[8:24].lower() for b in (b"heic", b"heif", b"heix")
+        ):
             return ".heic", "image/heic"
     raise HTTPException(400, "Only image uploads allowed")

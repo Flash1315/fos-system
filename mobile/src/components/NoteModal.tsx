@@ -13,6 +13,8 @@ export function NoteModal({
   label,
   placeholder = "Reason",
   secureTextEntry = false,
+  confirmTitle = "Confirm",
+  confirmVariant = "primary",
 }: {
   visible: boolean;
   title: string;
@@ -22,6 +24,8 @@ export function NoteModal({
   label?: string;
   placeholder?: string;
   secureTextEntry?: boolean;
+  confirmTitle?: string;
+  confirmVariant?: "primary" | "secondary" | "danger" | "ghost";
 }) {
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -46,7 +50,8 @@ export function NoteModal({
           <View style={styles.row}>
             <Btn title="Cancel" variant="ghost" onPress={onCancel} />
             <Btn
-              title="Confirm"
+              title={confirmTitle}
+              variant={confirmVariant}
               onPress={() => {
                 const trimmed = note.trim();
                 if (required && trimmed.length < 2) {

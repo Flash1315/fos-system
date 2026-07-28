@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.schemas import (
@@ -142,12 +142,15 @@ def reset_member_password(
 @router.post("/members/{member_id}/reset-token", response_model=MemberResetTokenOut)
 def issue_member_reset_token(
     member_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
     """Issue a one-time token; teammate sets a new password via /auth/accept-invite."""
     from app.services.invite_tokens import store_invite_token
+    from app.services.rate_limit import enforce_rate_limit
 
+    enforce_rate_limit(f"reset-token:{user.organization_id}:{user.id}", limit=20, window_sec=60)
     member = db.get(User, member_id)
     if not member or member.organization_id != user.organization_id:
         raise HTTPException(404, "User not found")

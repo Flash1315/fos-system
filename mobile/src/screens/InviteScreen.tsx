@@ -19,6 +19,7 @@ export function InviteScreen({
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [setTempPassword, setSetTempPassword] = useState(false);
   const [orgSlug, setOrgSlug] = useState("");
@@ -56,6 +57,10 @@ export function InviteScreen({
     }
     if (setTempPassword && password.length < 6) {
       Alert.alert("Fos", "Temporary password must be at least 6 characters");
+      return;
+    }
+    if (setTempPassword && password !== passwordConfirm) {
+      Alert.alert("Fos", "Passwords do not match");
       return;
     }
     const mode = setTempPassword ? "temporary password" : "invite token";
@@ -139,6 +144,13 @@ export function InviteScreen({
             value={password}
             onChangeText={setPassword}
             placeholder="min 6 characters"
+          />
+          <Label>Confirm password</Label>
+          <Field
+            secureTextEntry={!showPassword}
+            value={passwordConfirm}
+            onChangeText={setPasswordConfirm}
+            placeholder="repeat password"
           />
           <LinkText onPress={() => setShowPassword((v) => !v)}>
             {showPassword ? "Hide password" : "Show password"}

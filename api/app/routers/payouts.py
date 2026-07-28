@@ -322,7 +322,8 @@ def void_payout(
     if not row or row.organization_id != manager.organization_id:
         raise HTTPException(404, "Payout not found")
     if row.is_voided:
-        raise HTTPException(400, "Already voided")
+        u = db.get(User, row.user_id)
+        return _payout_out(db, row, u.full_name if u else "")
     if not _can_void_payout(db, row):
         raise HTTPException(
             400,

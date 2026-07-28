@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import { me, myBalance, orgDirectory, transferCash, type User } from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
@@ -24,6 +24,7 @@ export function TransferScreen({
   const [currency, setCurrency] = useState("IDR");
   const [bootError, setBootError] = useState("");
   const [booting, setBooting] = useState(true);
+  const submitLock = useRef(false);
 
   const bootstrap = async () => {
     setBooting(true);
@@ -49,7 +50,7 @@ export function TransferScreen({
   }, []);
 
   const submit = async () => {
-    if (busy || bootError || booting) {
+    if (busy || submitLock.current || bootError || booting) {
       if (bootError || booting) Alert.alert("Fos", bootError || "Still loading balances");
       return;
     }
@@ -66,6 +67,7 @@ export function TransferScreen({
       );
       return;
     }
+    submitLock.current = true;
     setBusy(true);
     Alert.alert(
       "Fos",
@@ -74,7 +76,10 @@ export function TransferScreen({
         {
           text: "Cancel",
           style: "cancel",
-          onPress: () => setBusy(false),
+          onPress: () => {
+            submitLock.current = false;
+            setBusy(false);
+          },
         },
         {
           text: "Transfer",
@@ -104,6 +109,7 @@ export function TransferScreen({
             } catch (e) {
               Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
             } finally {
+              submitLock.current = false;
               setBusy(false);
             }
           },
@@ -113,7 +119,7 @@ export function TransferScreen({
   };
 
   return (
-    <Screen scroll>
+    <Screen scroll onRefresh={() => void bootstrap()} refreshing={booting && !bootError && members.length > 0}>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Transfer cash to teammate</Label>
       <Sub>Moves available cash on hand immediately (approved transfer pair).</Sub>

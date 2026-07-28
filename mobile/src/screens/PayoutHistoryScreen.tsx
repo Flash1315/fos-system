@@ -261,7 +261,10 @@ export function PayoutHistoryScreen({
       <NoteModal
         visible={voidId != null}
         title="Void settlement"
+        label="Reason (required). Linked settlement request may reopen or cancel."
         required
+        confirmTitle="Void"
+        confirmVariant="danger"
         onCancel={() => setVoidId(null)}
         onSubmit={async (note) => {
           const id = voidId;

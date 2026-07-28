@@ -119,6 +119,7 @@ export default function App() {
         setBusy={setBusy}
         onBack={() => setScreen("home")}
         onRecord={(id) => openRecord(id, "approve")}
+        onAccount={() => setScreen("account")}
       />
     );
   }

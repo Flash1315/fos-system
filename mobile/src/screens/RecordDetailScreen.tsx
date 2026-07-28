@@ -492,8 +492,15 @@ export function RecordDetailScreen({
       />
       <NoteModal
         visible={voidOpen}
-        title="Void approved record"
+        title={
+          rec?.transfer_group_id
+            ? "Void transfer (both legs)"
+            : "Void approved record"
+        }
+        label="Reason (required). Void removes this from balances."
         required
+        confirmTitle="Void"
+        confirmVariant="danger"
         onCancel={() => setVoidOpen(false)}
         onSubmit={async (note) => {
           setVoidOpen(false);

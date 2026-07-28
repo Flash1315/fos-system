@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,7 @@ from app.schemas import (
     TokenOut,
     UserOut,
 )
+from app.services.rate_limit import client_ip, enforce_rate_limit
 
 router = APIRouter(tags=["auth"])
 
@@ -77,7 +78,8 @@ def _token_out(db: Session, user: User) -> TokenOut:
 
 
 @router.post("/orgs/register", response_model=TokenOut)
-def register_organization(body: OrgCreate, db: Session = Depends(get_db)):
+def register_organization(body: OrgCreate, request: Request, db: Session = Depends(get_db)):
+    enforce_rate_limit(f"register:{client_ip(request)}", limit=5, window_sec=60)
     if db.query(Organization).filter(Organization.slug == body.slug).first():
         raise HTTPException(400, "Organization slug already taken")
     currency = (body.currency or "IDR").strip().upper() or "IDR"
@@ -98,7 +100,12 @@ def register_organization(body: OrgCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/auth/login", response_model=TokenOut)
-def login(body: LoginIn, db: Session = Depends(get_db)):
+def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
+    enforce_rate_limit(f"login:{client_ip(request)}", limit=20, window_sec=60)
+    return _authenticate_login(body, db)
+
+
+def _authenticate_login(body: LoginIn, db: Session) -> TokenOut:
     org = db.query(Organization).filter(Organization.slug == body.organization_slug).first()
     if not org:
         raise HTTPException(401, "Invalid credentials")
@@ -118,15 +125,20 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
 
 @router.post("/auth/login-form", response_model=TokenOut)
 def login_form(
+    request: Request,
     form: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
     """OAuth2 password form: username = email@@organization-slug."""
+    enforce_rate_limit(f"login:{client_ip(request)}", limit=20, window_sec=60)
     raw = form.username or ""
     if "@@" not in raw:
         raise HTTPException(400, "Use username format: email@@organization-slug")
     email, slug = raw.rsplit("@@", 1)
-    return login(LoginIn(email=email, password=form.password, organization_slug=slug), db)
+    return _authenticate_login(
+        LoginIn(email=email, password=form.password, organization_slug=slug),
+        db,
+    )
 
 
 @router.get("/auth/me", response_model=UserOut)
@@ -153,9 +165,10 @@ def change_password(
 
 
 @router.post("/auth/accept-invite", response_model=TokenOut)
-def accept_invite(body: AcceptInviteIn, db: Session = Depends(get_db)):
+def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(get_db)):
     from app.services.invite_tokens import find_user_by_invite_token
 
+    enforce_rate_limit(f"accept-invite:{client_ip(request)}", limit=15, window_sec=60)
     token = body.token.strip()
     user = find_user_by_invite_token(db, token)
     if not user or not user.is_active:
@@ -215,9 +228,11 @@ def update_org(
 @router.post("/orgs/invite", response_model=InviteOut)
 def invite_user(
     body: InviteIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    enforce_rate_limit(f"invite:{user.organization_id}:{user.id}", limit=30, window_sec=60)
     exists = (
         db.query(User)
         .filter(User.organization_id == user.organization_id, User.email == body.email.lower())

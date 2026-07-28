@@ -668,6 +668,9 @@ def decide_record(
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
     if rec.status != RecordStatus.pending:
+        desired = RecordStatus.approved if body.approve else RecordStatus.rejected
+        if rec.status == desired and not rec.is_voided:
+            return _record_out(db, rec)
         raise HTTPException(400, "Already decided")
     if body.approve:
         if rec.kind == RecordKind.fuel:
@@ -731,7 +734,7 @@ def void_approved_record(
     if rec.status != RecordStatus.approved:
         raise HTTPException(400, "Only approved records can be voided")
     if rec.is_voided:
-        raise HTTPException(400, "Already voided")
+        return _record_out(db, rec)
     if not can_void_record(db, rec):
         raise HTTPException(
             400,

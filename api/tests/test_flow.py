@@ -1194,7 +1194,8 @@ def test_void_record_and_payout(client):
     assert voided.json()["is_voided"] is True
     assert client.get("/records/balance/me", headers=h).json()["spendings"] == 0
     again = client.post(f"/records/{rid}/void", headers=h, json={"note": "again"})
-    assert again.status_code == 400
+    assert again.status_code == 200
+    assert again.json()["is_voided"] is True
 
     client.post(
         "/records",
@@ -2595,7 +2596,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.5"
+    assert health.json()["version"] == "0.7.6"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -2874,4 +2875,62 @@ def test_settlement_pending_counts_and_image_magic(client):
     )
     assert good.status_code == 200, good.text
     assert good.json()["photo_url"].endswith(".jpg")
+
+
+def test_decide_and_void_idempotent_retries(client):
+    owner = _register(client, "flow-idem-dec", "idemdec-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rid = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 120,
+            "category": "Supplies",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    ).json()["id"]
+    first = client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
+    assert first.status_code == 200
+    again = client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
+    assert again.status_code == 200, again.text
+    assert again.json()["id"] == rid
+    assert again.json()["status"] == "approved"
+    conflict = client.post(f"/records/{rid}/decide", headers=h, json={"approve": False, "note": "nope"})
+    assert conflict.status_code == 400
+    void1 = client.post(f"/records/{rid}/void", headers=h, json={"note": "mistake"})
+    assert void1.status_code == 200, void1.text
+    void2 = client.post(f"/records/{rid}/void", headers=h, json={"note": "retry"})
+    assert void2.status_code == 200
+    assert void2.json()["is_voided"] is True
+
+
+def test_auth_login_rate_limit(client, monkeypatch):
+    from app.config import settings
+    from app.services.rate_limit import reset_limiter_for_tests
+
+    monkeypatch.setattr(settings, "rate_limit_enabled", True)
+    reset_limiter_for_tests()
+    # Isolated IP so earlier suite logins do not count against this window
+    ip = {"X-Forwarded-For": "203.0.113.77"}
+    _register(client, "flow-rl", "rl-owner@example.com")
+    last = None
+    for _ in range(25):
+        last = client.post(
+            "/auth/login",
+            headers=ip,
+            json={
+                "email": "rl-owner@example.com",
+                "password": "wrong-password",
+                "organization_slug": "flow-rl",
+            },
+        )
+        if last.status_code == 429:
+            break
+    assert last is not None
+    assert last.status_code == 429
+    assert "Retry-After" in last.headers
+    reset_limiter_for_tests()
+    monkeypatch.setattr(settings, "rate_limit_enabled", False)
 

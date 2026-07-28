@@ -3,7 +3,7 @@
 **Fos** — multi-tenant field expenses for any small team.  
 Mobile (Expo) + API. Built to sell; Ride & Joy can be the first customer later.
 
-> Product: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Rules: [`.cursorrules`](.cursorrules) · [`AGENTS.md`](AGENTS.md)  
+> Product: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Deploy: [`docs/DEPLOY.md`](docs/DEPLOY.md) · Rules: [`.cursorrules`](.cursorrules) · [`AGENTS.md`](AGENTS.md)  
 > RJ bot knowledge: [`docs/RJ_BOT_REFERENCE.md`](docs/RJ_BOT_REFERENCE.md) · snapshot [`reference/rj-spending-bot/`](reference/rj-spending-bot/)
 
 ## Monorepo

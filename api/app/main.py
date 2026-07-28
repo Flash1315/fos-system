@@ -73,7 +73,15 @@ def _validate_runtime_settings() -> str:
             raise RuntimeError("RATE_LIMIT_ENABLED must be true in production")
         db_url = (settings.database_url or "").strip().lower()
         if db_url.startswith("sqlite:"):
-            logger.warning("DATABASE_URL uses SQLite in production — prefer PostgreSQL")
+            raise RuntimeError(
+                "DATABASE_URL must be PostgreSQL in production (sqlite is local/dev only)"
+            )
+        pool_size = int(settings.db_pool_size or 0)
+        max_overflow = int(settings.db_max_overflow or 0)
+        if pool_size < 1 or pool_size > 100:
+            raise RuntimeError("DB_POOL_SIZE must be between 1 and 100")
+        if max_overflow < 0 or max_overflow > 100:
+            raise RuntimeError("DB_MAX_OVERFLOW must be between 0 and 100")
     elif not secret or secret in _INSECURE_SECRETS:
         logger.warning("SECRET_KEY is insecure — set a strong SECRET_KEY in production")
     elif media == "s3" and not (settings.s3_bucket or "").strip():

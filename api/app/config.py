@@ -51,5 +51,17 @@ class Settings(BaseSettings):
     # Drop idempotency rows older than this (hours)
     idempotency_ttl_hours: int = 72
 
+    # Postgres pool / SSL (ignored for SQLite)
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_recycle: int = 1800
+    db_pool_timeout: int = 30
+    db_connect_timeout: int = 10
+    # Appended via connect_args when not already in DATABASE_URL (e.g. require)
+    db_sslmode: str = ""
+
+    # Optional Redis for shared rate limits across workers
+    rate_limit_redis_url: str = ""
+
 
 settings = Settings()

@@ -73,3 +73,69 @@ jobs:
             exit 1
           fi
           docker stop fos-api
+
+  pytest-postgres:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fos
+          POSTGRES_PASSWORD: fos
+          POSTGRES_DB: fos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fos -d fos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements-dev.txt
+      - name: Smoke on Postgres
+        env:
+          SECRET_KEY: ci-secret-key-32chars-minimumxx
+          DATABASE_URL: postgresql+psycopg2://fos:fos@localhost:5432/fos
+          RATE_LIMIT_ENABLED: "0"
+        run: |
+          PYTHONPATH=. python - <<'PY'
+          from fastapi.testclient import TestClient
+          from app.main import app
+          with TestClient(app) as client:
+              h = client.get("/health")
+              assert h.status_code == 200, h.text
+              assert h.json()["db"] == "ok"
+              reg = client.post(
+                  "/orgs/register",
+                  json={
+                      "name": "CI PG",
+                      "slug": "ci-pg",
+                      "currency": "IDR",
+                      "owner_email": "ci-pg@example.com",
+                      "owner_name": "CI",
+                      "owner_password": "secret12",
+                      "owner_password_confirm": "secret12",
+                  },
+              )
+              assert reg.status_code == 200, reg.text
+              login = client.post(
+                  "/auth/login",
+                  json={
+                      "email": "ci-pg@example.com",
+                      "password": "secret12",
+                      "organization_slug": "ci-pg",
+                  },
+              )
+              assert login.status_code == 200, login.text
+          print("postgres smoke ok")
+          PY

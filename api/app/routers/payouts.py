@@ -132,8 +132,15 @@ def _create_payout_row(
     body: PayoutCreate,
     db: Session,
     manager: User,
+    *,
+    exclude_request_id: int | None = None,
 ) -> tuple[Payout, User]:
-    """Build a payout row and flush (no commit) so callers can batch atomically."""
+    """Build a payout row and flush (no commit) so callers can batch atomically.
+
+    Direct/batch settlements cannot eat amounts reserved by pending settlement
+    requests. Approving a request passes exclude_request_id so its own reserve
+    does not block itself.
+    """
     target = db.get(User, body.user_id)
     if not target or target.organization_id != manager.organization_id:
         raise HTTPException(404, "User not found")
@@ -148,19 +155,35 @@ def _create_payout_row(
     balance_after = 0.0
     if body.kind == PayoutKind.expense_payout:
         owed = float(bal.get("spendings") or 0)
-        if body.amount > owed + 1e-6:
-            if overpayment <= 0:
-                overpayment = body.amount - owed
-            balance_after = 0.0
+        reserved = pending_reserved(
+            db, target.id, manager.organization_id, PayoutKind.expense_payout, exclude_request_id
+        )
+        available = max(0.0, owed - reserved)
+        if body.amount > available + 1e-6:
+            if reserved <= 1e-9 and body.amount > owed + 1e-6:
+                if overpayment <= 0:
+                    overpayment = body.amount - owed
+                balance_after = 0.0
+            else:
+                raise HTTPException(
+                    400,
+                    f"Only {available} available to pay "
+                    f"({owed} owed, {reserved} reserved by pending requests).",
+                )
         else:
             overpayment = 0.0
             balance_after = max(0.0, owed - body.amount)
     elif body.kind == PayoutKind.income_handover:
         held = float(bal.get("cash_on_hand") or 0)
-        if body.amount > held + 1e-6:
+        reserved = pending_reserved(
+            db, target.id, manager.organization_id, PayoutKind.income_handover, exclude_request_id
+        )
+        available = max(0.0, held - reserved)
+        if body.amount > available + 1e-6:
             raise HTTPException(
                 400,
-                f"Insufficient cash on hand ({held}). Cannot take {body.amount}.",
+                f"Only {available} available to take "
+                f"({held} held, {reserved} reserved by pending requests).",
             )
         balance_after = max(0.0, held - body.amount)
         overpayment = 0.0
@@ -280,7 +303,7 @@ def batch_pay_all_spendings(
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
-    """Create expense_payout for every teammate with spendings > 0 (one commit)."""
+    """Create expense_payout for every teammate with available spendings > 0 (one commit)."""
     members = (
         db.query(User)
         .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
@@ -289,17 +312,17 @@ def batch_pay_all_spendings(
     built: list[tuple[Payout, User]] = []
     for m in members:
         bal = user_balance(db, m)
-        owed = float(bal.get("spendings") or 0)
-        if owed <= 0:
+        available = float(bal.get("available_spendings") or 0)
+        if available <= 0:
             continue
         built.append(
             _create_payout_row(
                 PayoutCreate(
                     user_id=m.id,
                     kind=PayoutKind.expense_payout,
-                    amount=owed,
+                    amount=available,
                     payment_method=payment_method,
-                    note="batch pay all spendings",
+                    note="batch pay available spendings",
                 ),
                 db=db,
                 manager=manager,
@@ -319,7 +342,7 @@ def batch_take_all_cash(
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
-    """Create income_handover for every teammate with cash_on_hand > 0 (one commit)."""
+    """Create income_handover for every teammate with available cash > 0 (one commit)."""
     members = (
         db.query(User)
         .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
@@ -328,17 +351,17 @@ def batch_take_all_cash(
     built: list[tuple[Payout, User]] = []
     for m in members:
         bal = user_balance(db, m)
-        held = float(bal.get("cash_on_hand") or 0)
-        if held <= 0:
+        available = float(bal.get("available_cash") or 0)
+        if available <= 0:
             continue
         built.append(
             _create_payout_row(
                 PayoutCreate(
                     user_id=m.id,
                     kind=PayoutKind.income_handover,
-                    amount=held,
+                    amount=available,
                     payment_method=payment_method,
-                    note="batch take all cash on hand",
+                    note="batch take available cash on hand",
                 ),
                 db=db,
                 manager=manager,
@@ -446,16 +469,21 @@ def approve_settlement_request(
     if not target:
         raise HTTPException(404, "User not found")
     bal = user_balance(db, target)
-    available = (
+    track = (
         float(bal.get("spendings") or 0)
         if req.kind == PayoutKind.expense_payout
         else float(bal.get("cash_on_hand") or 0)
     )
+    reserved_others = pending_reserved(
+        db, req.user_id, manager.organization_id, req.kind, exclude_id=req.id
+    )
+    available = max(0.0, track - reserved_others)
     if float(req.amount) > available + 1e-6:
         raise HTTPException(
             400,
-            f"Balance is only {available}; cancel or reduce other activity, then retry "
-            f"(request is {req.amount}).",
+            f"Balance is only {available} after other pending requests "
+            f"(track {track}, reserved by others {reserved_others}); "
+            f"cancel or reduce other activity, then retry (request is {req.amount}).",
         )
     amount = float(req.amount)
     row, target = _create_payout_row(
@@ -468,6 +496,7 @@ def approve_settlement_request(
         ),
         db=db,
         manager=manager,
+        exclude_request_id=req.id,
     )
     req.status = SettlementRequestStatus.approved
     req.decided_at = _utcnow()

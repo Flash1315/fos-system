@@ -57,9 +57,17 @@ export function BalancesScreen({
     item: TeamBalance,
     kind: "expense_payout" | "income_handover",
   ) => {
-    const value = kind === "expense_payout" ? item.spendings : item.cash_on_hand;
+    const value =
+      kind === "expense_payout"
+        ? item.available_spendings ?? item.spendings
+        : item.available_cash ?? item.cash_on_hand;
     if (value <= 0) {
-      Alert.alert("Fos", kind === "expense_payout" ? "Nothing owed" : "No cash held");
+      Alert.alert(
+        "Fos",
+        kind === "expense_payout"
+          ? "Nothing available (check reserved requests)"
+          : "No available cash (check reserved requests)",
+      );
       return;
     }
     markBusy(true);
@@ -217,13 +225,13 @@ export function BalancesScreen({
               <Btn
                 title="Pay spendings"
                 variant="ghost"
-                disabled={isBusy || item.spendings <= 0}
+                disabled={isBusy || (item.available_spendings ?? item.spendings) <= 0}
                 onPress={() => settle(item, "expense_payout")}
               />
               <Btn
                 title="Take cash"
                 variant="ghost"
-                disabled={isBusy || item.cash_on_hand <= 0}
+                disabled={isBusy || (item.available_cash ?? item.cash_on_hand) <= 0}
                 onPress={() => settle(item, "income_handover")}
               />
             </View>

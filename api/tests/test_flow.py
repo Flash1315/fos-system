@@ -612,16 +612,23 @@ def test_batch_take_all_cash_and_my_requests(client):
     req = client.post(
         "/payouts/requests",
         headers=h,
-        json={"kind": "income_handover", "amount": 15000, "note": "eod"},
+        json={"kind": "income_handover", "amount": 5000, "note": "eod"},
     )
     assert req.status_code == 200
     mine = client.get("/payouts/requests/mine", headers=h)
     assert mine.status_code == 200
     assert any(x["id"] == req.json()["id"] for x in mine.json())
-
+    # Pending request reserves 5000 — batch only takes available 10000
     batch = client.post("/payouts/batch-cash?payment_method=cash", headers=h)
     assert batch.status_code == 200, batch.text
     assert len(batch.json()) >= 1
+    assert any(x["user_id"] == owner["user"]["id"] and x["amount"] == 10000 for x in batch.json())
+    bal = client.get("/records/balance/me", headers=h).json()
+    assert bal["cash_on_hand"] == 5000
+    assert bal["reserved_cash"] == 5000
+    assert bal["available_cash"] == 0
+    approved = client.post(f"/payouts/requests/{req.json()['id']}/approve", headers=h)
+    assert approved.status_code == 200, approved.text
     assert client.get("/records/balance/me", headers=h).json()["cash_on_hand"] == 0
 
 
@@ -1354,6 +1361,53 @@ def test_transfer_excluded_from_operating_report(client):
     assert report["approved_expense_total"] == 3000
     assert report["internal_transfer_total"] == 10000
     assert report["net_result"] == 47000  # 50000 - 3000
+
+
+def test_payout_respects_reserved_available(client):
+    owner = _register(client, "flow-availpay", "availpay-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 10000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    req = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 6000, "note": "hold"},
+    )
+    assert req.status_code == 200
+    mid = client.get("/records/balance/me", headers=h).json()
+    assert mid["available_spendings"] == 4000
+    too_much = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "expense_payout", "amount": 10000},
+    )
+    assert too_much.status_code == 400
+    partial = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "expense_payout", "amount": 4000},
+    )
+    assert partial.status_code == 200, partial.text
+    assert partial.json()["balance_after"] == 6000
+    after = client.get("/records/balance/me", headers=h).json()
+    assert after["spendings"] == 6000
+    assert after["reserved_spendings"] == 6000
+    assert after["available_spendings"] == 0
+    approved = client.post(f"/payouts/requests/{req.json()['id']}/approve", headers=h)
+    assert approved.status_code == 200, approved.text
+    done = client.get("/records/balance/me", headers=h).json()
+    assert done["spendings"] == 0
+    assert done["reserved_spendings"] == 0
 
 
 def test_reject_requires_note(client):

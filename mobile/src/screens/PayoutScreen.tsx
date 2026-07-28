@@ -49,7 +49,13 @@ export function PayoutScreen({
 
   const selectedBal = balances.find((b) => b.user_id === userId);
   const suggested =
-    kind === "expense_payout" ? selectedBal?.spendings ?? 0 : selectedBal?.cash_on_hand ?? 0;
+    kind === "expense_payout"
+      ? selectedBal?.available_spendings ?? selectedBal?.spendings ?? 0
+      : selectedBal?.available_cash ?? selectedBal?.cash_on_hand ?? 0;
+  const reserved =
+    kind === "expense_payout"
+      ? selectedBal?.reserved_spendings ?? 0
+      : selectedBal?.reserved_cash ?? 0;
 
   useEffect(() => {
     if (suggested > 0) setAmount(String(suggested));
@@ -116,8 +122,9 @@ export function PayoutScreen({
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Settlements</Label>
       <Sub>
-        Partial pays leave a remainder (balance after). Paying more than owed stores overpayment for
-        the next cycle. Taking cash cannot exceed held cash.
+        Partial pays leave a remainder (balance after). Amount defaults to available (track minus
+        pending requests). Overpayment only when nothing is reserved. Taking cash cannot exceed
+        available held cash.
       </Sub>
       <Btn
         title={busy ? "…" : "Pay all team spendings"}
@@ -148,21 +155,25 @@ export function PayoutScreen({
       </View>
       {selectedBal && (
         <Sub>
-          Spendings {selectedBal.spendings.toLocaleString()} · Cash held{" "}
-          {selectedBal.cash_on_hand.toLocaleString()}
+          Spendings {selectedBal.spendings.toLocaleString()} · available{" "}
+          {(selectedBal.available_spendings ?? selectedBal.spendings).toLocaleString()}
+          {" · "}
+          Cash {selectedBal.cash_on_hand.toLocaleString()} · available{" "}
+          {(selectedBal.available_cash ?? selectedBal.cash_on_hand).toLocaleString()}
+          {reserved > 0 ? ` · reserved ${reserved.toLocaleString()}` : ""}
         </Sub>
       )}
       <Label>Amount</Label>
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
       <View style={styles.kinds}>
         <Chip
-          label={kind === "expense_payout" ? "Pay all owed" : "Take all held"}
+          label={kind === "expense_payout" ? "Pay available" : "Take available"}
           on={Number(amount) === suggested && suggested > 0}
           onPress={() => suggested > 0 && setAmount(String(suggested))}
         />
       </View>
       <Sub>
-        Paying more than current spendings auto-stores overpayment and reduces the next cycle.
+        Overpayment only works when no pending settlement requests reserve the track.
       </Sub>
       <Label>Method</Label>
       <View style={styles.kinds}>

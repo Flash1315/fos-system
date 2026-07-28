@@ -457,6 +457,7 @@ export function listMyPayouts() {
       is_voided?: boolean;
       void_note?: string;
       can_void?: boolean;
+      void_blocked_reason?: string | null;
       created_at: string;
     }[]
   >("/payouts/mine");
@@ -478,6 +479,7 @@ export function listOrgPayouts() {
       is_voided?: boolean;
       void_note?: string;
       can_void?: boolean;
+      void_blocked_reason?: string | null;
       created_at: string;
     }[]
   >("/payouts/org");

@@ -183,18 +183,17 @@ export function PayoutScreen({
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Settlements</Label>
       <Sub>
-        Partial pays leave a remainder (balance after). Amount defaults to available (track minus
-        pending requests). Overpayment only when nothing is reserved. Taking cash cannot exceed
-        available held cash.
+        Amount defaults to available (track minus pending requests). Overpayment is allowed only for
+        expense reimbursement when nothing is reserved. Cash handover cannot exceed available cash.
       </Sub>
       <Btn
-        title={busy ? "…" : "Pay all team spendings"}
+        title={busy ? "…" : "Pay all available spendings"}
         variant="secondary"
         onPress={payAllSpendings}
         disabled={busy}
       />
       <Btn
-        title={busy ? "…" : "Take all team cash"}
+        title={busy ? "…" : "Take all available cash"}
         variant="secondary"
         onPress={takeAllCash}
         disabled={busy}

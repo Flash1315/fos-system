@@ -50,6 +50,12 @@ export function AccountScreen({
   const [orgSlug, setOrgSlug] = useState("");
   const [currency, setCurrency] = useState("RUB");
   const [cancelId, setCancelId] = useState<number | null>(null);
+  const [teamReqFilter, setTeamReqFilter] = useState<"pending" | "approved" | "cancelled" | "all">(
+    "pending",
+  );
+  const [mineReqFilter, setMineReqFilter] = useState<"all" | "pending" | "approved" | "cancelled">(
+    "all",
+  );
 
   const reloadOrg = async () => {
     try {
@@ -64,13 +70,17 @@ export function AccountScreen({
 
   const reloadRequests = async () => {
     try {
-      setMine(await listMySettlementRequests());
+      setMine(
+        await listMySettlementRequests(
+          mineReqFilter === "all" ? undefined : { status: mineReqFilter },
+        ),
+      );
     } catch {
       setMine([]);
     }
     if (!isManager) return;
     try {
-      setRequests(await listSettlementRequests());
+      setRequests(await listSettlementRequests({ status: teamReqFilter }));
     } catch {
       /* ignore */
     }
@@ -95,7 +105,7 @@ export function AccountScreen({
       await refreshSuggestedAmount();
       await reloadRequests();
     })();
-  }, [kind]);
+  }, [kind, teamReqFilter, mineReqFilter]);
 
   const onPassword = async () => {
     if (!current || next.length < 6) {
@@ -210,8 +220,18 @@ export function AccountScreen({
       <Btn title={busy ? "…" : "Send request"} onPress={onRequest} disabled={busy} />
 
       <Label>My requests</Label>
+      <View style={styles.kinds}>
+        {(["all", "pending", "approved", "cancelled"] as const).map((s) => (
+          <Chip
+            key={s}
+            label={s}
+            on={mineReqFilter === s}
+            onPress={() => setMineReqFilter(s)}
+          />
+        ))}
+      </View>
       {mine.length === 0 ? (
-        <Sub>None yet</Sub>
+        <Sub>{mineReqFilter === "all" ? "None yet" : `No ${mineReqFilter} requests`}</Sub>
       ) : (
         mine.map((r) => (
           <View key={r.id} style={styles.card}>
@@ -247,39 +267,52 @@ export function AccountScreen({
 
       {isManager && (
         <>
-          <Label>Team pending requests</Label>
+          <Label>Team requests</Label>
+          <View style={styles.kinds}>
+            {(["pending", "approved", "cancelled", "all"] as const).map((s) => (
+              <Chip
+                key={s}
+                label={s}
+                on={teamReqFilter === s}
+                onPress={() => setTeamReqFilter(s)}
+              />
+            ))}
+          </View>
           {requests.length === 0 ? (
-            <Sub>None</Sub>
+            <Sub>{teamReqFilter === "all" ? "None" : `No ${teamReqFilter} requests`}</Sub>
           ) : (
             requests.map((r) => (
               <View key={r.id} style={styles.card}>
                 <Sub>
-                  {r.user_name} · {r.kind} · {r.amount.toLocaleString()} {currency}
+                  {r.user_name} · {r.kind} · {r.amount.toLocaleString()} {currency} ·{" "}
+                  {r.status || "pending"}
                   {r.note ? ` · ${r.note}` : ""}
                 </Sub>
-                <View style={styles.kinds}>
-                  <Btn
-                    title="Approve"
-                    disabled={busy}
-                    onPress={async () => {
-                      setBusy(true);
-                      try {
-                        await approveSettlementRequest(r.id);
-                        await reloadRequests();
-                      } catch (e) {
-                        Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-                      } finally {
-                        setBusy(false);
-                      }
-                    }}
-                  />
-                  <Btn
-                    title="Cancel"
-                    variant="ghost"
-                    disabled={busy}
-                    onPress={() => setCancelId(r.id)}
-                  />
-                </View>
+                {r.status === "pending" && (
+                  <View style={styles.kinds}>
+                    <Btn
+                      title="Approve"
+                      disabled={busy}
+                      onPress={async () => {
+                        setBusy(true);
+                        try {
+                          await approveSettlementRequest(r.id);
+                          await reloadRequests();
+                        } catch (e) {
+                          Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    />
+                    <Btn
+                      title="Cancel"
+                      variant="ghost"
+                      disabled={busy}
+                      onPress={() => setCancelId(r.id)}
+                    />
+                  </View>
+                )}
               </View>
             ))
           )}

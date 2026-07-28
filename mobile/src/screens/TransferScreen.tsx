@@ -22,25 +22,37 @@ export function TransferScreen({
   const [reserved, setReserved] = useState(0);
   const [available, setAvailable] = useState(0);
   const [currency, setCurrency] = useState("IDR");
+  const [bootError, setBootError] = useState("");
+  const [booting, setBooting] = useState(true);
+
+  const bootstrap = async () => {
+    setBooting(true);
+    setBootError("");
+    try {
+      const u = await me();
+      const rows = await orgDirectory();
+      setMembers(rows.filter((m) => m.id !== u.id));
+      const bal = await myBalance();
+      setHeld(bal.cash_on_hand);
+      setReserved(bal.reserved_cash ?? 0);
+      setAvailable(bal.available_cash ?? bal.cash_on_hand);
+      setCurrency(bal.currency);
+    } catch (e) {
+      setBootError(e instanceof Error ? e.message : "Could not load balances");
+    } finally {
+      setBooting(false);
+    }
+  };
 
   useEffect(() => {
-    (async () => {
-      try {
-        const u = await me();
-        const rows = await orgDirectory();
-        setMembers(rows.filter((m) => m.id !== u.id));
-        const bal = await myBalance();
-        setHeld(bal.cash_on_hand);
-        setReserved(bal.reserved_cash ?? 0);
-        setAvailable(bal.available_cash ?? bal.cash_on_hand);
-        setCurrency(bal.currency);
-      } catch {
-        /* ignore */
-      }
-    })();
+    void bootstrap();
   }, []);
 
   const submit = async () => {
+    if (bootError || booting) {
+      Alert.alert("Fos", bootError || "Still loading balances");
+      return;
+    }
     const value = Number(amount.replace(",", "."));
     if (!email.trim() || !value || value <= 0) {
       Alert.alert("Fos", "Recipient and amount required");
@@ -75,12 +87,21 @@ export function TransferScreen({
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Transfer cash to teammate</Label>
       <Sub>Moves available cash on hand immediately (approved transfer pair).</Sub>
-      <Sub>
-        Held {held.toLocaleString()} {currency}
-        {reserved > 0 ? ` · reserved ${reserved.toLocaleString()}` : ""}
-        {" · "}
-        available {available.toLocaleString()}
-      </Sub>
+      {booting ? (
+        <Sub>Loading balances…</Sub>
+      ) : bootError ? (
+        <>
+          <Sub>Could not load — {bootError}</Sub>
+          <Btn title="Retry" variant="ghost" onPress={bootstrap} />
+        </>
+      ) : (
+        <Sub>
+          Held {held.toLocaleString()} {currency}
+          {reserved > 0 ? ` · reserved ${reserved.toLocaleString()}` : ""}
+          {" · "}
+          available {available.toLocaleString()}
+        </Sub>
+      )}
       {members.length > 0 && (
         <>
           <Label>Teammate</Label>
@@ -108,7 +129,11 @@ export function TransferScreen({
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
       <Label>Comment</Label>
       <Field value={comment} onChangeText={setComment} />
-      <Btn title={busy ? "…" : "Submit transfer"} onPress={submit} disabled={busy} />
+      <Btn
+        title={busy ? "…" : "Submit transfer"}
+        onPress={submit}
+        disabled={busy || booting || !!bootError}
+      />
     </Screen>
   );
 }

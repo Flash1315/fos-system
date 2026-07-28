@@ -181,6 +181,31 @@ export function CreateScreen({
       Alert.alert("Fos", "Enter a valid amount");
       return;
     }
+    if (occurredDate.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(occurredDate.trim())) {
+      Alert.alert("Fos", "When must be YYYY-MM-DD or empty");
+      return;
+    }
+    if (kind === "fuel") {
+      if (liters && !(Number(liters.replace(",", ".")) > 0)) {
+        Alert.alert("Fos", "Liters must be a positive number");
+        return;
+      }
+      if (odometer && !(Number(odometer.replace(",", ".")) >= 0)) {
+        Alert.alert("Fos", "Odometer must be a number");
+        return;
+      }
+      if (
+        odometer &&
+        lastOdo != null &&
+        Number(odometer.replace(",", ".")) < lastOdo
+      ) {
+        Alert.alert(
+          "Fos",
+          `Odometer cannot decrease (last ${lastOdo}). Enter a higher reading.`,
+        );
+        return;
+      }
+    }
     if (!confirming) {
       if (kind !== "income" && paymentSource === "cash_on_hand") {
         try {

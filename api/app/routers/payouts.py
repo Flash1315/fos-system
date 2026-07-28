@@ -391,23 +391,22 @@ def batch_take_all_cash(
 
 @router.get("/requests/mine", response_model=list[SettlementRequestOut])
 def my_settlement_requests(
+    status: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    rows = (
-        db.query(SettlementRequest)
-        .filter(
-            SettlementRequest.organization_id == user.organization_id,
-            SettlementRequest.user_id == user.id,
-        )
-        .order_by(SettlementRequest.created_at.desc())
-        .limit(50)
-        .all()
+    q = db.query(SettlementRequest).filter(
+        SettlementRequest.organization_id == user.organization_id,
+        SettlementRequest.user_id == user.id,
     )
-    return [
-        _request_out(r, user.full_name)
-        for r in rows
-    ]
+    if status and status != "all":
+        try:
+            st = SettlementRequestStatus(status)
+        except ValueError as exc:
+            raise HTTPException(400, "Invalid status") from exc
+        q = q.filter(SettlementRequest.status == st)
+    rows = q.order_by(SettlementRequest.created_at.desc()).limit(50).all()
+    return [_request_out(r, user.full_name) for r in rows]
 
 
 @router.post("/requests", response_model=SettlementRequestOut)
@@ -448,19 +447,26 @@ def request_settlement(
 
 @router.get("/requests", response_model=list[SettlementRequestOut])
 def list_settlement_requests(
+    status: str | None = "pending",
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
-    rows = (
-        db.query(SettlementRequest)
-        .filter(
-            SettlementRequest.organization_id == user.organization_id,
-            SettlementRequest.status == SettlementRequestStatus.pending,
-        )
-        .order_by(SettlementRequest.created_at.asc())
-        .limit(100)
-        .all()
+    q = db.query(SettlementRequest).filter(
+        SettlementRequest.organization_id == user.organization_id,
     )
+    if status and status != "all":
+        try:
+            st = SettlementRequestStatus(status)
+        except ValueError as exc:
+            raise HTTPException(400, "Invalid status") from exc
+        q = q.filter(SettlementRequest.status == st)
+        if st == SettlementRequestStatus.pending:
+            q = q.order_by(SettlementRequest.created_at.asc())
+        else:
+            q = q.order_by(SettlementRequest.created_at.desc())
+    else:
+        q = q.order_by(SettlementRequest.created_at.desc())
+    rows = q.limit(100).all()
     out = []
     for r in rows:
         u = db.get(User, r.user_id)

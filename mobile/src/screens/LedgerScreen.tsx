@@ -20,7 +20,15 @@ export function LedgerScreen({
   const [purpose, setPurpose] = useState("");
   const [memberId, setMemberId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [searchDebounced, setSearchDebounced] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
 
   useEffect(() => {
     (async () => {
@@ -34,25 +42,29 @@ export function LedgerScreen({
 
   const reload = async () => {
     try {
+      setLoadError("");
       setRows(
         await orgRecords({
           status: status && status !== "voided" ? status : undefined,
           kind: kind || undefined,
           purpose: purpose || undefined,
           created_by: memberId ?? undefined,
-          q: search.trim() || undefined,
+          q: searchDebounced || undefined,
           voided: status === "voided" ? true : status === "approved" ? false : undefined,
         }),
       );
     } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setLoading(false);
     }
   };
 
   useFocusEffect(reload);
   useEffect(() => {
     void reload();
-  }, [status, kind, purpose, memberId, search]);
+  }, [status, kind, purpose, memberId, searchDebounced]);
 
   return (
     <Screen>
@@ -111,7 +123,19 @@ export function LedgerScreen({
             }}
           />
         }
-        ListEmptyComponent={<Sub>No records</Sub>}
+        ListEmptyComponent={
+          <Sub>
+            {loading
+              ? "Loading…"
+              : loadError
+                ? `Could not load — ${loadError}`
+                : status === "voided"
+                  ? "No voided records"
+                  : status
+                    ? `No ${status} records`
+                    : "No records"}
+          </Sub>
+        }
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => onRecord(item.id)}>
             <Text style={styles.rowTitle}>
@@ -125,6 +149,7 @@ export function LedgerScreen({
             <Text style={styles.rowMeta}>
               {item.created_by_name || "—"} · {item.purpose || "—"} · {item.category || "—"} ·{" "}
               {formatWhen(item.created_at)}
+              {item.is_in_closed_cycle ? " · settled period" : ""}
             </Text>
           </Pressable>
         )}

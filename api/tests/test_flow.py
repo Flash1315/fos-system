@@ -1811,3 +1811,37 @@ def test_adjustment_voided_filter(client):
     assert any(x["id"] == aid and x["is_voided"] for x in only_void)
     by_track = client.get("/adjustments?track=spendings&voided=true", headers=h).json()
     assert any(x["id"] == aid for x in by_track)
+
+
+def test_settlement_request_status_filter(client):
+    owner = _register(client, "flow-reqhist", "reqhist-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 4000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    req = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 4000, "note": "pay me"},
+    )
+    assert req.status_code == 200
+    rid = req.json()["id"]
+    pending = client.get("/payouts/requests?status=pending", headers=h).json()
+    assert any(x["id"] == rid for x in pending)
+    client.post(f"/payouts/requests/{rid}/cancel", headers=h, json={"note": "changed mind"})
+    pending2 = client.get("/payouts/requests?status=pending", headers=h).json()
+    assert all(x["id"] != rid for x in pending2)
+    cancelled = client.get("/payouts/requests?status=cancelled", headers=h).json()
+    assert any(x["id"] == rid and x["status"] == "cancelled" for x in cancelled)
+    all_rows = client.get("/payouts/requests?status=all", headers=h).json()
+    assert any(x["id"] == rid for x in all_rows)
+    mine = client.get("/payouts/requests/mine?status=cancelled", headers=h).json()
+    assert any(x["id"] == rid for x in mine)

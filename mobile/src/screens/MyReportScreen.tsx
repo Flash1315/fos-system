@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Alert, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import { myReport, type MyReport, type ReportPeriod } from "../api";
-import { Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
+import { Btn, Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { colors } from "../theme";
 
 const PERIODS: { label: string; days?: number }[] = [
@@ -18,6 +18,7 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [custom, setCustom] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   const period = (): ReportPeriod | undefined => {
     if (custom && (dateFrom.trim() || dateTo.trim())) {
@@ -28,8 +29,10 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
 
   const reload = async () => {
     try {
+      setLoadError("");
       setReport(await myReport(period()));
     } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     }
   };
@@ -72,9 +75,14 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
           <Field autoCapitalize="none" value={dateTo} onChangeText={setDateTo} placeholder="optional" />
         </>
       )}
-      {!report ? (
+      {!report && !loadError ? (
         <Sub>Loading…</Sub>
-      ) : (
+      ) : loadError && !report ? (
+        <>
+          <Sub>Could not load — {loadError}</Sub>
+          <Btn title="Retry" variant="ghost" onPress={reload} />
+        </>
+      ) : report ? (
         <>
           <Card>
             <Label>Cash on hand</Label>
@@ -116,7 +124,7 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
             )}
           </Card>
         </>
-      )}
+      ) : null}
     </Screen>
   );
 }

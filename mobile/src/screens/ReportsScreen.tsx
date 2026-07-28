@@ -19,6 +19,7 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   const [dateTo, setDateTo] = useState("");
   const [custom, setCustom] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   const period = (): ReportPeriod | undefined => {
     if (custom && (dateFrom.trim() || dateTo.trim())) {
@@ -29,8 +30,10 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
 
   const reload = async () => {
     try {
+      setLoadError("");
       setReport(await orgReport(period()));
     } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     }
   };
@@ -106,9 +109,14 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
         </>
       )}
       <Btn title={exporting ? "…" : "Export CSV"} variant="ghost" onPress={onExport} disabled={exporting} />
-      {!report ? (
+      {!report && !loadError ? (
         <Sub>Loading…</Sub>
-      ) : (
+      ) : loadError && !report ? (
+        <>
+          <Sub>Could not load — {loadError}</Sub>
+          <Btn title="Retry" variant="ghost" onPress={reload} />
+        </>
+      ) : report ? (
         <>
           <Card>
             <Label>Net result (period)</Label>
@@ -174,7 +182,7 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
             )}
           </Card>
         </>
-      )}
+      ) : null}
     </Screen>
   );
 }

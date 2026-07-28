@@ -533,7 +533,10 @@ export function batchTakeCash(payment_method = "cash") {
   });
 }
 
-export function listMySettlementRequests() {
+export function listMySettlementRequests(params?: { status?: string }) {
+  const q = new URLSearchParams();
+  if (params?.status) q.set("status", params.status);
+  const qs = q.toString();
   return request<
     {
       id: number;
@@ -547,7 +550,7 @@ export function listMySettlementRequests() {
       payout_id?: number | null;
       created_at: string;
     }[]
-  >("/payouts/requests/mine");
+  >(`/payouts/requests/mine${qs ? `?${qs}` : ""}`);
 }
 
 export function requestSettlement(body: {
@@ -561,7 +564,12 @@ export function requestSettlement(body: {
   });
 }
 
-export function listSettlementRequests() {
+export function listSettlementRequests(params?: {
+  status?: "pending" | "approved" | "cancelled" | "all";
+}) {
+  const q = new URLSearchParams();
+  if (params?.status) q.set("status", params.status);
+  const qs = q.toString();
   return request<
     {
       id: number;
@@ -575,7 +583,7 @@ export function listSettlementRequests() {
       payout_id?: number | null;
       created_at: string;
     }[]
-  >("/payouts/requests");
+  >(`/payouts/requests${qs ? `?${qs}` : ""}`);
 }
 
 export function approveSettlementRequest(id: number) {

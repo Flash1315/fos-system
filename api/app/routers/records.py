@@ -46,6 +46,8 @@ def _normalize_payment_fields(kind: RecordKind, source: str, method: str) -> tup
 
 
 def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
+    from app.services.balances import can_void_record
+
     creator = db.get(User, rec.created_by)
     decider = db.get(User, rec.decided_by) if rec.decided_by else None
     data = RecordOut.model_validate(rec)
@@ -53,6 +55,7 @@ def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
         update={
             "created_by_name": creator.full_name if creator else "",
             "decided_by_name": decider.full_name if decider else "",
+            "can_void": can_void_record(db, rec),
         }
     )
 
@@ -378,7 +381,11 @@ def void_approved_record(
     """Manager voids an approved record; kept for audit, excluded from balances.
 
     Transfer legs are voided together via transfer_group_id.
+    Records already included in a settlement cutoff cannot be voided until
+    that payout is voided first.
     """
+    from app.services.balances import can_void_record
+
     rec = db.get(MoneyRecord, record_id)
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
@@ -386,6 +393,11 @@ def void_approved_record(
         raise HTTPException(400, "Only approved records can be voided")
     if rec.is_voided:
         raise HTTPException(400, "Already voided")
+    if not can_void_record(db, rec):
+        raise HTTPException(
+            400,
+            "Record is locked by a settlement. Void the latest payout first.",
+        )
     stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
     note = f"[voided by {user.full_name} {stamp}] {body.note}"
     now = _utcnow()

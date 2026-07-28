@@ -132,6 +132,7 @@ class RecordOut(BaseModel):
     is_voided: bool = False
     voided_at: Optional[datetime] = None
     transfer_group_id: Optional[str] = None
+    can_void: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -202,6 +203,8 @@ class OrgReportOut(BaseModel):
     cash_position: float
     spend_from_cash: float = 0.0
     spend_from_pocket: float = 0.0
+    # Peer cash transfers (excluded from operating expense/income totals)
+    internal_transfer_total: float = 0.0
     total_spendings: float = 0.0
     total_cash_held: float = 0.0
     by_category: list[CategoryTotal]

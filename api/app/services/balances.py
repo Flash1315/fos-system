@@ -28,6 +28,55 @@ def last_payout_at(db: Session, org_id: int, user_id: int, kind: PayoutKind):
     return row.created_at if row else None
 
 
+def record_effective_at(rec: MoneyRecord):
+    return rec.occurred_at or rec.created_at
+
+
+def settlement_kind_for_record(rec: MoneyRecord) -> PayoutKind | None:
+    """Which payout cycle 'covers' this approved record, if any."""
+    if rec.kind == RecordKind.income and (rec.payment_method or "") == "cash":
+        return PayoutKind.income_handover
+    if rec.kind in (RecordKind.expense, RecordKind.fuel):
+        source = rec.payment_source or "cash_on_hand"
+        if source == "my_pocket":
+            return PayoutKind.expense_payout
+        return PayoutKind.income_handover
+    return None
+
+
+def record_locked_by_settlement(db: Session, rec: MoneyRecord) -> bool:
+    """True if a non-voided payout cutoff already includes this record."""
+    if rec.status != RecordStatus.approved or rec.is_voided:
+        return False
+    kind = settlement_kind_for_record(rec)
+    if kind is None:
+        return False
+    cut = last_payout(db, rec.organization_id, rec.created_by, kind)
+    if cut is None:
+        return False
+    eff = record_effective_at(rec)
+    if eff is None:
+        return False
+    return eff <= cut.created_at
+
+
+def can_void_record(db: Session, rec: MoneyRecord) -> bool:
+    if rec.status != RecordStatus.approved or rec.is_voided:
+        return False
+    if rec.transfer_group_id:
+        siblings = (
+            db.query(MoneyRecord)
+            .filter(
+                MoneyRecord.organization_id == rec.organization_id,
+                MoneyRecord.transfer_group_id == rec.transfer_group_id,
+                MoneyRecord.is_voided.is_(False),
+            )
+            .all()
+        )
+        return all(not record_locked_by_settlement(db, s) for s in siblings)
+    return not record_locked_by_settlement(db, rec)
+
+
 def user_balance(db: Session, user: User) -> dict:
     org_id = user.organization_id
     hand_cut = last_payout(db, org_id, user.id, PayoutKind.income_handover)

@@ -41,6 +41,7 @@ export type MoneyRecord = {
   is_voided?: boolean;
   voided_at?: string | null;
   transfer_group_id?: string | null;
+  can_void?: boolean;
 };
 
 export type OrgReport = {
@@ -55,6 +56,7 @@ export type OrgReport = {
   cash_position: number;
   spend_from_cash?: number;
   spend_from_pocket?: number;
+  internal_transfer_total?: number;
   total_spendings?: number;
   total_cash_held?: number;
   by_category: { kind: string; category: string; total: number }[];
@@ -493,6 +495,8 @@ export function listMySettlementRequests() {
       amount: number;
       note: string;
       status: string;
+      settled_amount?: number | null;
+      payout_id?: number | null;
       created_at: string;
     }[]
   >("/payouts/requests/mine");
@@ -519,6 +523,8 @@ export function listSettlementRequests() {
       amount: number;
       note: string;
       status: string;
+      settled_amount?: number | null;
+      payout_id?: number | null;
       created_at: string;
     }[]
   >("/payouts/requests");

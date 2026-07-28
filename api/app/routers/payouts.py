@@ -2,6 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles
@@ -56,6 +57,27 @@ class VoidIn(BaseModel):
     note: str = Field(min_length=1, max_length=2000)
 
 
+class SettlementRequestIn(BaseModel):
+    kind: PayoutKind
+    amount: float = Field(gt=0)
+    note: str = ""
+
+
+class SettlementRequestOut(BaseModel):
+    id: int
+    user_id: int
+    user_name: str = ""
+    kind: PayoutKind
+    amount: float
+    note: str
+    status: SettlementRequestStatus
+    created_at: datetime
+    settled_amount: float | None = None
+    payout_id: int | None = None
+
+    model_config = {"from_attributes": True}
+
+
 def _can_void_payout(db: Session, row: Payout) -> bool:
     if row.is_voided:
         return False
@@ -81,6 +103,35 @@ def _payout_out(db: Session, row: Payout, user_name: str) -> PayoutOut:
         can_void=_can_void_payout(db, row),
         created_by=row.created_by,
         created_at=row.created_at,
+    )
+
+
+def _pending_reserved(
+    db: Session, user_id: int, org_id: int, kind: PayoutKind, exclude_id: int | None = None
+) -> float:
+    q = db.query(func.coalesce(func.sum(SettlementRequest.amount), 0.0)).filter(
+        SettlementRequest.organization_id == org_id,
+        SettlementRequest.user_id == user_id,
+        SettlementRequest.kind == kind,
+        SettlementRequest.status == SettlementRequestStatus.pending,
+    )
+    if exclude_id is not None:
+        q = q.filter(SettlementRequest.id != exclude_id)
+    return float(q.scalar() or 0)
+
+
+def _request_out(row: SettlementRequest, user_name: str) -> SettlementRequestOut:
+    return SettlementRequestOut(
+        id=row.id,
+        user_id=row.user_id,
+        user_name=user_name,
+        kind=row.kind,
+        amount=row.amount,
+        note=row.note,
+        status=row.status,
+        created_at=row.created_at,
+        settled_amount=row.settled_amount,
+        payout_id=row.payout_id,
     )
 
 
@@ -198,29 +249,25 @@ def void_payout(
     row.voided_at = _utcnow()
     row.voided_by = manager.id
     row.void_note = body.note
+    linked = (
+        db.query(SettlementRequest)
+        .filter(
+            SettlementRequest.organization_id == manager.organization_id,
+            SettlementRequest.payout_id == row.id,
+        )
+        .first()
+    )
+    if linked is not None:
+        linked.status = SettlementRequestStatus.pending
+        linked.decided_at = None
+        linked.decided_by = None
+        linked.settled_amount = None
+        linked.payout_id = None
+        linked.note = ((linked.note or "") + f"\n[reopened after payout void] {body.note}").strip()
     db.commit()
     db.refresh(row)
     target = db.get(User, row.user_id)
     return _payout_out(db, row, target.full_name if target else "")
-
-
-class SettlementRequestIn(BaseModel):
-    kind: PayoutKind
-    amount: float = Field(gt=0)
-    note: str = ""
-
-
-class SettlementRequestOut(BaseModel):
-    id: int
-    user_id: int
-    user_name: str = ""
-    kind: PayoutKind
-    amount: float
-    note: str
-    status: SettlementRequestStatus
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
 
 
 @router.post("/batch-spendings", response_model=list[PayoutOut])
@@ -307,16 +354,7 @@ def my_settlement_requests(
         .all()
     )
     return [
-        SettlementRequestOut(
-            id=r.id,
-            user_id=r.user_id,
-            user_name=user.full_name,
-            kind=r.kind,
-            amount=r.amount,
-            note=r.note,
-            status=r.status,
-            created_at=r.created_at,
-        )
+        _request_out(r, user.full_name)
         for r in rows
     ]
 
@@ -334,10 +372,13 @@ def request_settlement(
     else:
         available = float(bal.get("cash_on_hand") or 0)
         label = "cash on hand"
-    if body.amount > available + 1e-6:
+    reserved = _pending_reserved(db, user.id, user.organization_id, body.kind)
+    open_to_request = max(0.0, available - reserved)
+    if body.amount > open_to_request + 1e-6:
         raise HTTPException(
             400,
-            f"Request exceeds {label} ({available}). Ask for {available} or less.",
+            f"Request exceeds available {label} ({open_to_request}; "
+            f"balance {available}, reserved by pending {reserved}).",
         )
     row = SettlementRequest(
         organization_id=user.organization_id,
@@ -351,16 +392,7 @@ def request_settlement(
     db.add(row)
     db.commit()
     db.refresh(row)
-    return SettlementRequestOut(
-        id=row.id,
-        user_id=row.user_id,
-        user_name=user.full_name,
-        kind=row.kind,
-        amount=row.amount,
-        note=row.note,
-        status=row.status,
-        created_at=row.created_at,
-    )
+    return _request_out(row, user.full_name)
 
 
 @router.get("/requests", response_model=list[SettlementRequestOut])
@@ -381,18 +413,7 @@ def list_settlement_requests(
     out = []
     for r in rows:
         u = db.get(User, r.user_id)
-        out.append(
-            SettlementRequestOut(
-                id=r.id,
-                user_id=r.user_id,
-                user_name=u.full_name if u else "",
-                kind=r.kind,
-                amount=r.amount,
-                note=r.note,
-                status=r.status,
-                created_at=r.created_at,
-            )
-        )
+        out.append(_request_out(r, u.full_name if u else ""))
     return out
 
 
@@ -416,14 +437,19 @@ def approve_settlement_request(
         if req.kind == PayoutKind.expense_payout
         else float(bal.get("cash_on_hand") or 0)
     )
-    amount = min(float(req.amount), available)
-    if amount <= 0:
-        raise HTTPException(400, "Nothing left to settle for this request")
+    if float(req.amount) > available + 1e-6:
+        raise HTTPException(
+            400,
+            f"Balance is only {available}; cancel or reduce other activity, then retry "
+            f"(request is {req.amount}).",
+        )
+    amount = float(req.amount)
     req.status = SettlementRequestStatus.approved
     req.decided_at = _utcnow()
     req.decided_by = manager.id
+    req.settled_amount = amount
     db.flush()
-    return create_payout(
+    payout = create_payout(
         PayoutCreate(
             user_id=req.user_id,
             kind=req.kind,
@@ -434,6 +460,16 @@ def approve_settlement_request(
         db=db,
         manager=manager,
     )
+    # create_payout commits; re-attach payout link
+    req = db.get(SettlementRequest, request_id)
+    if req is not None:
+        req.payout_id = payout.id
+        req.settled_amount = amount
+        req.status = SettlementRequestStatus.approved
+        req.decided_at = req.decided_at or _utcnow()
+        req.decided_by = req.decided_by or manager.id
+        db.commit()
+    return payout
 
 
 @router.post("/requests/{request_id}/cancel", response_model=SettlementRequestOut)
@@ -456,13 +492,4 @@ def cancel_settlement_request(
     db.commit()
     db.refresh(req)
     u = db.get(User, req.user_id)
-    return SettlementRequestOut(
-        id=req.id,
-        user_id=req.user_id,
-        user_name=u.full_name if u else "",
-        kind=req.kind,
-        amount=req.amount,
-        note=req.note,
-        status=req.status,
-        created_at=req.created_at,
-    )
+    return _request_out(req, u.full_name if u else "")

@@ -130,7 +130,7 @@ export function RecordDetailScreen({
     !!rec &&
     rec.status === "pending" &&
     (rec.created_by === user.id || isManager);
-  const canVoid = !!rec && isManager && rec.status === "approved" && !rec.is_voided;
+  const canVoid = !!rec && isManager && !!rec.can_void;
 
   return (
     <Screen scroll>

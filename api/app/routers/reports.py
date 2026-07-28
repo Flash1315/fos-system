@@ -65,6 +65,7 @@ def my_report(
             MoneyRecord.kind == kind,
             MoneyRecord.status == RecordStatus.approved,
             MoneyRecord.is_voided.is_(False),
+            MoneyRecord.transfer_group_id.is_(None),
         )
         if payment is not None:
             q = q.filter(MoneyRecord.payment_method == payment)
@@ -82,6 +83,7 @@ def my_report(
         MoneyRecord.created_by == user.id,
         MoneyRecord.status == RecordStatus.approved,
         MoneyRecord.is_voided.is_(False),
+        MoneyRecord.transfer_group_id.is_(None),
         MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
     )
     if since is not None:
@@ -101,6 +103,7 @@ def my_report(
         MoneyRecord.created_by == user.id,
         MoneyRecord.status == RecordStatus.approved,
         MoneyRecord.is_voided.is_(False),
+        MoneyRecord.transfer_group_id.is_(None),
     )
     if since is not None:
         cat_q = cat_q.filter(eff >= since)
@@ -144,6 +147,7 @@ def org_report(
             MoneyRecord.kind == kind,
             MoneyRecord.status == RecordStatus.approved,
             MoneyRecord.is_voided.is_(False),
+            MoneyRecord.transfer_group_id.is_(None),
         )
         if payment is not None:
             q = q.filter(MoneyRecord.payment_method == payment)
@@ -164,6 +168,7 @@ def org_report(
             MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
             MoneyRecord.status == RecordStatus.approved,
             MoneyRecord.is_voided.is_(False),
+            MoneyRecord.transfer_group_id.is_(None),
             MoneyRecord.payment_source.in_(sources),
         )
         if since is not None:
@@ -171,6 +176,19 @@ def org_report(
         if until is not None:
             q = q.filter(eff <= until)
         return float(q.scalar() or 0)
+
+    xfer_q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
+        MoneyRecord.organization_id == oid,
+        MoneyRecord.kind == RecordKind.expense,
+        MoneyRecord.status == RecordStatus.approved,
+        MoneyRecord.is_voided.is_(False),
+        MoneyRecord.transfer_group_id.is_not(None),
+    )
+    if since is not None:
+        xfer_q = xfer_q.filter(eff >= since)
+    if until is not None:
+        xfer_q = xfer_q.filter(eff <= until)
+    internal_transfer_total = float(xfer_q.scalar() or 0)
 
     spend_from_cash = sum_spend_source(["cash_on_hand", ""])
     spend_from_pocket = sum_spend_source(["my_pocket"])
@@ -203,6 +221,7 @@ def org_report(
         MoneyRecord.organization_id == oid,
         MoneyRecord.status == RecordStatus.approved,
         MoneyRecord.is_voided.is_(False),
+        MoneyRecord.transfer_group_id.is_(None),
     )
     if since is not None:
         cat_q = cat_q.filter(eff >= since)
@@ -221,6 +240,7 @@ def org_report(
         MoneyRecord.organization_id == oid,
         MoneyRecord.status == RecordStatus.approved,
         MoneyRecord.is_voided.is_(False),
+        MoneyRecord.transfer_group_id.is_(None),
         MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
     )
     if since is not None:
@@ -244,6 +264,7 @@ def org_report(
         cash_position=cash_position,
         spend_from_cash=spend_from_cash,
         spend_from_pocket=spend_from_pocket,
+        internal_transfer_total=internal_transfer_total,
         total_spendings=total_spendings,
         total_cash_held=total_cash_held,
         by_category=by_category,

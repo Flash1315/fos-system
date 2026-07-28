@@ -21,6 +21,8 @@ type ReqRow = {
   amount: number;
   note: string;
   status?: string;
+  settled_amount?: number | null;
+  payout_id?: number | null;
 };
 
 export function AccountScreen({
@@ -201,6 +203,7 @@ export function AccountScreen({
           <View key={r.id} style={styles.card}>
             <Sub>
               {r.kind} · {r.amount.toLocaleString()} · {r.status || "pending"}
+              {r.settled_amount != null ? ` · settled ${r.settled_amount.toLocaleString()}` : ""}
               {r.note ? ` · ${r.note}` : ""}
             </Sub>
             {r.status === "pending" && (

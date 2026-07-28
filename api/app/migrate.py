@@ -56,3 +56,10 @@ def ensure_money_record_columns() -> None:
             ("void_note", "TEXT DEFAULT ''"),
         ],
     )
+    _ensure_columns(
+        "settlement_requests",
+        [
+            ("settled_amount", "FLOAT"),
+            ("payout_id", "INTEGER"),
+        ],
+    )

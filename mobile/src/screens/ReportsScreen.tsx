@@ -125,6 +125,12 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
               {(report.spend_from_cash ?? 0).toLocaleString()} /{" "}
               {(report.spend_from_pocket ?? 0).toLocaleString()}
             </Text>
+            {(report.internal_transfer_total ?? 0) > 0 && (
+              <>
+                <Label>Internal transfers (excluded from totals)</Label>
+                <Text style={styles.line}>{(report.internal_transfer_total ?? 0).toLocaleString()}</Text>
+              </>
+            )}
             <Label>Team held cash</Label>
             <Text style={styles.line}>{(report.total_cash_held ?? 0).toLocaleString()}</Text>
             <Label>Team spendings owed</Label>

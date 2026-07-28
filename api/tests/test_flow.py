@@ -1204,3 +1204,115 @@ def test_payment_fields_and_currency_lock(client):
     assert locked.status_code == 400
     rename = client.patch("/orgs/me", headers=h, json={"name": "Guards Co"})
     assert rename.status_code == 200
+
+
+def test_settlement_reserve_and_record_lock(client):
+    owner = _register(client, "flow-reserve", "reserve-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 10000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    r1 = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 6000, "note": "first"},
+    )
+    assert r1.status_code == 200
+    r2 = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 5000, "note": "too much"},
+    )
+    assert r2.status_code == 400
+    r2ok = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 4000, "note": "second"},
+    )
+    assert r2ok.status_code == 200
+
+    rid = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 111,
+            "category": "Food",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    ).json()["id"]
+    # cancel pending requests so we can settle the record cleanly
+    client.post(f"/payouts/requests/{r1.json()['id']}/cancel", headers=h)
+    client.post(f"/payouts/requests/{r2ok.json()['id']}/cancel", headers=h)
+    detail = client.get(f"/records/{rid}", headers=h).json()
+    assert detail["can_void"] is True
+    pay = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "expense_payout", "amount": 10111},
+    )
+    assert pay.status_code == 200
+    locked = client.get(f"/records/{rid}", headers=h).json()
+    assert locked["can_void"] is False
+    denied = client.post(f"/records/{rid}/void", headers=h, json={"note": "nope"})
+    assert denied.status_code == 400
+    # void payout unlocks
+    client.post(f"/payouts/{pay.json()['id']}/void", headers=h, json={"note": "undo settle"})
+    unlocked = client.get(f"/records/{rid}", headers=h).json()
+    assert unlocked["can_void"] is True
+
+
+def test_transfer_excluded_from_operating_report(client):
+    owner = _register(client, "flow-xferrep", "xferrep-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "xferrep-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 50000,
+            "category": "Cash",
+            "payment_method": "cash",
+            "approve_now": True,
+        },
+    )
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 3000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    client.post(
+        "/transfers",
+        headers=h,
+        json={"to_email": "xferrep-emp@example.com", "amount": 10000, "comment": "ops"},
+    )
+    report = client.get("/reports/org", headers=h).json()
+    assert report["approved_expense_total"] == 3000
+    assert report["internal_transfer_total"] == 10000
+    assert report["net_result"] == 47000  # 50000 - 3000

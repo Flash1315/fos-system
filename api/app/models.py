@@ -158,3 +158,6 @@ class SettlementRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Filled when approved — actual payout amount may be clamped
+    settled_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    payout_id: Mapped[int | None] = mapped_column(ForeignKey("payouts.id"), nullable=True)

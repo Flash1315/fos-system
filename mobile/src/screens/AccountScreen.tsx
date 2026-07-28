@@ -12,6 +12,7 @@ import {
   updateOrg,
   type User,
 } from "../api";
+import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
 type ReqRow = {
@@ -48,6 +49,7 @@ export function AccountScreen({
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
   const [currency, setCurrency] = useState("RUB");
+  const [cancelId, setCancelId] = useState<number | null>(null);
 
   const reloadOrg = async () => {
     try {
@@ -267,17 +269,7 @@ export function AccountScreen({
                     title="Cancel"
                     variant="ghost"
                     disabled={busy}
-                    onPress={async () => {
-                      setBusy(true);
-                      try {
-                        await cancelSettlementRequest(r.id);
-                        await reloadRequests();
-                      } catch (e) {
-                        Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-                      } finally {
-                        setBusy(false);
-                      }
-                    }}
+                    onPress={() => setCancelId(r.id)}
                   />
                 </View>
               </View>
@@ -285,6 +277,29 @@ export function AccountScreen({
           )}
         </>
       )}
+      <NoteModal
+        visible={cancelId != null}
+        title="Cancel teammate request"
+        onCancel={() => setCancelId(null)}
+        onSubmit={async (cancelNote) => {
+          if (!cancelNote.trim()) {
+            Alert.alert("Fos", "Cancel requires a note");
+            return;
+          }
+          const id = cancelId;
+          setCancelId(null);
+          if (id == null) return;
+          setBusy(true);
+          try {
+            await cancelSettlementRequest(id, cancelNote.trim());
+            await reloadRequests();
+          } catch (e) {
+            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
     </Screen>
   );
 }

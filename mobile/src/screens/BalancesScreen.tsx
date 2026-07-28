@@ -176,7 +176,7 @@ export function BalancesScreen({
                   <View key={a.id} style={styles.adjRow}>
                     <Text style={styles.adj}>
                       {a.user_name} · {a.track} · {formatMoney(a.amount, currency)} — {a.note}
-                      {!a.can_void ? " · locked" : ""}
+                      {!a.can_void ? ` · ${a.void_blocked_reason || "locked"}` : ""}
                     </Text>
                     {!!a.can_void && (
                       <Btn

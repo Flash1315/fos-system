@@ -1363,6 +1363,59 @@ def test_transfer_excluded_from_operating_report(client):
     assert report["net_result"] == 47000  # 50000 - 3000
 
 
+def test_manager_cancel_request_requires_note(client):
+    owner = _register(client, "flow-cancnote", "cancnote-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "cancnote-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    assert inv.status_code == 200
+    emp_id = inv.json()["id"]
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 3000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "created_for_user_id": emp_id,
+            "approve_now": True,
+        },
+    )
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "cancnote-emp@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-cancnote",
+        },
+    )
+    eh = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    req = client.post(
+        "/payouts/requests",
+        headers=eh,
+        json={"kind": "expense_payout", "amount": 3000, "note": "pls"},
+    )
+    assert req.status_code == 200
+    bare = client.post(f"/payouts/requests/{req.json()['id']}/cancel", headers=h, json={})
+    assert bare.status_code == 400
+    ok = client.post(
+        f"/payouts/requests/{req.json()['id']}/cancel",
+        headers=h,
+        json={"note": "not this week"},
+    )
+    assert ok.status_code == 200
+    assert "not this week" in ok.json()["note"]
+
+
 def test_payout_respects_reserved_available(client):
     owner = _register(client, "flow-availpay", "availpay-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -1578,6 +1631,7 @@ def test_balance_adjustments_and_atomic_approve(client):
     listed = client.get("/adjustments", headers=h).json()
     spend_row = next(x for x in listed if x["id"] == adj.json()["id"])
     assert spend_row["can_void"] is False
+    assert spend_row["void_blocked_reason"]
     locked = client.post(
         f"/adjustments/{adj.json()['id']}/void",
         headers=h,

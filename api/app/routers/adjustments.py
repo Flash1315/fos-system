@@ -10,7 +10,7 @@ from app.auth import get_current_user, require_roles
 from app.db import get_db
 from app.models import AdjustmentTrack, BalanceAdjustment, User, UserRole
 from app.routers.records import _utcnow
-from app.services.balances import can_void_adjustment
+from app.services.balances import adjustment_void_blocked_reason, can_void_adjustment
 
 router = APIRouter(prefix="/adjustments", tags=["adjustments"])
 
@@ -35,6 +35,7 @@ class AdjustmentOut(BaseModel):
     created_at: datetime
     is_voided: bool = False
     can_void: bool = False
+    void_blocked_reason: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -56,6 +57,7 @@ def _out(row: BalanceAdjustment, user_name: str, db: Session | None = None) -> A
         created_at=row.created_at,
         is_voided=bool(row.is_voided),
         can_void=can_void_adjustment(db, row) if db is not None else False,
+        void_blocked_reason=adjustment_void_blocked_reason(db, row) if db is not None else None,
     )
 
 

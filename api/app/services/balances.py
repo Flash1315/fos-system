@@ -126,6 +126,12 @@ def can_void_adjustment(db: Session, adj: BalanceAdjustment) -> bool:
     return not adjustment_locked_by_settlement(db, adj)
 
 
+def adjustment_void_blocked_reason(db: Session, adj: BalanceAdjustment) -> str | None:
+    if adj.is_voided or can_void_adjustment(db, adj):
+        return None
+    return "Locked by a later settlement. Void that payout first."
+
+
 def pending_reserved(
     db: Session, user_id: int, org_id: int, kind: PayoutKind, exclude_id: int | None = None
 ) -> float:

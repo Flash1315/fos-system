@@ -57,6 +57,10 @@ class VoidIn(BaseModel):
     note: str = Field(min_length=1, max_length=2000)
 
 
+class CancelRequestIn(BaseModel):
+    note: str = ""
+
+
 class SettlementRequestIn(BaseModel):
     kind: PayoutKind
     amount: float = Field(gt=0)
@@ -511,6 +515,7 @@ def approve_settlement_request(
 @router.post("/requests/{request_id}/cancel", response_model=SettlementRequestOut)
 def cancel_settlement_request(
     request_id: int,
+    body: CancelRequestIn = CancelRequestIn(),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -522,9 +527,14 @@ def cancel_settlement_request(
         raise HTTPException(403, "Insufficient role")
     if req.status != SettlementRequestStatus.pending:
         raise HTTPException(400, "Request already decided")
+    # Manager cancelling someone else's request must leave a note
+    if req.user_id != user.id and not (body.note or "").strip():
+        raise HTTPException(400, "Cancel requires a note")
     req.status = SettlementRequestStatus.cancelled
     req.decided_at = _utcnow()
     req.decided_by = user.id
+    if (body.note or "").strip():
+        req.note = (req.note + f"\n[cancelled] {body.note.strip()}").strip()
     db.commit()
     db.refresh(req)
     u = db.get(User, req.user_id)

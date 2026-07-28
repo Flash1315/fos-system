@@ -574,8 +574,11 @@ export function approveSettlementRequest(id: number) {
   return request(`/payouts/requests/${id}/approve`, { method: "POST" });
 }
 
-export function cancelSettlementRequest(id: number) {
-  return request(`/payouts/requests/${id}/cancel`, { method: "POST" });
+export function cancelSettlementRequest(id: number, note = "") {
+  return request(`/payouts/requests/${id}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
 }
 
 export type BalanceAdjustment = {
@@ -590,6 +593,7 @@ export type BalanceAdjustment = {
   created_at: string;
   is_voided: boolean;
   can_void?: boolean;
+  void_blocked_reason?: string | null;
 };
 
 export function listAdjustments() {

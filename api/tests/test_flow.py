@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _jpeg_bytes() -> bytes:
     """Return a tiny valid JPEG for receipt-upload tests."""
@@ -2804,7 +2806,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -5206,7 +5208,7 @@ def test_login_slug_norm_telegram_and_security_headers(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     assert health.headers.get("x-content-type-options") == "nosniff"
     assert health.headers.get("x-frame-options") == "DENY"
     assert health.headers.get("referrer-policy") == "no-referrer"
@@ -5273,7 +5275,7 @@ def test_login_bounds_password_same_and_transfer_email(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     assert health.headers.get("cache-control") == "no-store"
 
     # Seed cash via income then transfer with mixed-case email
@@ -5376,7 +5378,7 @@ def test_idem_charset_invite_email_and_org_patch(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
 
 def test_logout_bike_normalize_and_register_slug(client):
@@ -5386,7 +5388,7 @@ def test_logout_bike_normalize_and_register_slug(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     assert health.json()["db"] == "ok"
     assert health.json()["ok"] is True
 
@@ -5453,7 +5455,7 @@ def test_place_client_normalize_and_coop_header(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     assert health.headers.get("cross-origin-opener-policy") == "same-origin"
 
     rec = client.post(
@@ -5508,7 +5510,7 @@ def test_slug_shape_category_collapse(client):
     owner = _register(client, "flow-0731", "v0731-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     rec = client.post(
         "/records",
@@ -5539,7 +5541,7 @@ def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
     """v0.7.32: X-Request-Id, note whitespace collapse, team mutation rate limit."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     assert "X-Request-Id" in health.headers
     rid = health.headers["X-Request-Id"]
     assert len(rid) >= 8
@@ -5663,7 +5665,7 @@ def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
 def test_list_rate_limits_comment_collapse_batch_method(client, monkeypatch):
     """v0.7.33: list GET rate limits, decide/comment collapse, batch payment_method."""
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     assert "X-Request-Id" in health.headers
 
     owner = _register(client, "flow-0733", "v0733-owner@example.com")
@@ -5727,7 +5729,7 @@ def test_list_rate_limits_comment_collapse_batch_method(client, monkeypatch):
 def test_control_chars_read_limits_and_request_id_header(client, monkeypatch):
     """v0.7.34: reject control chars, rate-limit remaining reads."""
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     assert health.headers.get("X-Request-Id")
 
     owner = _register(client, "flow-0734", "v0734-owner@example.com")
@@ -5800,7 +5802,7 @@ def test_health_controls_before_collapse_and_export_names(client, monkeypatch):
     """v0.7.35: health readiness, control-char order, CSV export still works."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     assert health.json()["ok"] is True
     assert health.json()["db"] == "ok"
 
@@ -5868,7 +5870,7 @@ def test_login_timing_media_token_bound_and_export_cap(client):
     """v0.7.36: dummy-hash login path, media token bound, health version."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     # Missing account still 401 (dummy hash path)
     missing = client.post(
@@ -5897,7 +5899,7 @@ def test_preauth_429_body_limit_purpose_and_settings(client, monkeypatch, tmp_pa
     """v0.7.37: middleware 429 JSON, body size, purpose reject, settings guard."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     from app.config import settings
     from app.services.rate_limit import reset_limiter_for_tests
@@ -5960,7 +5962,7 @@ def test_org_cap_jwt_bind_pagination_csv_and_plaintext_invite(client, monkeypatc
     """v0.7.38: invite ceiling, JWT org bind, pagination, CSV defaults, hashed-only invites."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     from app.config import settings
     from app.db import SessionLocal
@@ -6087,7 +6089,7 @@ def test_reset_force_accept_message_reports_default_and_amount(client):
     """v0.7.39: reset 409/force, accept message, reports default window, amount schema."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     owner = _register(client, "flow-0739", "v0739-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -6167,7 +6169,7 @@ def test_password_strength_hsts_reject_note_and_media_path(client, monkeypatch):
     """v0.7.40: password rules, optional HSTS, reject note min 2, media path guard."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     weak = client.post(
         "/orgs/register",
@@ -6234,7 +6236,7 @@ def test_invitee_billing_idem_ttl_and_docs_gate(client, monkeypatch):
     """v0.7.41: block unsettled invitees, canceled billing, idem prune, JWT ceiling."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     assert client.get("/docs").status_code == 200
 
     owner = _register(client, "flow-0741", "v0741-owner@example.com")
@@ -6347,7 +6349,7 @@ def test_billing_freeze_mutations_and_media_type(client):
     """v0.7.42: canceled org blocks decide/void; media content-type; invitee JWT rejected."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     from app.services.storage import content_type_for
 
@@ -6446,7 +6448,7 @@ def test_billing_readonly_cancel_and_startup_bounds(client, monkeypatch):
     """v0.7.43: canceled org is read-only; cancel pending still works; startup bounds."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     owner = _register(client, "flow-0743", "v0743-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -6595,7 +6597,7 @@ def test_tenant_ready_leak_reactivate_cap_and_prod_guards(client, monkeypatch):
     """v0.7.44: org-first create-for, reactivate seats, secret/proxy prod guards, freeze team/billing."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     a = _register(client, "flow-0744a", "v0744a-owner@example.com")
     ha = {"Authorization": f"Bearer {a['access_token']}"}
@@ -6783,7 +6785,7 @@ def test_past_due_readonly_overpay_forbid_and_health_backend(client, monkeypatch
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     assert health.json()["media_backend"] == "local"
 
     from app.config import settings
@@ -6860,7 +6862,7 @@ def test_cancel_creator_only_append_truncate_and_xff(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     owner = _register(client, "flow-0746", "v0746-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -6948,7 +6950,7 @@ def test_csv_settled_amount_currency_and_startup_pairs(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     owner = _register(client, "flow-0747", "v0747-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -7044,7 +7046,7 @@ def test_rate_limit_prod_gate_limiter_cap_and_cancel_replay_auth(client, monkeyp
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     from app.main import _validate_runtime_settings
     from app.config import settings
@@ -7193,7 +7195,7 @@ def test_login_form_validation_and_docker_pack_markers(client):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     bad_email = client.post(
         "/auth/login-form",
@@ -7235,7 +7237,7 @@ def test_freeze_idem_replay_accept_invite_and_local_media_oserror(client, monkey
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     owner = _register(client, "flow-0750", "v0750-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -7356,7 +7358,7 @@ def test_prod_refuses_sqlite_and_deploy_pack_markers(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "secret_key", "a" * 40)
@@ -7438,7 +7440,7 @@ def test_eas_pack_markers(client):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     root = Path(__file__).resolve().parents[2]
     assert (root / "docs" / "EAS.md").is_file()
@@ -7462,7 +7464,7 @@ def test_redis_limiter_fallback_and_hot_indexes(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     monkeypatch.setattr(settings, "rate_limit_enabled", True)
 
@@ -7525,7 +7527,7 @@ def test_ops_cors_health_metrics_and_alembic_first(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     live = client.get("/health/live")
     assert live.status_code == 200
@@ -7592,7 +7594,7 @@ def test_closed_cycle_gate_photo_idem_and_comment_status(client):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     owner = _register(client, "flow-0755", "v0755-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -7707,7 +7709,7 @@ def test_invite_reset_token_visibility_retry_and_closed_cycle_client(client, mon
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     owner = _register(client, "flow-0758", "v0758-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -7795,7 +7797,7 @@ def test_soft_retry_resume_content_hash_and_prod_metrics_compose(client):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     root = Path(__file__).resolve().parents[2]
     api_ts = (root / "mobile" / "src" / "api.ts").read_text(encoding="utf-8")
@@ -7881,7 +7883,7 @@ def test_resume_billing_media_hygiene_and_ready_media(client):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     assert health.json().get("media") in ("ok", "error")
     assert "media_backend" in health.json()
 
@@ -8049,7 +8051,7 @@ def test_account_freeze_auth_share_422_and_limiter_ready(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     assert health.json()["limiter"] in ("memory", "redis", "redis_error")
 
     ready = client.get("/health/ready")
@@ -8163,7 +8165,7 @@ def test_detail_freeze_auth_offline_session_csv_ci(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
 
     root = Path(__file__).resolve().parents[2]
     detail = (root / "mobile" / "src" / "screens" / "RecordDetailScreen.tsx").read_text(
@@ -8294,8 +8296,8 @@ def test_v0775_payout_history_freeze_void_gate_markers():
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.220"
-    text = Path("/workspace/mobile/src/screens/PayoutHistoryScreen.tsx").read_text(
+    assert APP_VERSION == "0.7.230"
+    text = Path(REPO_ROOT / "mobile/src/screens/PayoutHistoryScreen.tsx").read_text(
         encoding="utf-8"
     )
     assert "billingMe" in text
@@ -8310,16 +8312,16 @@ def test_v0776_invite_balances_account_freeze_polish_markers():
     """v0.7.76: invite email format; balances void modal freeze; password-under-freeze note."""
     from pathlib import Path
 
-    invite = Path("/workspace/mobile/src/screens/InviteScreen.tsx").read_text(
+    invite = Path(REPO_ROOT / "mobile/src/screens/InviteScreen.tsx").read_text(
         encoding="utf-8"
     )
     assert "emailFormatError" in invite
-    balances = Path("/workspace/mobile/src/screens/BalancesScreen.tsx").read_text(
+    balances = Path(REPO_ROOT / "mobile/src/screens/BalancesScreen.tsx").read_text(
         encoding="utf-8"
     )
     assert "if (billingReadonly)" in balances
     assert "BILLING_READONLY_MSG" in balances
-    account = Path("/workspace/mobile/src/screens/AccountScreen.tsx").read_text(
+    account = Path(REPO_ROOT / "mobile/src/screens/AccountScreen.tsx").read_text(
         encoding="utf-8"
     )
     assert "Password change still works while billing is restricted" in account
@@ -8329,10 +8331,10 @@ def test_v0777_export_org_rate_limit_and_access_role_bind_markers():
     """v0.7.77: export-org rate limit + access JWT role bind."""
     from pathlib import Path
 
-    reports = Path("/workspace/api/app/routers/reports.py").read_text(encoding="utf-8")
+    reports = Path(REPO_ROOT / "api/app/routers/reports.py").read_text(encoding="utf-8")
     assert "export-org:" in reports
     assert "limit=20" in reports
-    auth = Path("/workspace/api/app/auth.py").read_text(encoding="utf-8")
+    auth = Path(REPO_ROOT / "api/app/auth.py").read_text(encoding="utf-8")
     assert "Access token role claim must match the current account role" in auth
     assert 'payload.get("role")' in auth
 
@@ -8433,13 +8435,13 @@ def test_v0778_health_cache_control_ci_and_docs_markers():
     """v0.7.78: CI + docs assert live Cache-Control no-store."""
     from pathlib import Path
 
-    ci = Path("/workspace/.github/workflows/api-tests.yml").read_text(encoding="utf-8")
+    ci = Path(REPO_ROOT / ".github/workflows/api-tests.yml").read_text(encoding="utf-8")
     assert "cache-control:.*no-store" in ci
     assert 'live.headers.get("cache-control")' in ci
-    main = Path("/workspace/api/app/main.py").read_text(encoding="utf-8")
+    main = Path(REPO_ROOT / "api/app/main.py").read_text(encoding="utf-8")
     assert "Cache-Control" in main
     assert "no-store" in main
-    deploy = Path("/workspace/docs/DEPLOY.md").read_text(encoding="utf-8")
+    deploy = Path(REPO_ROOT / "docs/DEPLOY.md").read_text(encoding="utf-8")
     assert "Cache-Control: no-store" in deploy
 
 def test_v0779_home_resume_freeze_markers():
@@ -8448,13 +8450,13 @@ def test_v0779_home_resume_freeze_markers():
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.220"
-    home = Path("/workspace/mobile/src/screens/HomeScreen.tsx").read_text(encoding="utf-8")
+    assert APP_VERSION == "0.7.230"
+    home = Path(REPO_ROOT / "mobile/src/screens/HomeScreen.tsx").read_text(encoding="utf-8")
     assert "BILLING_READONLY_MSG" in home
     assert "isBillingReadOnly" in home
     assert "billingMe()" in home
     for name in ("ApproveScreen.tsx", "TeamScreen.tsx", "BalancesScreen.tsx"):
-        text = Path(f"/workspace/mobile/src/screens/{name}").read_text(encoding="utf-8")
+        text = Path(REPO_ROOT / f"mobile/src/screens/{name}").read_text(encoding="utf-8")
         assert "onResumeRefresh" in text
         assert "billingMe" in text
         assert "setBillingReadonly" in text
@@ -8464,16 +8466,16 @@ def test_v0780_confirm_path_freeze_recheck_markers():
     """v0.7.80: confirm handlers re-check billingReadonly before mutations."""
     from pathlib import Path
 
-    approve = Path("/workspace/mobile/src/screens/ApproveScreen.tsx").read_text(encoding="utf-8")
+    approve = Path(REPO_ROOT / "mobile/src/screens/ApproveScreen.tsx").read_text(encoding="utf-8")
     assert "busy || billingReadonly" in approve
     assert "BILLING_READONLY_MSG" in approve
-    team = Path("/workspace/mobile/src/screens/TeamScreen.tsx").read_text(encoding="utf-8")
+    team = Path(REPO_ROOT / "mobile/src/screens/TeamScreen.tsx").read_text(encoding="utf-8")
     assert "if (busy || billingReadonly)" in team
-    balances = Path("/workspace/mobile/src/screens/BalancesScreen.tsx").read_text(encoding="utf-8")
+    balances = Path(REPO_ROOT / "mobile/src/screens/BalancesScreen.tsx").read_text(encoding="utf-8")
     assert "if (isBusy || billingReadonly)" in balances
-    account = Path("/workspace/mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
+    account = Path(REPO_ROOT / "mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
     assert "if (busy || billingReadonly)" in account
-    payout = Path("/workspace/mobile/src/screens/PayoutScreen.tsx").read_text(encoding="utf-8")
+    payout = Path(REPO_ROOT / "mobile/src/screens/PayoutScreen.tsx").read_text(encoding="utf-8")
     assert "if (busy || billingReadonly)" in payout
 
 
@@ -8481,16 +8483,16 @@ def test_v0781_expires_in_session_hygiene_markers():
     """v0.7.81: persist fos_token_exp from expires_in; preflight Session expired."""
     from pathlib import Path
 
-    api = Path("/workspace/mobile/src/api.ts").read_text(encoding="utf-8")
+    api = Path(REPO_ROOT / "mobile/src/api.ts").read_text(encoding="utf-8")
     assert "fos_token_exp" in api
     assert "expiresInSec" in api
     assert "Session expired" in api
     assert "ensureAccessTokenNotExpired" in api
-    auth = Path("/workspace/mobile/src/screens/AuthScreen.tsx").read_text(encoding="utf-8")
+    auth = Path(REPO_ROOT / "mobile/src/screens/AuthScreen.tsx").read_text(encoding="utf-8")
     assert "res.expires_in" in auth
-    account = Path("/workspace/mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
+    account = Path(REPO_ROOT / "mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
     assert "res.expires_in" in account
-    app = Path("/workspace/mobile/App.tsx").read_text(encoding="utf-8")
+    app = Path(REPO_ROOT / "mobile/App.tsx").read_text(encoding="utf-8")
     assert "Session expired" in app
     assert "expiresIn" in app
 
@@ -8499,18 +8501,18 @@ def test_v0782_soft_fail_invite_org_ready_media_markers():
     """v0.7.82: list soft-fail, invite-org limit, ready/media Cache-Control no-store."""
     from pathlib import Path
 
-    home = Path("/workspace/mobile/src/screens/HomeScreen.tsx").read_text(encoding="utf-8")
+    home = Path(REPO_ROOT / "mobile/src/screens/HomeScreen.tsx").read_text(encoding="utf-8")
     assert 'setLoadError(e instanceof Error ? e.message : "Load failed")' in home
     assert 'Alert.alert("Fos", e instanceof Error ? e.message : "Load failed")' not in home
-    ledger = Path("/workspace/mobile/src/screens/LedgerScreen.tsx").read_text(encoding="utf-8")
+    ledger = Path(REPO_ROOT / "mobile/src/screens/LedgerScreen.tsx").read_text(encoding="utf-8")
     assert 'setLoadError(e instanceof Error ? e.message : "Failed")' in ledger
     assert 'Alert.alert("Fos", e instanceof Error ? e.message : "Failed")' not in ledger
-    auth = Path("/workspace/api/app/routers/auth.py").read_text(encoding="utf-8")
+    auth = Path(REPO_ROOT / "api/app/routers/auth.py").read_text(encoding="utf-8")
     assert "invite-org:" in auth
     assert "limit=60" in auth
-    media = Path("/workspace/api/app/routers/media.py").read_text(encoding="utf-8")
+    media = Path(REPO_ROOT / "api/app/routers/media.py").read_text(encoding="utf-8")
     assert 'Cache-Control": "no-store"' in media or "Cache-Control': 'no-store'" in media
-    ci = Path("/workspace/.github/workflows/api-tests.yml").read_text(encoding="utf-8")
+    ci = Path(REPO_ROOT / ".github/workflows/api-tests.yml").read_text(encoding="utf-8")
     assert "ready_headers" in ci
     assert 'ready.headers.get("cache-control")' in ci
 
@@ -8558,9 +8560,9 @@ def test_v0783_reports_soft_fail_markers():
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.220"
+    assert APP_VERSION == "0.7.230"
     for name in ("ReportsScreen.tsx", "MyReportScreen.tsx"):
-        text = Path(f"/workspace/mobile/src/screens/{name}").read_text(encoding="utf-8")
+        text = Path(REPO_ROOT / f"mobile/src/screens/{name}").read_text(encoding="utf-8")
         assert "setLoadError" in text
         assert "Retry" in text
         needle = 'setLoadError(e instanceof Error ? e.message : "Failed");'
@@ -8568,7 +8570,7 @@ def test_v0783_reports_soft_fail_markers():
         assert idx >= 0
         window = text[idx : idx + len(needle) + 80]
         assert "Alert.alert" not in window
-    approve = Path("/workspace/mobile/src/screens/ApproveScreen.tsx").read_text(encoding="utf-8")
+    approve = Path(REPO_ROOT / "mobile/src/screens/ApproveScreen.tsx").read_text(encoding="utf-8")
     needle = 'setLoadError(e instanceof Error ? e.message : "Failed");'
     idx = approve.find(needle)
     assert idx >= 0
@@ -8579,7 +8581,7 @@ def test_v0784_create_teammate_categories_polish_markers():
     """v0.7.84: Create shows File for on team error; categories retry; confirm billingMe."""
     from pathlib import Path
 
-    text = Path("/workspace/mobile/src/screens/CreateScreen.tsx").read_text(encoding="utf-8")
+    text = Path(REPO_ROOT / "mobile/src/screens/CreateScreen.tsx").read_text(encoding="utf-8")
     assert "Retry teammates" in text
     assert "Retry categories" in text
     assert "loadCategories" in text
@@ -8592,11 +8594,11 @@ def test_v0785_transfer_record_detail_freeze_soft_fail_markers():
     """v0.7.85: Transfer resume bootstrap; RecordDetail soft-fail + billing re-check."""
     from pathlib import Path
 
-    transfer = Path("/workspace/mobile/src/screens/TransferScreen.tsx").read_text(encoding="utf-8")
+    transfer = Path(REPO_ROOT / "mobile/src/screens/TransferScreen.tsx").read_text(encoding="utf-8")
     assert "void bootstrap()" in transfer
     assert "billingMe()" in transfer
     assert "BILLING_READONLY_MSG" in transfer
-    detail = Path("/workspace/mobile/src/screens/RecordDetailScreen.tsx").read_text(encoding="utf-8")
+    detail = Path(REPO_ROOT / "mobile/src/screens/RecordDetailScreen.tsx").read_text(encoding="utf-8")
     needle = 'setLoadError(e instanceof Error ? e.message : "Failed");'
     idx = detail.find(needle)
     assert idx >= 0
@@ -8609,10 +8611,10 @@ def test_v0786_transfer_org_export_cache_markers(client):
     """v0.7.86: transfer-org limit; CSV Cache-Control no-store."""
     from pathlib import Path
 
-    transfers = Path("/workspace/api/app/routers/transfers.py").read_text(encoding="utf-8")
+    transfers = Path(REPO_ROOT / "api/app/routers/transfers.py").read_text(encoding="utf-8")
     assert "transfer-org:" in transfers
     assert "limit=60" in transfers
-    reports = Path("/workspace/api/app/routers/reports.py").read_text(encoding="utf-8")
+    reports = Path(REPO_ROOT / "api/app/routers/reports.py").read_text(encoding="utf-8")
     assert '"Cache-Control": "no-store"' in reports
 
     owner = _register(client, "flow-expcache", "expcache@example.com")
@@ -8688,7 +8690,7 @@ def test_v0787_soft_fail_load_more_markers():
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.220"
+    assert APP_VERSION == "0.7.230"
     for name, needle in (
         ("LedgerScreen.tsx", "Load more failed"),
         ("HomeScreen.tsx", "Load more failed"),
@@ -8696,11 +8698,11 @@ def test_v0787_soft_fail_load_more_markers():
         ("BalancesScreen.tsx", "Load more failed"),
         ("AccountScreen.tsx", "Load more failed"),
     ):
-        text = Path(f"/workspace/mobile/src/screens/{name}").read_text(encoding="utf-8")
+        text = Path(REPO_ROOT / f"mobile/src/screens/{name}").read_text(encoding="utf-8")
         assert needle in text
         bad = f'Alert.alert("Fos", e instanceof Error ? e.message : "{needle}")'
         assert bad not in text
-    team = Path("/workspace/mobile/src/screens/TeamScreen.tsx").read_text(encoding="utf-8")
+    team = Path(REPO_ROOT / "mobile/src/screens/TeamScreen.tsx").read_text(encoding="utf-8")
     idx = team.find('setLoadError(e instanceof Error ? e.message : "Failed");')
     assert idx >= 0
     assert "Alert.alert" not in team[idx : idx + 90]
@@ -8710,11 +8712,11 @@ def test_v0788_invite_account_settle_freeze_markers():
     """v0.7.88: Invite resume slug + billingMe; Account approve re-checks freeze."""
     from pathlib import Path
 
-    invite = Path("/workspace/mobile/src/screens/InviteScreen.tsx").read_text(encoding="utf-8")
+    invite = Path(REPO_ROOT / "mobile/src/screens/InviteScreen.tsx").read_text(encoding="utf-8")
     assert "void loadSlug()" in invite
     assert "await billingMe()" in invite
     assert "doInvite" in invite
-    account = Path("/workspace/mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
+    account = Path(REPO_ROOT / "mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
     assert "doApproveRequest" in account
     assert "await billingMe()" in account
     assert "approveSettlementRequest" in account
@@ -8724,14 +8726,14 @@ def test_v0789_org_money_rate_limit_markers():
     """v0.7.89: adjustment-org, payout-org, decide-batch-org rate limits."""
     from pathlib import Path
 
-    adj = Path("/workspace/api/app/routers/adjustments.py").read_text(encoding="utf-8")
+    adj = Path(REPO_ROOT / "api/app/routers/adjustments.py").read_text(encoding="utf-8")
     assert "adjustment-org:" in adj
-    pay = Path("/workspace/api/app/routers/payouts.py").read_text(encoding="utf-8")
+    pay = Path(REPO_ROOT / "api/app/routers/payouts.py").read_text(encoding="utf-8")
     assert "payout-org:" in pay
     assert pay.count("payout-org:") >= 3
-    rec = Path("/workspace/api/app/routers/records.py").read_text(encoding="utf-8")
+    rec = Path(REPO_ROOT / "api/app/routers/records.py").read_text(encoding="utf-8")
     assert "decide-batch-org:" in rec
-    deploy = Path("/workspace/docs/DEPLOY.md").read_text(encoding="utf-8")
+    deploy = Path(REPO_ROOT / "docs/DEPLOY.md").read_text(encoding="utf-8")
     assert "adjustment-org:" in deploy
     assert "payout-org:" in deploy
     assert "decide-batch-org:" in deploy
@@ -8783,15 +8785,15 @@ def test_v0790_demo_hygiene_and_ci_prod_docs_markers():
     """v0.7.90: no hardcoded demo secrets; EAS docs; CI prod /docs 404."""
     from pathlib import Path
 
-    auth = Path("/workspace/mobile/src/screens/AuthScreen.tsx").read_text(encoding="utf-8")
+    auth = Path(REPO_ROOT / "mobile/src/screens/AuthScreen.tsx").read_text(encoding="utf-8")
     assert "demo2092" not in auth
     assert "secret12" not in auth
     assert "!!DEMO_SLUG" in auth
     assert "!!DEMO_PASSWORD" in auth
-    eas = Path("/workspace/docs/EAS.md").read_text(encoding="utf-8")
+    eas = Path(REPO_ROOT / "docs/EAS.md").read_text(encoding="utf-8")
     assert "EXPO_PUBLIC_DEMO_LOGIN" in eas
     assert "no hardcoded demo credentials" in eas
-    ci = Path("/workspace/.github/workflows/api-tests.yml").read_text(encoding="utf-8")
+    ci = Path(REPO_ROOT / ".github/workflows/api-tests.yml").read_text(encoding="utf-8")
     assert "fos-api-prod" in ci
     assert "ENVIRONMENT=production" in ci
     assert "adjustment-org:" in ci
@@ -8802,11 +8804,11 @@ def test_v0791_team_approve_confirm_billing_markers():
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.220"
-    team = Path("/workspace/mobile/src/screens/TeamScreen.tsx").read_text(encoding="utf-8")
+    assert APP_VERSION == "0.7.230"
+    team = Path(REPO_ROOT / "mobile/src/screens/TeamScreen.tsx").read_text(encoding="utf-8")
     assert "await billingMe()" in team
     assert "setMemberActive" in team
-    approve = Path("/workspace/mobile/src/screens/ApproveScreen.tsx").read_text(encoding="utf-8")
+    approve = Path(REPO_ROOT / "mobile/src/screens/ApproveScreen.tsx").read_text(encoding="utf-8")
     assert "await billingMe()" in approve
     assert "doDecide" in approve
 
@@ -8815,12 +8817,12 @@ def test_v0792_payout_balances_account_confirm_billing_markers():
     """v0.7.92: Payout/Balances/Account money confirms re-check billing."""
     from pathlib import Path
 
-    payout = Path("/workspace/mobile/src/screens/PayoutScreen.tsx").read_text(encoding="utf-8")
+    payout = Path(REPO_ROOT / "mobile/src/screens/PayoutScreen.tsx").read_text(encoding="utf-8")
     assert "await billingMe()" in payout
     assert "disabled={busy || billingReadonly}" in payout
-    balances = Path("/workspace/mobile/src/screens/BalancesScreen.tsx").read_text(encoding="utf-8")
+    balances = Path(REPO_ROOT / "mobile/src/screens/BalancesScreen.tsx").read_text(encoding="utf-8")
     assert balances.count("await billingMe()") >= 2
-    account = Path("/workspace/mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
+    account = Path(REPO_ROOT / "mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
     assert "await billingMe()" in account
     assert "requestSettlement" in account
 
@@ -8829,7 +8831,7 @@ def test_v0793_payout_history_soft_fail_markers():
     """v0.7.93: PayoutHistory reload/load-more soft-fail + void billingMe."""
     from pathlib import Path
 
-    text = Path("/workspace/mobile/src/screens/PayoutHistoryScreen.tsx").read_text(encoding="utf-8")
+    text = Path(REPO_ROOT / "mobile/src/screens/PayoutHistoryScreen.tsx").read_text(encoding="utf-8")
     needle = 'setLoadError(e instanceof Error ? e.message : "Failed");'
     idx = text.find(needle)
     assert idx >= 0
@@ -8843,11 +8845,11 @@ def test_v0794_comment_void_cancel_org_markers():
     """v0.7.94: comment-org / void-org / cancel-org rate limits."""
     from pathlib import Path
 
-    rec = Path("/workspace/api/app/routers/records.py").read_text(encoding="utf-8")
+    rec = Path(REPO_ROOT / "api/app/routers/records.py").read_text(encoding="utf-8")
     assert "comment-org:" in rec
     assert "void-org:" in rec
     assert "cancel-org:" in rec
-    deploy = Path("/workspace/docs/DEPLOY.md").read_text(encoding="utf-8")
+    deploy = Path(REPO_ROOT / "docs/DEPLOY.md").read_text(encoding="utf-8")
     assert "comment-org:" in deploy
 
 
@@ -8855,12 +8857,12 @@ def test_v0795_settle_request_team_payout_void_org_markers():
     """v0.7.95: settle-request-org, team-org, payout-void uses payout-org."""
     from pathlib import Path
 
-    pay = Path("/workspace/api/app/routers/payouts.py").read_text(encoding="utf-8")
+    pay = Path(REPO_ROOT / "api/app/routers/payouts.py").read_text(encoding="utf-8")
     assert "settle-request-org:" in pay
     assert pay.count("payout-org:") >= 5
-    team = Path("/workspace/api/app/routers/team.py").read_text(encoding="utf-8")
+    team = Path(REPO_ROOT / "api/app/routers/team.py").read_text(encoding="utf-8")
     assert "team-org:" in team
-    deploy = Path("/workspace/docs/DEPLOY.md").read_text(encoding="utf-8")
+    deploy = Path(REPO_ROOT / "docs/DEPLOY.md").read_text(encoding="utf-8")
     assert "settle-request-org:" in deploy
     assert "team-org:" in deploy
 
@@ -8869,12 +8871,12 @@ def test_v0796_session_dual_alert_and_soft_retry_markers():
     """v0.7.96: wasAuthRecentlyCleared; isSafeSoftRetry GET/Idem only."""
     from pathlib import Path
 
-    api = Path("/workspace/mobile/src/api.ts").read_text(encoding="utf-8")
+    api = Path(REPO_ROOT / "mobile/src/api.ts").read_text(encoding="utf-8")
     assert "wasAuthRecentlyCleared" in api
     assert "isSafeSoftRetry" in api
     assert "method.toUpperCase() === \"GET\" || hasIdempotencyKey" in api
     assert "pre-0.7.81 tokens" in api or "fos_token_exp" in api
-    app = Path("/workspace/mobile/App.tsx").read_text(encoding="utf-8")
+    app = Path(REPO_ROOT / "mobile/App.tsx").read_text(encoding="utf-8")
     assert "wasAuthRecentlyCleared" in app
 
 
@@ -8882,12 +8884,12 @@ def test_v0797_copy_consistency_markers():
     """v0.7.97: unified settlement copy; US canceled spelling in success."""
     from pathlib import Path
 
-    home = Path("/workspace/mobile/src/screens/HomeScreen.tsx").read_text(encoding="utf-8")
-    account = Path("/workspace/mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
+    home = Path(REPO_ROOT / "mobile/src/screens/HomeScreen.tsx").read_text(encoding="utf-8")
+    account = Path(REPO_ROOT / "mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
     assert "Settlement request sent to managers" in home
     assert "Settlement request sent to managers" in account
     assert 'Alert.alert("Fos", "Settlement request sent")' not in home
-    detail = Path("/workspace/mobile/src/screens/RecordDetailScreen.tsx").read_text(encoding="utf-8")
+    detail = Path(REPO_ROOT / "mobile/src/screens/RecordDetailScreen.tsx").read_text(encoding="utf-8")
     assert "Record canceled" in detail
     assert "Record cancelled" not in detail
 
@@ -8896,11 +8898,11 @@ def test_v0798_decide_org_and_media_nosniff_markers(client):
     """v0.7.98: decide-org limit; media nosniff header contract."""
     from pathlib import Path
 
-    rec = Path("/workspace/api/app/routers/records.py").read_text(encoding="utf-8")
+    rec = Path(REPO_ROOT / "api/app/routers/records.py").read_text(encoding="utf-8")
     assert "decide-org:" in rec
-    media = Path("/workspace/api/app/routers/media.py").read_text(encoding="utf-8")
+    media = Path(REPO_ROOT / "api/app/routers/media.py").read_text(encoding="utf-8")
     assert "nosniff" in media
-    main = Path("/workspace/api/app/main.py").read_text(encoding="utf-8")
+    main = Path(REPO_ROOT / "api/app/main.py").read_text(encoding="utf-8")
     assert "_REQUEST_ID_RE" in main
     assert "128" in main
 
@@ -8909,11 +8911,11 @@ def test_v0799_ci_docs_ready_media_markers():
     """v0.7.99: CI asserts ready media + new org-limit DEPLOY greps."""
     from pathlib import Path
 
-    ci = Path("/workspace/.github/workflows/api-tests.yml").read_text(encoding="utf-8")
+    ci = Path(REPO_ROOT / ".github/workflows/api-tests.yml").read_text(encoding="utf-8")
     assert '"media"' in ci
     assert "comment-org:" in ci
     assert "team-org:" in ci
-    product = Path("/workspace/docs/PRODUCT.md").read_text(encoding="utf-8")
+    product = Path(REPO_ROOT / "docs/PRODUCT.md").read_text(encoding="utf-8")
     assert "comment/void/cancel" in product or "comment-org" in product or "Confirm-path billingMe" in product
 
 
@@ -8923,14 +8925,14 @@ def test_v07100_ready_closeout_freeze_matrix_and_version(client):
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.220"
+    assert APP_VERSION == "0.7.230"
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.220"
+    assert health.json()["version"] == "0.7.230"
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert "media" in ready.json()
 
-    api = Path("/workspace/mobile/src/api.ts").read_text(encoding="utf-8")
+    api = Path(REPO_ROOT / "mobile/src/api.ts").read_text(encoding="utf-8")
     assert "isSafeSoftRetry" in api
     assert 'method.toUpperCase() === "GET" || hasIdempotencyKey' in api
 
@@ -8998,8 +9000,8 @@ def test_v07101_payout_soft_fail_and_batch_billing_markers():
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.220"
-    text = Path("/workspace/mobile/src/screens/PayoutScreen.tsx").read_text(encoding="utf-8")
+    assert APP_VERSION == "0.7.230"
+    text = Path(REPO_ROOT / "mobile/src/screens/PayoutScreen.tsx").read_text(encoding="utf-8")
     idx = text.find('setBootError(e instanceof Error ? e.message : "Failed");')
     assert idx >= 0
     assert "Alert.alert" not in text[idx : idx + 90]
@@ -9011,10 +9013,10 @@ def test_v07102_approve_reject_balances_void_billing_markers():
     """v0.7.102: rejectAll + Balances void await billingMe."""
     from pathlib import Path
 
-    approve = Path("/workspace/mobile/src/screens/ApproveScreen.tsx").read_text(encoding="utf-8")
+    approve = Path(REPO_ROOT / "mobile/src/screens/ApproveScreen.tsx").read_text(encoding="utf-8")
     assert "rejectAll" in approve
     assert approve.count("await billingMe()") >= 3
-    balances = Path("/workspace/mobile/src/screens/BalancesScreen.tsx").read_text(encoding="utf-8")
+    balances = Path(REPO_ROOT / "mobile/src/screens/BalancesScreen.tsx").read_text(encoding="utf-8")
     assert "voidAdjustment" in balances
     assert "await billingMe()" in balances
 
@@ -9023,7 +9025,7 @@ def test_v07103_team_reset_confirm_billing_markers():
     """v0.7.103: Issue reset token + Set password confirm billingMe."""
     from pathlib import Path
 
-    team = Path("/workspace/mobile/src/screens/TeamScreen.tsx").read_text(encoding="utf-8")
+    team = Path(REPO_ROOT / "mobile/src/screens/TeamScreen.tsx").read_text(encoding="utf-8")
     assert "issueMemberResetToken" in team
     assert "resetMemberPassword" in team
     assert team.count("await billingMe()") >= 4
@@ -9032,16 +9034,16 @@ def test_v07103_team_reset_confirm_billing_markers():
 def test_v07104_upload_org_rate_limit_markers():
     from pathlib import Path
 
-    media = Path("/workspace/api/app/routers/media.py").read_text(encoding="utf-8")
+    media = Path(REPO_ROOT / "api/app/routers/media.py").read_text(encoding="utf-8")
     assert "upload-org:" in media
-    deploy = Path("/workspace/docs/DEPLOY.md").read_text(encoding="utf-8")
+    deploy = Path(REPO_ROOT / "docs/DEPLOY.md").read_text(encoding="utf-8")
     assert "upload-org:" in deploy
 
 
 def test_v07105_telegram_org_rate_limit_markers():
     from pathlib import Path
 
-    billing = Path("/workspace/api/app/routers/billing.py").read_text(encoding="utf-8")
+    billing = Path(REPO_ROOT / "api/app/routers/billing.py").read_text(encoding="utf-8")
     assert "telegram-org:" in billing
     assert billing.count("telegram-org:") >= 2
 
@@ -9049,7 +9051,7 @@ def test_v07105_telegram_org_rate_limit_markers():
 def test_v07106_reset_org_rate_limit_markers():
     from pathlib import Path
 
-    team = Path("/workspace/api/app/routers/team.py").read_text(encoding="utf-8")
+    team = Path(REPO_ROOT / "api/app/routers/team.py").read_text(encoding="utf-8")
     assert "reset-password-org:" in team
     assert "reset-token-org:" in team
 
@@ -9057,7 +9059,7 @@ def test_v07106_reset_org_rate_limit_markers():
 def test_v07107_records_list_org_rate_limit_markers():
     from pathlib import Path
 
-    rec = Path("/workspace/api/app/routers/records.py").read_text(encoding="utf-8")
+    rec = Path(REPO_ROOT / "api/app/routers/records.py").read_text(encoding="utf-8")
     assert "records-list-org:" in rec
     assert rec.count("records-list-org:") >= 2
 
@@ -9066,12 +9068,12 @@ def test_v07108_metrics_cors_ci_markers(client):
     """v0.7.108: X-Metrics-Token CORS; metrics Cache-Control no-store; CI greps."""
     from pathlib import Path
 
-    main = Path("/workspace/api/app/main.py").read_text(encoding="utf-8")
+    main = Path(REPO_ROOT / "api/app/main.py").read_text(encoding="utf-8")
     assert "X-Metrics-Token" in main
     metrics = client.get("/metrics")
     assert metrics.status_code == 200
     assert "no-store" in (metrics.headers.get("cache-control") or "").lower()
-    ci = Path("/workspace/.github/workflows/api-tests.yml").read_text(encoding="utf-8")
+    ci = Path(REPO_ROOT / ".github/workflows/api-tests.yml").read_text(encoding="utf-8")
     assert "upload-org:" in ci
     assert "telegram-org:" in ci
     assert "records-list-org:" in ci
@@ -9080,7 +9082,7 @@ def test_v07108_metrics_cors_ci_markers(client):
 def test_v07109_auth_inline_form_error_markers():
     from pathlib import Path
 
-    auth = Path("/workspace/mobile/src/screens/AuthScreen.tsx").read_text(encoding="utf-8")
+    auth = Path(REPO_ROOT / "mobile/src/screens/AuthScreen.tsx").read_text(encoding="utf-8")
     assert "formError" in auth
     assert "setFormError" in auth
     assert 'Alert.alert("Fos", "Organization slug is required")' not in auth
@@ -9093,11 +9095,11 @@ def test_v07110_create_photo_account_tg_and_version(client):
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.220"
-    assert client.get("/health").json()["version"] == "0.7.220"
-    create = Path("/workspace/mobile/src/screens/CreateScreen.tsx").read_text(encoding="utf-8")
+    assert APP_VERSION == "0.7.230"
+    assert client.get("/health").json()["version"] == "0.7.230"
+    create = Path(REPO_ROOT / "mobile/src/screens/CreateScreen.tsx").read_text(encoding="utf-8")
     assert "Receipt photo attached" not in create
-    account = Path("/workspace/mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
+    account = Path(REPO_ROOT / "mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
     assert "setTelegramChat" in account
     assert "testTelegram" in account
     assert account.count("await billingMe()") >= 3
@@ -9137,16 +9139,16 @@ def test_v07111_freeze_confirm_photo_org_and_copy_markers():
     """v0.7.111: Save org / photo upload billingMe; broader freeze copy."""
     from pathlib import Path
 
-    api = Path("/workspace/mobile/src/api.ts").read_text(encoding="utf-8")
+    api = Path(REPO_ROOT / "mobile/src/api.ts").read_text(encoding="utf-8")
     assert "receipt uploads are blocked" in api
-    account = Path("/workspace/mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
+    account = Path(REPO_ROOT / "mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
     assert "onSaveOrg" in account
     assert account.count("await billingMe()") >= 4
-    create = Path("/workspace/mobile/src/screens/CreateScreen.tsx").read_text(encoding="utf-8")
+    create = Path(REPO_ROOT / "mobile/src/screens/CreateScreen.tsx").read_text(encoding="utf-8")
     pick = create.find("const pickPhoto")
     assert pick >= 0
     assert "await billingMe()" in create[pick : pick + 2200]
-    detail = Path("/workspace/mobile/src/screens/RecordDetailScreen.tsx").read_text(encoding="utf-8")
+    detail = Path(REPO_ROOT / "mobile/src/screens/RecordDetailScreen.tsx").read_text(encoding="utf-8")
     pedit = detail.find("const pickEditPhoto")
     assert pedit >= 0
     assert "await billingMe()" in detail[pedit : pedit + 2200]
@@ -9157,7 +9159,7 @@ def test_v07112_session_expired_storage_markers():
     """v0.7.112: SessionExpiredError + safe token persist/clear."""
     from pathlib import Path
 
-    api = Path("/workspace/mobile/src/api.ts").read_text(encoding="utf-8")
+    api = Path(REPO_ROOT / "mobile/src/api.ts").read_text(encoding="utf-8")
     assert "class SessionExpiredError" in api
     assert "shouldSkipErrorAlert" in api
     assert "Promise.allSettled([storageDelete(TOKEN_KEY), storageDelete(TOKEN_EXP_KEY)])" in api
@@ -9174,7 +9176,7 @@ def test_v07113_stale_list_soft_fail_markers():
     from pathlib import Path
 
     for name in ("HomeScreen.tsx", "ApproveScreen.tsx", "LedgerScreen.tsx", "PayoutHistoryScreen.tsx"):
-        text = Path(f"/workspace/mobile/src/screens/{name}").read_text(encoding="utf-8")
+        text = Path(REPO_ROOT / f"mobile/src/screens/{name}").read_text(encoding="utf-8")
         assert "stale-data soft-fail" in text
         needle = 'setLoadError(e instanceof Error ? e.message :'
         idx = text.find(needle)
@@ -9187,14 +9189,14 @@ def test_v07114_pane_isolate_balances_account_markers():
     """v0.7.114: Balances/Account isolate pane failures."""
     from pathlib import Path
 
-    bal = Path("/workspace/mobile/src/screens/BalancesScreen.tsx").read_text(encoding="utf-8")
+    bal = Path(REPO_ROOT / "mobile/src/screens/BalancesScreen.tsx").read_text(encoding="utf-8")
     assert "Promise.allSettled" in bal
     assert "adjLoadError" in bal
     reload_start = bal.find("const reload = async")
     load_more = bal.find("const loadMoreAdj")
     assert reload_start >= 0 and load_more > reload_start
     assert 'Alert.alert("Fos", e instanceof Error ? e.message : "Failed")' not in bal[reload_start:load_more]
-    account = Path("/workspace/mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
+    account = Path(REPO_ROOT / "mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
     assert "Retain previous personal requests" in account
     assert "Retain previous team requests" in account
     assert "Keep previous suggested amount" in account
@@ -9204,19 +9206,19 @@ def test_v07115_reference_data_preserve_markers():
     """v0.7.115: retain teammate filters / slug / Create directory on blip."""
     from pathlib import Path
 
-    ledger = Path("/workspace/mobile/src/screens/LedgerScreen.tsx").read_text(encoding="utf-8")
+    ledger = Path(REPO_ROOT / "mobile/src/screens/LedgerScreen.tsx").read_text(encoding="utf-8")
     assert "Keep last-known teammate filter" in ledger
     assert "void loadMembers()" in ledger
-    hist = Path("/workspace/mobile/src/screens/PayoutHistoryScreen.tsx").read_text(encoding="utf-8")
+    hist = Path(REPO_ROOT / "mobile/src/screens/PayoutHistoryScreen.tsx").read_text(encoding="utf-8")
     assert "Keep last-known teammate filter" in hist
     assert "void loadMembers()" in hist
-    create = Path("/workspace/mobile/src/screens/CreateScreen.tsx").read_text(encoding="utf-8")
+    create = Path(REPO_ROOT / "mobile/src/screens/CreateScreen.tsx").read_text(encoding="utf-8")
     assert "Keep last-known teammate directory" in create
     lt = create.find("const loadTeamContext")
     assert lt >= 0
     lt_end = create.find("useEffect(() => {\n    void loadTeamContext", lt)
     assert "setMembers([])" not in create[lt:lt_end]
-    invite = Path("/workspace/mobile/src/screens/InviteScreen.tsx").read_text(encoding="utf-8")
+    invite = Path(REPO_ROOT / "mobile/src/screens/InviteScreen.tsx").read_text(encoding="utf-8")
     assert "Keep last-known slug" in invite
     ls = invite.find("const loadSlug")
     ls_end = invite.find("useEffect(() => {\n    void loadSlug", ls)
@@ -9227,9 +9229,9 @@ def test_v07116_resume_settlement_context_markers():
     """v0.7.116: Payout/Account resume refresh balances + suggested amount."""
     from pathlib import Path
 
-    payout = Path("/workspace/mobile/src/screens/PayoutScreen.tsx").read_text(encoding="utf-8")
+    payout = Path(REPO_ROOT / "mobile/src/screens/PayoutScreen.tsx").read_text(encoding="utf-8")
     assert "boot({ preserveSelection: true })" in payout
-    account = Path("/workspace/mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
+    account = Path(REPO_ROOT / "mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
     resume = account.find("useEffect(() => onResumeRefresh")
     assert resume >= 0
     assert "refreshSuggestedAmount" in account[resume : resume + 350]
@@ -9239,7 +9241,7 @@ def test_v07117_auth_api_errors_inline_markers():
     """v0.7.117: Auth login/register/invite API failures use formError."""
     from pathlib import Path
 
-    auth = Path("/workspace/mobile/src/screens/AuthScreen.tsx").read_text(encoding="utf-8")
+    auth = Path(REPO_ROOT / "mobile/src/screens/AuthScreen.tsx").read_text(encoding="utf-8")
     assert "setFormError(friendly)" in auth
     assert 'setFormError(e instanceof Error ? e.message : "Failed")' in auth
     assert "Alert.alert" not in auth
@@ -9251,13 +9253,13 @@ def test_v07118_mutation_org_limits_markers_and_429(client, monkeypatch):
 
     from fastapi import HTTPException
 
-    rec = Path("/workspace/api/app/routers/records.py").read_text(encoding="utf-8")
+    rec = Path(REPO_ROOT / "api/app/routers/records.py").read_text(encoding="utf-8")
     assert "record-write-org:" in rec
-    auth = Path("/workspace/api/app/routers/auth.py").read_text(encoding="utf-8")
+    auth = Path(REPO_ROOT / "api/app/routers/auth.py").read_text(encoding="utf-8")
     assert "org-update-org:" in auth
-    pay = Path("/workspace/api/app/routers/payouts.py").read_text(encoding="utf-8")
+    pay = Path(REPO_ROOT / "api/app/routers/payouts.py").read_text(encoding="utf-8")
     assert "settle-cancel-org:" in pay
-    deploy = Path("/workspace/docs/DEPLOY.md").read_text(encoding="utf-8")
+    deploy = Path(REPO_ROOT / "docs/DEPLOY.md").read_text(encoding="utf-8")
     assert "record-write-org:" in deploy
     assert "org-update-org:" in deploy
     assert "settle-cancel-org:" in deploy
@@ -9301,15 +9303,15 @@ def test_v07119_read_org_limits_markers_and_429(client, monkeypatch):
 
     from fastapi import HTTPException
 
-    rec = Path("/workspace/api/app/routers/records.py").read_text(encoding="utf-8")
+    rec = Path(REPO_ROOT / "api/app/routers/records.py").read_text(encoding="utf-8")
     assert "balances-read-org:" in rec
-    reports = Path("/workspace/api/app/routers/reports.py").read_text(encoding="utf-8")
+    reports = Path(REPO_ROOT / "api/app/routers/reports.py").read_text(encoding="utf-8")
     assert "reports-read-org:" in reports
-    pay = Path("/workspace/api/app/routers/payouts.py").read_text(encoding="utf-8")
+    pay = Path(REPO_ROOT / "api/app/routers/payouts.py").read_text(encoding="utf-8")
     assert "finance-list-org:" in pay
-    adj = Path("/workspace/api/app/routers/adjustments.py").read_text(encoding="utf-8")
+    adj = Path(REPO_ROOT / "api/app/routers/adjustments.py").read_text(encoding="utf-8")
     assert "finance-list-org:" in adj
-    deploy = Path("/workspace/docs/DEPLOY.md").read_text(encoding="utf-8")
+    deploy = Path(REPO_ROOT / "docs/DEPLOY.md").read_text(encoding="utf-8")
     assert "balances-read-org:" in deploy
     assert "reports-read-org:" in deploy
     assert "finance-list-org:" in deploy
@@ -9343,10 +9345,10 @@ def test_v07120_early_error_headers_docs_ci_version_seal(client):
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.220"
-    assert client.get("/health").json()["version"] == "0.7.220"
+    assert APP_VERSION == "0.7.230"
+    assert client.get("/health").json()["version"] == "0.7.230"
 
-    main = Path("/workspace/api/app/main.py").read_text(encoding="utf-8")
+    main = Path(REPO_ROOT / "api/app/main.py").read_text(encoding="utf-8")
     assert '"Permissions-Policy"' in main
     assert '"Cross-Origin-Opener-Policy"' in main
     fn = main.find("def _json_error")
@@ -9372,12 +9374,12 @@ def test_v07120_early_error_headers_docs_ci_version_seal(client):
     assert "no-store" in (ok.headers.get("cache-control") or "").lower()
     assert "geolocation=()" in (ok.headers.get("permissions-policy") or "")
 
-    ci = Path("/workspace/.github/workflows/api-tests.yml").read_text(encoding="utf-8")
+    ci = Path(REPO_ROOT / ".github/workflows/api-tests.yml").read_text(encoding="utf-8")
     assert "package-lock.json" in ci
     assert "lock_pkg" in ci
     assert "record-write-org:" in ci
     assert "finance-list-org:" in ci
-    deploy = Path("/workspace/docs/DEPLOY.md").read_text(encoding="utf-8")
+    deploy = Path(REPO_ROOT / "docs/DEPLOY.md").read_text(encoding="utf-8")
     assert "record-write-org:" in deploy
     assert "finance-list-org:" in deploy
 
@@ -9752,11 +9754,11 @@ def test_v07201_new_org_keys_markers_and_param_429(
         "records.py": ("categories-org:", "media-token-org:", "fuel-odo-org:"),
     }
     for filename, expected in router_keys.items():
-        source = Path(f"/workspace/api/app/routers/{filename}").read_text(
+        source = Path(REPO_ROOT / f"api/app/routers/{filename}").read_text(
             encoding="utf-8"
         )
         assert all(marker in source for marker in expected)
-    deploy = Path("/workspace/docs/DEPLOY.md").read_text(encoding="utf-8")
+    deploy = Path(REPO_ROOT / "docs/DEPLOY.md").read_text(encoding="utf-8")
     assert all(
         marker in deploy
         for markers in router_keys.values()
@@ -9834,7 +9836,7 @@ def test_v07202_org_limit_aggregates_across_users(client, monkeypatch):
 
 
 def test_v07203_accept_invite_org_limit_markers():
-    auth = Path("/workspace/api/app/routers/auth.py").read_text(encoding="utf-8")
+    auth = Path(REPO_ROOT / "api/app/routers/auth.py").read_text(encoding="utf-8")
     start = auth.index("def accept_invite(")
     end = auth.index('@router.get("/orgs/me"', start)
     block = auth[start:end]
@@ -9845,9 +9847,9 @@ def test_v07203_accept_invite_org_limit_markers():
 
 
 def test_v07204_non_money_idempotency_markers():
-    auth = Path("/workspace/api/app/routers/auth.py").read_text(encoding="utf-8")
-    team = Path("/workspace/api/app/routers/team.py").read_text(encoding="utf-8")
-    billing = Path("/workspace/api/app/routers/billing.py").read_text(encoding="utf-8")
+    auth = Path(REPO_ROOT / "api/app/routers/auth.py").read_text(encoding="utf-8")
+    team = Path(REPO_ROOT / "api/app/routers/team.py").read_text(encoding="utf-8")
+    billing = Path(REPO_ROOT / "api/app/routers/billing.py").read_text(encoding="utf-8")
 
     for source in (auth, team, billing):
         assert 'alias="Idempotency-Key"' in source
@@ -9872,7 +9874,7 @@ def test_v07204_non_money_idempotency_markers():
 
 def test_v07205_idempotency_mismatch_marker():
     for filename in ("auth.py", "team.py", "billing.py"):
-        source = Path(f"/workspace/api/app/routers/{filename}").read_text(
+        source = Path(REPO_ROOT / f"api/app/routers/{filename}").read_text(
             encoding="utf-8"
         )
         assert "require_idem_match(hit, fp)" in source
@@ -9971,9 +9973,9 @@ def test_v07207_production_config_rejection_matrix(monkeypatch):
 
 
 def test_v07208_session_skip_and_listutil_markers():
-    alert_error = Path("/workspace/mobile/src/alertError.ts")
-    api = Path("/workspace/mobile/src/api.ts")
-    list_util = Path("/workspace/mobile/src/listUtil.ts")
+    alert_error = Path(REPO_ROOT / "mobile/src/alertError.ts")
+    api = Path(REPO_ROOT / "mobile/src/api.ts")
+    list_util = Path(REPO_ROOT / "mobile/src/listUtil.ts")
     assert alert_error.is_file() and "alertFosError" in alert_error.read_text(
         encoding="utf-8"
     )
@@ -9986,11 +9988,11 @@ def test_v07208_session_skip_and_listutil_markers():
 
 def test_v07209_stale_guard_and_draft_markers():
     markers = {
-        "/workspace/mobile/App.tsx": "probeGen",
-        "/workspace/mobile/src/screens/PayoutScreen.tsx": "amountDirty",
-        "/workspace/mobile/src/screens/CreateScreen.tsx": "catGen",
-        "/workspace/mobile/src/screens/LedgerScreen.tsx": "membersGen",
-        "/workspace/mobile/src/screens/PayoutHistoryScreen.tsx": "membersGen",
+        str(REPO_ROOT / "mobile/App.tsx"): "probeGen",
+        str(REPO_ROOT / "mobile/src/screens/PayoutScreen.tsx"): "amountDirty",
+        str(REPO_ROOT / "mobile/src/screens/CreateScreen.tsx"): "catGen",
+        str(REPO_ROOT / "mobile/src/screens/LedgerScreen.tsx"): "membersGen",
+        str(REPO_ROOT / "mobile/src/screens/PayoutHistoryScreen.tsx"): "membersGen",
     }
     for filename, marker in markers.items():
         source = Path(filename).read_text(encoding="utf-8")
@@ -10000,9 +10002,9 @@ def test_v07209_stale_guard_and_draft_markers():
 def test_v07210_format_utc_and_listutil_node():
     import subprocess
 
-    format_source = Path("/workspace/mobile/src/format.ts").read_text(encoding="utf-8")
+    format_source = Path(REPO_ROOT / "mobile/src/format.ts").read_text(encoding="utf-8")
     assert 's + "Z"' in format_source
-    smoke = Path("/workspace/mobile/scripts/unit-smoke.mjs")
+    smoke = Path(REPO_ROOT / "mobile/scripts/unit-smoke.mjs")
     assert smoke.is_file()
     result = subprocess.run(
         ["node", str(smoke)],
@@ -10017,10 +10019,10 @@ def test_v07210_format_utc_and_listutil_node():
 def test_v07220_version_seal(client):
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.220"
+    assert APP_VERSION == "0.7.230"
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.7.220"
+    assert response.json()["version"] == "0.7.230"
 
 
 def test_v07225_team_balances_two_users_shape(client):
@@ -10118,3 +10120,140 @@ def test_v07227_valid_jpeg_upload_is_sanitized(client):
     )
     assert response.status_code == 200, response.text
     assert response.json()["photo_url"].endswith(".jpg")
+
+
+def test_v07221_approve_all_fetches_pending_ids_markers():
+    """v0.7.221: Approve/Reject all page through pending ids up to batch cap."""
+    approve = Path(REPO_ROOT / "mobile/src/screens/ApproveScreen.tsx").read_text(encoding="utf-8")
+    assert "pendingRecords" in approve
+    assert "first 100" in approve or "Approve all" in approve
+    assert "hasMore" in approve
+
+
+def test_v07222_dismiss_safe_busy_and_body_timeout_markers():
+    """v0.7.222: Alert onDismiss clears busy; request timeout covers body read."""
+    transfer = Path(REPO_ROOT / "mobile/src/screens/TransferScreen.tsx").read_text(encoding="utf-8")
+    assert "onDismiss" in transfer
+    payout = Path(REPO_ROOT / "mobile/src/screens/PayoutScreen.tsx").read_text(encoding="utf-8")
+    assert "onDismiss" in payout
+    api = Path(REPO_ROOT / "mobile/src/api.ts").read_text(encoding="utf-8")
+    # timer must still be active across res.text()
+    assert "await res.text()" in api
+    req = api.find("async function request<T>")
+    chunk = api[req : req + 2500]
+    assert chunk.find("await res.text()") < chunk.find("clearTimeout(timer)")
+
+
+def test_v07223_native_csv_file_share_markers():
+    """v0.7.223: Reports export writes a temp CSV file for native share."""
+    reports = Path(REPO_ROOT / "mobile/src/screens/ReportsScreen.tsx").read_text(encoding="utf-8")
+    assert "expo-file-system" in reports or "FileSystem" in reports
+    assert "Sharing" in reports or "expo-sharing" in reports
+    pkg = Path(REPO_ROOT / "mobile/package.json").read_text(encoding="utf-8")
+    assert "expo-file-system" in pkg
+    assert "expo-sharing" in pkg
+
+
+def test_v07224_create_draft_persistence_markers():
+    """v0.7.224: CreateScreen persists field drafts without photo bytes."""
+    create = Path(REPO_ROOT / "mobile/src/screens/CreateScreen.tsx").read_text(encoding="utf-8")
+    assert "fos_create_draft" in create or "create_draft" in create
+    assert "Restore draft" in create or "restore" in create.lower()
+    assert "draft" in create.lower()
+
+
+def test_v07225_batched_team_balances_markers(client):
+    """v0.7.225: team balances use batched payout/reservation reads."""
+    bal = Path(REPO_ROOT / "api/app/services/balances.py").read_text(encoding="utf-8")
+    assert "team_balances" in bal or "last_payouts" in bal or "batch" in bal.lower()
+    owner = _register(client, "flow-teambal", "teambal@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    res = client.get("/records/balance/team", headers=h)
+    assert res.status_code == 200
+    assert isinstance(res.json(), list)
+
+
+def test_v07226_audit_journal_markers_and_decide(client):
+    """v0.7.226: AuditEvent written on record decide."""
+    from app.db import SessionLocal
+    from app.models import AuditEvent
+
+    assert Path(REPO_ROOT / "api/alembic/versions/20260728_0003_audit_events.py").exists()
+    audit = Path(REPO_ROOT / "api/app/services/audit.py").read_text(encoding="utf-8")
+    assert "write_audit" in audit
+    owner = _register(client, "flow-aud1", "aud1@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    created = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 12,
+            "category": "Office",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert created.status_code == 200, created.text
+    rid = created.json()["id"]
+    decided = client.post(
+        f"/records/{rid}/decide",
+        headers={**h, "Idempotency-Key": "aud-decide-1"},
+        json={"approve": True, "note": ""},
+    )
+    assert decided.status_code == 200, decided.text
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(AuditEvent)
+            .filter(AuditEvent.organization_id == owner["user"]["organization_id"])
+            .all()
+        )
+        assert any(r.action.startswith("record") or "decide" in r.action for r in rows)
+    finally:
+        db.close()
+
+
+def test_v07227_image_sanitize_markers(client):
+    """v0.7.227: uploads go through sanitize_image / Pillow re-encode."""
+    images = Path(REPO_ROOT / "api/app/services/images.py").read_text(encoding="utf-8")
+    assert "sanitize_image" in images
+    assert "PIL" in images or "Image" in images
+    req = Path(REPO_ROOT / "api/requirements.txt").read_text(encoding="utf-8")
+    assert "Pillow" in req
+    owner = _register(client, "flow-img1", "img1@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    up = client.post(
+        "/media/photo",
+        headers={**h, "Idempotency-Key": "img-1"},
+        files={"file": ("e.jpg", _jpeg_bytes(), "image/jpeg")},
+    )
+    assert up.status_code == 200, up.text
+
+
+def test_v07228_alembic_advisory_lock_markers():
+    """v0.7.228: postgres alembic upgrade takes advisory lock."""
+    runner = Path(REPO_ROOT / "api/app/alembic_runner.py").read_text(encoding="utf-8")
+    assert "pg_advisory_lock" in runner
+
+
+def test_v07229_pg_concurrency_file_and_ci_markers():
+    """v0.7.229: dedicated postgres concurrency tests wired in CI."""
+    assert Path(REPO_ROOT / "api/tests/test_pg_concurrency.py").exists()
+    ci = Path(REPO_ROOT / ".github/workflows/api-tests.yml").read_text(encoding="utf-8")
+    assert "test_pg_concurrency.py" in ci
+
+
+def test_v07230_lockfile_and_version_seal(client):
+    """v0.7.230: requirements.lock + version seal."""
+    from app.version import APP_VERSION
+
+    assert APP_VERSION == "0.7.230"
+    assert client.get("/health").json()["version"] == "0.7.230"
+    assert Path(REPO_ROOT / "api/requirements.lock.txt").exists()
+    lock = Path(REPO_ROOT / "api/requirements.lock.txt").read_text(encoding="utf-8")
+    assert "fastapi==" in lock or "fastapi" in lock
+    dockerfile = Path(REPO_ROOT / "api/Dockerfile").read_text(encoding="utf-8")
+    assert "requirements.lock.txt" in dockerfile
+    deploy = Path(REPO_ROOT / "docs/DEPLOY.md").read_text(encoding="utf-8")
+    assert "requirements.lock.txt" in deploy

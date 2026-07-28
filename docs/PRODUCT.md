@@ -327,3 +327,4 @@ Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`
 - Payout batch confirm freeze; Approve rejectAll/Balances void billingMe; Team reset freeze; upload/telegram/reset/list org limits; Auth inline form errors; Create photo quiet attach; metrics no-store + X-Metrics-Token CORS
 - Soft-fail retains stale lists; pane-isolated Balances/Account; resume refresh for Payout/filters; Auth API errors inline; record-write/org-update/settle-cancel + balances/reports/finance-list org limits; early-error header parity
 - v0.7.121–0.7.220 hardening: shared org budgets, non-money idempotency, security/config matrices, mobile stale-response guards, pinned/audited CI, and route inventory
+- v0.7.221–0.7.230: truthful approve-all, dismiss-safe busy, CSV file share, create drafts, batched balances, audit journal, image sanitize, alembic lock, PG concurrency CI, dependency lock

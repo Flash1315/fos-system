@@ -23,6 +23,9 @@ def normalize_idem_key(raw: str | None) -> str | None:
         return None
     if len(key) > 128:
         raise HTTPException(400, "Idempotency-Key too long (max 128)")
+    # Printable ASCII only — reject control chars / non-ASCII noise
+    if any(ord(ch) < 33 or ord(ch) > 126 for ch in key):
+        raise HTTPException(400, "Idempotency-Key contains invalid characters")
     return key
 
 

@@ -135,6 +135,11 @@ class InviteIn(BaseModel):
     password: Optional[str] = Field(default=None, min_length=6, max_length=128)
     password_confirm: Optional[str] = Field(default=None, min_length=6, max_length=128)
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def email_norm(cls, v):
+        return str(v or "").strip().lower()
+
     @field_validator("full_name")
     @classmethod
     def strip_full_name(cls, v: str) -> str:
@@ -176,7 +181,10 @@ class AcceptInviteIn(BaseModel):
     @field_validator("token", mode="before")
     @classmethod
     def token_strip(cls, v):
-        return str(v or "").strip()
+        token = str(v or "").strip()
+        if token and not re.fullmatch(r"[A-Za-z0-9_-]+", token):
+            raise ValueError("invite token has invalid characters")
+        return token
 
     @model_validator(mode="after")
     def confirm_matches(self):

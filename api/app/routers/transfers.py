@@ -67,6 +67,13 @@ def create_transfer(
     user: User = Depends(get_current_user),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"transfer:{user.organization_id}:{user.id}",
+        limit=30,
+        window_sec=60,
+    )
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None
     if key:

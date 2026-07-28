@@ -27,13 +27,15 @@ def _utcnow() -> datetime:
 
 
 def create_access_token(user_id: int, org_id: int, role: str, token_version: int = 0) -> str:
-    expire = _utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
+    now = _utcnow()
+    expire = now + timedelta(minutes=settings.access_token_expire_minutes)
     payload = {
         "sub": str(user_id),
         "org": org_id,
         "role": role,
         "ver": int(token_version or 0),
         "typ": "access",
+        "iat": now,
         "exp": expire,
     }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
@@ -41,12 +43,14 @@ def create_access_token(user_id: int, org_id: int, role: str, token_version: int
 
 def create_media_token(user_id: int, org_id: int, token_version: int = 0, minutes: int = 15) -> str:
     """Short-lived token for <Image> query auth — scoped to media only."""
-    expire = _utcnow() + timedelta(minutes=max(1, minutes))
+    now = _utcnow()
+    expire = now + timedelta(minutes=max(1, minutes))
     payload = {
         "sub": str(user_id),
         "org": org_id,
         "ver": int(token_version or 0),
         "typ": "media",
+        "iat": now,
         "exp": expire,
     }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)

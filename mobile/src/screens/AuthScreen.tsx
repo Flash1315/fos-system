@@ -73,6 +73,10 @@ export function AuthScreen({
         Alert.alert("Fos", "Password must be at least 6 characters");
         return;
       }
+      if (password.length > 128) {
+        Alert.alert("Fos", "Password is too long (max 128 characters)");
+        return;
+      }
       if (password !== passwordConfirm) {
         Alert.alert("Fos", "Passwords do not match");
         return;
@@ -108,6 +112,10 @@ export function AuthScreen({
       Alert.alert("Fos", "Password must be at least 6 characters");
       return;
     }
+    if (password.length > 128) {
+      Alert.alert("Fos", "Password is too long (max 128 characters)");
+      return;
+    }
     if (mode === "register") {
       if (!orgName.trim() || orgName.trim().length < 2) {
         Alert.alert("Fos", "Company name must be at least 2 characters");
@@ -127,7 +135,7 @@ export function AuthScreen({
       }
     }
     const slug = orgSlug.toLowerCase().trim();
-    const mail = email.trim();
+    const mail = email.trim().toLowerCase();
     setBusy(true);
     try {
       if (mode === "register") {

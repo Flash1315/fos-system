@@ -215,6 +215,14 @@ export function AccountScreen({
       Alert.alert("Fos", "Enter current password and new password (min 6)");
       return;
     }
+    if (next.length > 128 || current.length > 128) {
+      Alert.alert("Fos", "Password is too long (max 128 characters)");
+      return;
+    }
+    if (next === current) {
+      Alert.alert("Fos", "New password must be different from current password");
+      return;
+    }
     if (next !== nextConfirm) {
       Alert.alert("Fos", "Passwords do not match");
       return;

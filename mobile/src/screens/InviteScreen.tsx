@@ -59,6 +59,10 @@ export function InviteScreen({
       Alert.alert("Fos", "Temporary password must be at least 6 characters");
       return;
     }
+    if (setTempPassword && password.length > 128) {
+      Alert.alert("Fos", "Password is too long (max 128 characters)");
+      return;
+    }
     if (setTempPassword && password !== passwordConfirm) {
       Alert.alert("Fos", "Passwords do not match");
       return;
@@ -66,7 +70,7 @@ export function InviteScreen({
     const mode = setTempPassword ? "temporary password" : "invite token";
     Alert.alert(
       "Fos",
-      `Invite ${fullName.trim()} <${email.trim()}> as ${role} via ${mode}?`,
+      `Invite ${fullName.trim()} <${email.trim().toLowerCase()}> as ${role} via ${mode}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -82,7 +86,7 @@ export function InviteScreen({
     setBusy(true);
     try {
       const res = await inviteUser({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         full_name: fullName.trim(),
         role,
         ...(setTempPassword
@@ -92,12 +96,12 @@ export function InviteScreen({
       if (res.invite_token) {
         Alert.alert(
           "Fos",
-          `Teammate invited.\n\nShare:\nSlug: ${orgSlug}\nEmail: ${email.trim()}\nInvite token: ${res.invite_token}\n\nThey open Accept invite, paste the token, and set their own password.`,
+          `Teammate invited.\n\nShare:\nSlug: ${orgSlug}\nEmail: ${email.trim().toLowerCase()}\nInvite token: ${res.invite_token}\n\nThey open Accept invite, paste the token, and set their own password.`,
         );
       } else {
         Alert.alert(
           "Fos",
-          `Teammate invited.\n\nShare login:\nSlug: ${orgSlug}\nEmail: ${email.trim()}\nPassword: (the one you set)`,
+          `Teammate invited.\n\nShare login:\nSlug: ${orgSlug}\nEmail: ${email.trim().toLowerCase()}\nPassword: (the one you set)`,
         );
       }
       onDone();

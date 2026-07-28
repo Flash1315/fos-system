@@ -241,11 +241,17 @@ def my_org(user: User = Depends(get_current_user), db: Session = Depends(get_db)
 @router.patch("/orgs/me", response_model=OrgOut)
 def update_org(
     body: OrgUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
     from app.services.locks import lock_organization
 
+    enforce_rate_limit(
+        f"org-update:{user.organization_id}:{user.id}",
+        limit=20,
+        window_sec=60,
+    )
     org = lock_organization(db, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")

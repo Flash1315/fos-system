@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.27"
+    assert health.json()["version"] == "0.7.28"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -5160,7 +5160,7 @@ def test_login_slug_norm_telegram_and_security_headers(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.27"
+    assert health.json()["version"] == "0.7.28"
     assert health.headers.get("x-content-type-options") == "nosniff"
     assert health.headers.get("x-frame-options") == "DENY"
     assert health.headers.get("referrer-policy") == "no-referrer"
@@ -5227,7 +5227,7 @@ def test_login_bounds_password_same_and_transfer_email(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.27"
+    assert health.json()["version"] == "0.7.28"
     assert health.headers.get("cache-control") == "no-store"
 
     # Seed cash via income then transfer with mixed-case email
@@ -5267,3 +5267,67 @@ def test_login_bounds_password_same_and_transfer_email(client):
         },
     )
     assert xfer.status_code == 200, xfer.text
+
+
+def test_idem_charset_invite_email_and_org_patch(client):
+    owner = _register(client, "flow-0728", "v0728-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    bad_idem = client.post(
+        "/records",
+        headers={**h, "Idempotency-Key": "bad key\n"},
+        json={
+            "kind": "expense",
+            "amount": 10,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert bad_idem.status_code == 400
+    assert "invalid" in bad_idem.json()["detail"].lower()
+
+    space_idem = client.post(
+        "/records",
+        headers={**h, "Idempotency-Key": "has space"},
+        json={
+            "kind": "expense",
+            "amount": 10,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert space_idem.status_code == 400
+
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "  V0728-Emp@Example.com ",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+            "password_confirm": "secret12",
+        },
+    )
+    assert inv.status_code == 200, inv.text
+    assert inv.json()["email"] == "v0728-emp@example.com"
+
+    bad_tok = client.post(
+        "/auth/accept-invite",
+        json={
+            "token": "not valid!!tokenxx",
+            "password": "secret99",
+            "password_confirm": "secret99",
+        },
+    )
+    assert bad_tok.status_code == 422
+
+    patched = client.patch("/orgs/me", headers=h, json={"name": "Flow 0728 Co"})
+    assert patched.status_code == 200
+    assert patched.json()["name"] == "Flow 0728 Co"
+
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["version"] == "0.7.28"

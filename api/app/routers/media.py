@@ -63,6 +63,11 @@ def get_photo(
         user = user_from_token(token, db, allow_media=True, require_media=True)
     else:
         raise HTTPException(401, "Could not validate credentials")
+    enforce_rate_limit(
+        f"media-get:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     if org_id != user.organization_id:
         raise HTTPException(403, "Forbidden")
     if "/" in filename or ".." in filename or not _MEDIA_NAME_RE.match(filename):

@@ -28,6 +28,10 @@ export function TransferScreen({
   const submitLock = useRef(false);
   const idemKeyRef = useRef<string | null>(null);
 
+  useEffect(() => {
+    idemKeyRef.current = null;
+  }, [email, amount, comment]);
+
   const bootstrap = async () => {
     setBooting(true);
     setBootError("");

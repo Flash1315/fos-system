@@ -1,4 +1,6 @@
 const MAX_MONEY = 9999999999999999.99;
+const MAX_LITERS = 10000;
+const MAX_ODOMETER = 9999999.99;
 
 function normalizeMoney(value: number): number | null {
   if (!Number.isFinite(value)) return null;
@@ -23,6 +25,20 @@ export function parseFiniteSignedMoney(raw: string): number | null {
   const value = Number(String(raw ?? "").trim().replace(",", "."));
   if (!Number.isFinite(value) || value === 0) return null;
   return normalizeMoney(value);
+}
+
+/** Liters for fuel forms — positive finite, max 10000. */
+export function parseFiniteLiters(raw: string): number | null {
+  const value = Number(String(raw ?? "").trim().replace(",", "."));
+  if (!Number.isFinite(value) || value <= 0 || value > MAX_LITERS) return null;
+  return value;
+}
+
+/** Odometer reading — non-negative finite, max 9999999.99. */
+export function parseFiniteOdometer(raw: string): number | null {
+  const value = Number(String(raw ?? "").trim().replace(",", "."));
+  if (!Number.isFinite(value) || value < 0 || value > MAX_ODOMETER) return null;
+  return value;
 }
 
 export function formatMoney(amount: number, currency: string) {

@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.24"
+    assert health.json()["version"] == "0.7.25"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -5066,3 +5066,78 @@ def test_org_scoped_locks_batch_bounds_and_billing_redact(client):
     mgr_bill = client.get("/billing/me", headers=mh)
     assert mgr_bill.status_code == 200
     assert mgr_bill.json()["telegram_chat_id"] == ""
+
+
+def test_fuel_caps_date_span_and_export_charset(client):
+    owner = _register(client, "flow-0725", "v0725-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    huge_liters = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 50,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "Cap-1",
+            "liters": 10001,
+            "odometer": 100,
+            "payment_source": "my_pocket",
+        },
+    )
+    assert huge_liters.status_code == 422
+
+    huge_odo = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 50,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "Cap-1",
+            "liters": 5,
+            "odometer": 10000000,
+            "payment_source": "my_pocket",
+        },
+    )
+    assert huge_odo.status_code == 422
+
+    ok_fuel = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 50,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "Cap-1",
+            "liters": 5,
+            "odometer": 100,
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert ok_fuel.status_code == 200, ok_fuel.text
+
+    wide = client.get(
+        "/reports/org?date_from=2010-01-01&date_to=2026-01-01",
+        headers=h,
+    )
+    assert wide.status_code == 400
+    assert "3650" in wide.json()["detail"]
+
+    csv = client.get("/reports/export.csv?days=30", headers=h)
+    assert csv.status_code == 200
+    ctype = (csv.headers.get("content-type") or "").lower()
+    assert "text/csv" in ctype
+    assert "charset=utf-8" in ctype
+
+    members = client.get("/orgs/members", headers=h)
+    assert members.status_code == 200
+    assert any(m["email"] == "v0725-owner@example.com" for m in members.json())
+
+    team = client.get("/records/balance/team", headers=h)
+    assert team.status_code == 200
+    assert isinstance(team.json(), list)

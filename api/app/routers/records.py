@@ -624,7 +624,7 @@ def team_balances(
     members = (
         db.query(User)
         .filter(User.organization_id == user.organization_id, User.is_active.is_(True))
-        .order_by(User.full_name.asc())
+        .order_by(User.full_name.asc(), User.id.asc())
         .all()
     )
     return [user_balance(db, m) for m in members]

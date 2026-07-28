@@ -90,7 +90,7 @@ export function PayoutScreen({
 
   useEffect(() => {
     payoutIdemRef.current = null;
-  }, [userId, kind, method]);
+  }, [userId, kind, method, amount]);
 
   useEffect(() => {
     batchSpendIdemRef.current = null;

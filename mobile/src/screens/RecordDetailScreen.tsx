@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, Image, Text, StyleSheet } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect } from "../useFocus";
@@ -18,7 +18,7 @@ import {
 } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Card, Chip, Field, Label, Row, Screen, Sub, TopBar } from "../components/ui";
-import { formatMoney, formatWhen, parseFiniteMoney, statusColor } from "../format";
+import { formatMoney, formatWhen, parseFiniteLiters, parseFiniteMoney, parseFiniteOdometer, statusColor } from "../format";
 import { isValidYmd, ymdError } from "../dates";
 import { colors } from "../theme";
 
@@ -68,6 +68,24 @@ export function RecordDetailScreen({
   const voidIdemRef = useRef<string | null>(null);
   const editIdemRef = useRef<string | null>(null);
   const isManager = user.role === "owner" || user.role === "manager";
+
+  useEffect(() => {
+    editIdemRef.current = null;
+  }, [
+    editAmount,
+    editPlace,
+    editComment,
+    editCategory,
+    editPurpose,
+    editPaymentSource,
+    editPaymentMethod,
+    editClient,
+    editLiters,
+    editOdometer,
+    editBike,
+    editOccurred,
+    editPhotoUrl,
+  ]);
 
   const applyEditFields = (row: MoneyRecord) => {
     setEditAmount(String(row.amount));
@@ -269,9 +287,9 @@ export function RecordDetailScreen({
     }
     if (rec?.kind === "fuel") {
       body.bike = editBike.trim();
-      const liters = Number(editLiters.replace(",", "."));
-      if (!editLiters.trim() || !Number.isFinite(liters) || liters <= 0) {
-        Alert.alert("Fos", "Liters is required for fuel");
+      const liters = parseFiniteLiters(editLiters);
+      if (liters == null) {
+        Alert.alert("Fos", "Liters is required for fuel (max 10000)");
         return;
       }
       body.liters = liters;
@@ -295,9 +313,9 @@ export function RecordDetailScreen({
           return;
         }
         if (odoRaw) {
-          const odo = Number(odoRaw.replace(",", "."));
-          if (!Number.isFinite(odo) || odo < 0) {
-            Alert.alert("Fos", "Odometer must be a finite number");
+          const odo = parseFiniteOdometer(odoRaw);
+          if (odo == null) {
+            Alert.alert("Fos", "Odometer must be a valid reading (0–9999999.99)");
             return;
           }
           if (hint.min_odometer != null && odo < hint.min_odometer) {

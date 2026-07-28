@@ -40,7 +40,7 @@ def list_members(
     rows = (
         db.query(User)
         .filter(User.organization_id == user.organization_id)
-        .order_by(User.role.asc(), User.full_name.asc())
+        .order_by(User.role.asc(), User.full_name.asc(), User.id.asc())
         .all()
     )
     return [MemberOut.model_validate(r) for r in rows]
@@ -55,7 +55,7 @@ def org_directory(
     rows = (
         db.query(User)
         .filter(User.organization_id == user.organization_id, User.is_active.is_(True))
-        .order_by(User.full_name.asc())
+        .order_by(User.full_name.asc(), User.id.asc())
         .all()
     )
     return [MemberOut.model_validate(r) for r in rows]

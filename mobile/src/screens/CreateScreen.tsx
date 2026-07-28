@@ -16,7 +16,7 @@ import {
 } from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { isValidYmd } from "../dates";
-import { formatWhen, parseFiniteMoney } from "../format";
+import { formatWhen, parseFiniteLiters, parseFiniteMoney, parseFiniteOdometer } from "../format";
 
 export function CreateScreen({
   busy,
@@ -63,6 +63,27 @@ export function CreateScreen({
   const [myCurrency, setMyCurrency] = useState("IDR");
   const [categoriesError, setCategoriesError] = useState("");
   const [teamLoadError, setTeamLoadError] = useState("");
+
+  useEffect(() => {
+    idemKeyRef.current = null;
+  }, [
+    kind,
+    amount,
+    category,
+    purpose,
+    place,
+    bike,
+    comment,
+    liters,
+    odometer,
+    clientName,
+    paymentMethod,
+    paymentSource,
+    photoUrl,
+    forUserId,
+    occurredDate,
+    approveNow,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,17 +290,17 @@ export function CreateScreen({
       return;
     }
     if (kind === "fuel") {
-      const litersVal = Number(liters.replace(",", "."));
-      const odoVal = odometer.trim() ? Number(odometer.replace(",", ".")) : null;
-      if (!liters.trim() || !Number.isFinite(litersVal) || litersVal <= 0) {
-        Alert.alert("Fos", "Liters is required for fuel");
+      const litersVal = parseFiniteLiters(liters);
+      const odoVal = odometer.trim() ? parseFiniteOdometer(odometer) : null;
+      if (litersVal == null) {
+        Alert.alert("Fos", "Liters is required for fuel (max 10000)");
         return;
       }
-      if (odometer.trim() && (!Number.isFinite(odoVal as number) || (odoVal as number) < 0)) {
-        Alert.alert("Fos", "Odometer must be a finite number");
+      if (odometer.trim() && odoVal == null) {
+        Alert.alert("Fos", "Odometer must be a valid reading (0–9999999.99)");
         return;
       }
-      if (hasFuelHistory && (odoVal == null || !Number.isFinite(odoVal))) {
+      if (hasFuelHistory && odoVal == null) {
         Alert.alert(
           "Fos",
           `Odometer is required after prior fuel history${
@@ -420,9 +441,9 @@ export function CreateScreen({
           return;
         }
         if (odoRaw) {
-          const odoVal = Number(odoRaw.replace(",", "."));
-          if (!Number.isFinite(odoVal) || odoVal < 0) {
-            Alert.alert("Fos", "Odometer must be a finite number");
+          const odoVal = parseFiniteOdometer(odoRaw);
+          if (odoVal == null) {
+            Alert.alert("Fos", "Odometer must be a valid reading (0–9999999.99)");
             return;
           }
           if (last.min_odometer != null && odoVal < last.min_odometer) {
@@ -463,10 +484,10 @@ export function CreateScreen({
           payment_method: kind === "income" ? paymentMethod : "",
           payment_source: kind === "income" ? "" : paymentSource,
           client_name: kind === "income" ? clientName.trim() : "",
-          liters: kind === "fuel" ? Number(liters.replace(",", ".")) : undefined,
+          liters: kind === "fuel" ? parseFiniteLiters(liters) ?? undefined : undefined,
           odometer:
             kind === "fuel" && odometer.trim()
-              ? Number(odometer.replace(",", "."))
+              ? parseFiniteOdometer(odometer) ?? undefined
               : undefined,
           created_for_user_id: forUserId ?? undefined,
           occurred_at: occurredDate.trim() ? `${occurredDate.trim()}T12:00:00` : undefined,

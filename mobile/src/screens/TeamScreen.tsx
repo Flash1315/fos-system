@@ -29,6 +29,7 @@ export function TeamScreen({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [showOwnerSetPassword, setShowOwnerSetPassword] = useState(false);
 
   const reload = async () => {
     try {
@@ -107,6 +108,15 @@ export function TeamScreen({
     <Screen>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Text style={styles.title}>Team</Text>
+      {currentUser.role === "owner" ? (
+        <View style={styles.kinds}>
+          <Chip
+            label={showOwnerSetPassword ? "Hide advanced" : "Show advanced"}
+            on={showOwnerSetPassword}
+            onPress={() => setShowOwnerSetPassword((v) => !v)}
+          />
+        </View>
+      ) : null}
       <FlatList
         data={rows}
         keyExtractor={(item) => String(item.id)}
@@ -197,12 +207,14 @@ export function TeamScreen({
                     );
                   }}
                 />
-                <Btn
-                  title="Set password (owner)"
-                  variant="ghost"
-                  disabled={busy}
-                  onPress={() => setResetId(item.id)}
-                />
+                {showOwnerSetPassword ? (
+                  <Btn
+                    title="Set password (owner)"
+                    variant="ghost"
+                    disabled={busy}
+                    onPress={() => setResetId(item.id)}
+                  />
+                ) : null}
               </>
             )}
           </View>

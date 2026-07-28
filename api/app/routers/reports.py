@@ -51,6 +51,8 @@ def _window(
         until = _parse_day(date_to, end=True)
         if since and until and since >= until:
             raise HTTPException(400, "date_from must be on or before date_to")
+        if since and until and (until - since).days > 3650:
+            raise HTTPException(400, "date range cannot exceed 3650 days")
         return since, until
     if days:
         since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
@@ -310,6 +312,14 @@ def export_csv(
 ):
     import csv
 
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"export:{user.organization_id}:{user.id}",
+        limit=10,
+        window_sec=60,
+    )
+
     oid = user.organization_id
     since, until = _window(days, date_from, date_to)
     eff = _effective_at()
@@ -511,6 +521,6 @@ def export_csv(
     filename = f"fos-export-{safe}.csv"
     return PlainTextResponse(
         buf.getvalue(),
-        media_type="text/csv",
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

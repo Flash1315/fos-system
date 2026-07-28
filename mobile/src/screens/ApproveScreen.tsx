@@ -122,6 +122,9 @@ export function ApproveScreen({
 
   useEffect(() => onResumeRefresh(() => {
     void reload();
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
   }), []);
 
   const runDecide = async (id: number, approve: boolean, note = "") => {
@@ -158,7 +161,10 @@ export function ApproveScreen({
   };
 
   const doDecide = async (id: number, approve: boolean, note = "", allowClosedCycle = false) => {
-    if (busy) return;
+    if (busy || billingReadonly) {
+      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     const noteKey = note.replace(/\s+/g, " ").trim();
     const key = idemKeyFor(
       decideIdemRef,
@@ -183,7 +189,10 @@ export function ApproveScreen({
     if (busy || billingReadonly || !rows.length) return;
     const closed = rows.filter((r) => r.is_in_closed_cycle);
     const go = async () => {
-      if (busy) return;
+      if (busy || billingReadonly) {
+        if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+        return;
+      }
       setBusy(true);
       try {
         const slot = `a:${rows.map((r) => r.id).join(",")}`;

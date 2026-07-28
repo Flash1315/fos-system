@@ -346,6 +346,11 @@ def invite_user(
     from app.services.org_limits import require_org_can_add_member
 
     enforce_rate_limit(f"invite:{user.organization_id}:{user.id}", limit=30, window_sec=60)
+    enforce_rate_limit(
+        f"invite-org:{user.organization_id}",
+        limit=60,
+        window_sec=60,
+    )
     email = body.email.lower().strip()
     enforce_rate_limit(
         f"invite-email:{user.organization_id}:{email}",

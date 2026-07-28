@@ -147,4 +147,8 @@ def get_photo(
         raise HTTPException(503, "Media storage unavailable")
     if data is None or err == "not_found":
         raise HTTPException(404, "Not found")
-    return Response(content=data, media_type=storage.content_type_for(filename))
+    return Response(
+        content=data,
+        media_type=storage.content_type_for(filename),
+        headers={"Cache-Control": "no-store"},
+    )

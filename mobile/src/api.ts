@@ -39,7 +39,9 @@ function networkErrorFrom(e: unknown): Error {
 }
 
 const TOKEN_KEY = "fos_token";
+const TOKEN_EXP_KEY = "fos_token_exp";
 let cachedToken: string | null = null;
+let cachedTokenExpMs = 0;
 let cachedMediaToken: string | null = null;
 let cachedMediaTokenExpMs = 0;
 const REQUEST_TIMEOUT_MS = 30000;
@@ -184,16 +186,26 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-export async function saveToken(token: string) {
+export async function saveToken(token: string, expiresInSec?: number) {
   await storageSet(TOKEN_KEY, token);
   cachedToken = token;
+  if (expiresInSec != null && Number.isFinite(expiresInSec) && expiresInSec > 0) {
+    const expMs = Date.now() + Math.floor(expiresInSec) * 1000;
+    cachedTokenExpMs = expMs;
+    await storageSet(TOKEN_EXP_KEY, String(expMs));
+  } else {
+    cachedTokenExpMs = 0;
+    await storageDelete(TOKEN_EXP_KEY);
+  }
 }
 
 export async function clearToken() {
   cachedToken = null;
+  cachedTokenExpMs = 0;
   cachedMediaToken = null;
   cachedMediaTokenExpMs = 0;
   await storageDelete(TOKEN_KEY);
+  await storageDelete(TOKEN_EXP_KEY);
 }
 
 /** Revoke server-side tokens then clear local session. */
@@ -210,6 +222,26 @@ export async function getToken() {
   if (cachedToken) return cachedToken;
   cachedToken = await storageGet(TOKEN_KEY);
   return cachedToken;
+}
+
+async function loadTokenExpMs(): Promise<number> {
+  if (cachedTokenExpMs > 0) return cachedTokenExpMs;
+  const raw = await storageGet(TOKEN_EXP_KEY);
+  const n = raw ? Number(raw) : 0;
+  cachedTokenExpMs = Number.isFinite(n) && n > 0 ? n : 0;
+  return cachedTokenExpMs;
+}
+
+/** Clear local session when persisted access-token expiry has passed. */
+async function ensureAccessTokenNotExpired(): Promise<void> {
+  const token = await getToken();
+  if (!token) return;
+  const expMs = await loadTokenExpMs();
+  if (expMs <= 0) return;
+  // Small skew so we don't race the server clock.
+  if (Date.now() + 5_000 < expMs) return;
+  await notifyUnauthorized(token);
+  throw new Error("Session expired");
 }
 
 function newClientRequestId(): string {
@@ -247,6 +279,7 @@ async function request<T>(
   init: RequestInit = {},
   opts?: { timeoutMs?: number; retries?: number },
 ): Promise<T> {
+  await ensureAccessTokenNotExpired();
   const auth = await authHeaders();
   const requestToken = auth.Authorization?.startsWith("Bearer ")
     ? auth.Authorization.slice(7)
@@ -322,6 +355,7 @@ async function request<T>(
 }
 
 async function requestText(path: string, init: RequestInit = {}): Promise<string> {
+  await ensureAccessTokenNotExpired();
   const auth = await authHeaders();
   const requestToken = auth.Authorization?.startsWith("Bearer ")
     ? auth.Authorization.slice(7)

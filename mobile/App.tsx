@@ -67,7 +67,7 @@ export default function App() {
       setScreen("auth");
       Alert.alert(
         "Fos",
-        "Session ended — expired, role changed, password reset, or signed out elsewhere. Log in again.",
+        "Session expired — log in again. Also happens after role change, password reset, or sign-out elsewhere.",
       );
     });
     return () => setUnauthorizedHandler(null);
@@ -146,8 +146,8 @@ export default function App() {
       <AuthScreen
         busy={busy}
         setBusy={setBusy}
-        onDone={async (token, u) => {
-          await saveToken(token);
+        onDone={async (token, u, expiresIn) => {
+          await saveToken(token, expiresIn);
           setUser(u);
           setScreen("home");
         }}

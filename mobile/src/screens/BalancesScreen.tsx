@@ -127,6 +127,9 @@ export function BalancesScreen({
 
   useEffect(() => onResumeRefresh(() => {
     void reload();
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
   }), []);
 
   React.useEffect(() => {
@@ -169,7 +172,10 @@ export function BalancesScreen({
       {
         text: "Settle",
         onPress: async () => {
-          if (isBusy) return;
+          if (isBusy || billingReadonly) {
+            if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+            return;
+          }
           if (payoutSlotRef.current !== slot) {
             payoutSlotRef.current = slot;
             payoutIdemRef.current = null;
@@ -239,7 +245,10 @@ export function BalancesScreen({
         {
           text: "Post",
           onPress: async () => {
-            if (isBusy) return;
+            if (isBusy || billingReadonly) {
+              if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+              return;
+            }
             markBusy(true);
             try {
               if (!adjustIdemRef.current) adjustIdemRef.current = makeIdempotencyKey("adj");

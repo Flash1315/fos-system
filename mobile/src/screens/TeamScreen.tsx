@@ -66,6 +66,9 @@ export function TeamScreen({
 
   useEffect(() => onResumeRefresh(() => {
     void reload();
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
   }), []);
 
   const toggle = async (member: User) => {
@@ -88,7 +91,10 @@ export function TeamScreen({
         text: nextActive ? "Activate" : "Deactivate",
         style: nextActive ? "default" : "destructive",
         onPress: async () => {
-          if (busy) return;
+          if (busy || billingReadonly) {
+            if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+            return;
+          }
           setBusy(true);
           try {
             await setMemberActive(member.id, nextActive);
@@ -104,7 +110,7 @@ export function TeamScreen({
   };
 
   const changeRole = async (member: User, role: "owner" | "manager" | "employee") => {
-    if (busy) return;
+    if (busy || billingReadonly) return;
     if (currentUser.role !== "owner") return;
     if (member.role === role) return;
     Alert.alert("Fos", `Change ${member.full_name} role to ${role}? Their current sessions will end.`, [
@@ -112,7 +118,10 @@ export function TeamScreen({
       {
         text: "Change",
         onPress: async () => {
-          if (busy) return;
+          if (busy || billingReadonly) {
+            if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+            return;
+          }
           setBusy(true);
           try {
             await setMemberRole(member.id, role);

@@ -88,7 +88,10 @@ jobs:
               echo "$headers"
               echo "$headers" | grep -qi 'cache-control:.*no-store'
               cat /tmp/fos-live.json
-              ready=$(curl -fsS http://127.0.0.1:8000/health/ready)
+              ready_headers=$(curl -fsS -D- -o /tmp/fos-ready.json http://127.0.0.1:8000/health/ready)
+              echo "$ready_headers"
+              echo "$ready_headers" | grep -qi 'cache-control:.*no-store'
+              ready=$(cat /tmp/fos-ready.json)
               echo "$ready"
               echo "$ready" | grep -q '"db":"ok"'
               echo "$ready" | grep -q '"limiter"'
@@ -174,6 +177,9 @@ jobs:
               live = client.get("/health/live")
               assert live.status_code == 200
               assert "no-store" in (live.headers.get("cache-control") or "").lower()
+              ready = client.get("/health/ready")
+              assert ready.status_code == 200
+              assert "no-store" in (ready.headers.get("cache-control") or "").lower()
               docs = client.get("/docs")
               assert docs.status_code == 200  # development image
           print("postgres smoke ok")

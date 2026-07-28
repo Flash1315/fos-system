@@ -37,6 +37,8 @@ DB_POOL_RECYCLE=1800
 
 - Probe `GET /health/live` (liveness; use for container healthchecks) and `GET /health/ready` (DB; also reports `media` status without failing ready on media blips)
 - Live/ready responses send `Cache-Control: no-store`
+- Authenticated media file responses send `Cache-Control: no-store`
+- Invite endpoints enforce per-org `invite-org:` rate limits
 - Persist `/app/uploads` or S3; content-addressed keys; cancels may remove unused receipt objects
 - Idempotency rows are pruned on API startup (and on store)
 - Ready reports `limiter` (`memory` / `redis` / `redis_error`) without failing on Redis blips; multi-worker should set `RATE_LIMIT_REDIS_URL`

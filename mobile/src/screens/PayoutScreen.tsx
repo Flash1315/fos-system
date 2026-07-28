@@ -170,6 +170,10 @@ export function PayoutScreen({
   };
 
   const doSubmit = async (value: number) => {
+    if (busy || billingReadonly) {
+      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     try {
       const bals = await teamBalances();
       setBalances(bals);

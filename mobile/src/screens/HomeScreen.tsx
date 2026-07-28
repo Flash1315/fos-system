@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
-import { makeIdempotencyKey, billingMe, me, myBalance, myOrg, myPendingSettlementCount, myRecords, onResumeRefresh, pendingCount as fetchPendingCount, pendingSettlementCount, requestSettlement, type MoneyRecord, type User } from "../api";
+import { BILLING_READONLY_MSG, makeIdempotencyKey, billingMe, isBillingReadOnly, me, myBalance, myOrg, myPendingSettlementCount, myRecords, onResumeRefresh, pendingCount as fetchPendingCount, pendingSettlementCount, requestSettlement, type MoneyRecord, type User } from "../api";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
@@ -161,7 +161,6 @@ export function HomeScreen({
       setRows([]);
       setHasMore(false);
       setLoadError(e instanceof Error ? e.message : "Load failed");
-      Alert.alert("Fos", e instanceof Error ? e.message : "Load failed");
     } finally {
       if (gen === reloadGen.current) setLoading(false);
     }
@@ -213,6 +212,17 @@ export function HomeScreen({
           if (requestBusy) return;
           setRequestBusy(true);
           try {
+            try {
+              const b = await billingMe();
+              const frozen = isBillingReadOnly(b.billing_status);
+              setBillingCanceled(frozen);
+              if (frozen) {
+                Alert.alert("Fos", BILLING_READONLY_MSG);
+                return;
+              }
+            } catch {
+              /* proceed; API will 403 if frozen */
+            }
             const bal = await myBalance();
             const freshAmount =
               kind === "expense_payout"
@@ -270,13 +280,7 @@ export function HomeScreen({
         </View>
         <LinkText onPress={onLogout}>Log out</LinkText>
       </View>
-      {billingCanceled ? (
-        <Sub>
-          Billing restricted — org is read-only (canceled or past due). You can still view data
-          and cancel pending items; creates, approvals, and invites are blocked until billing is
-          restored.
-        </Sub>
-      ) : null}
+      {billingCanceled ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
       <Card>
         <Label>Cash on hand</Label>
         <Text style={styles.balance}>{balance}</Text>

@@ -25,7 +25,7 @@ export function AuthScreen({
 }: {
   busy: boolean;
   setBusy: (v: boolean) => void;
-  onDone: (token: string, user: User) => void | Promise<void>;
+  onDone: (token: string, user: User, expiresIn?: number) => void | Promise<void>;
 }) {
   const [mode, setMode] = useState<"login" | "register" | "invite">("login");
   const [orgSlug, setOrgSlug] = useState("");
@@ -109,7 +109,7 @@ export function AuthScreen({
           setOrgSlug(res.organization_slug);
           setRememberedSlug(res.organization_slug);
         }
-        await onDone(res.access_token, res.user);
+        await onDone(res.access_token, res.user, res.expires_in);
       } catch (e) {
         Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
       } finally {
@@ -180,7 +180,7 @@ export function AuthScreen({
         await storageSet(LAST_SLUG_KEY, slug);
         await storageSet(LAST_EMAIL_KEY, mail);
         setRememberedSlug(slug);
-        await onDone(res.access_token, res.user);
+        await onDone(res.access_token, res.user, res.expires_in);
       } else {
         const res = await login({
           email: mail,
@@ -190,7 +190,7 @@ export function AuthScreen({
         await storageSet(LAST_SLUG_KEY, slug);
         await storageSet(LAST_EMAIL_KEY, mail);
         setRememberedSlug(slug);
-        await onDone(res.access_token, res.user);
+        await onDone(res.access_token, res.user, res.expires_in);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed";

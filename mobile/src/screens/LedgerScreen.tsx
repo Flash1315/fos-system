@@ -72,7 +72,6 @@ export function LedgerScreen({
       setRows([]);
       setHasMore(false);
       setLoadError(e instanceof Error ? e.message : "Failed");
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
       if (gen === reloadGen.current) setLoading(false);
     }

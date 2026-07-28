@@ -260,7 +260,7 @@ export function AccountScreen({
     setBusy(true);
     try {
       const res = await changePassword(current, next, nextConfirm);
-      await saveToken(res.access_token);
+      await saveToken(res.access_token, res.expires_in);
       setCurrent("");
       setNext("");
       setNextConfirm("");
@@ -323,7 +323,10 @@ export function AccountScreen({
       {
         text: "Send",
         onPress: async () => {
-          if (busy) return;
+          if (busy || billingReadonly) {
+            if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+            return;
+          }
           setBusy(true);
           try {
             const bal = await myBalance();

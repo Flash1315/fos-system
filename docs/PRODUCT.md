@@ -252,6 +252,7 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Payout history voids gated under billing freeze; Invite validates email; Balances void modal re-checks freeze
 - Password change remains allowed under freeze; CSV export capped per-user and per-org
 - Access JWT role claim must match DB role; `/health/live`+`/ready` send `Cache-Control: no-store`; OpenAPI hidden in prod
+- Home/Approve/Team/Balances resume freeze re-check; confirm-path freeze gates; client `expires_in` → `fos_token_exp`; invite-org rate limit; media `Cache-Control: no-store`
 - Production refuses SQLite `DATABASE_URL`; Alembic upgrade fails hard in production
 - Postgres pool/SSL knobs: `DB_POOL_*`, `DB_SSLMODE`; see `docs/DEPLOY.md`
 - Accept-invite allowed during billing freeze; money idempotency replays before writable gate

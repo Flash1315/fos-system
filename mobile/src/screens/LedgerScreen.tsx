@@ -15,7 +15,7 @@ export function LedgerScreen({
 }) {
   const [rows, setRows] = useState<MoneyRecord[]>([]);
   const [members, setMembers] = useState<User[]>([]);
-  const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected">("");
+  const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected" | "voided">("");
   const [kind, setKind] = useState<"" | "expense" | "fuel" | "income">("");
   const [purpose, setPurpose] = useState("");
   const [memberId, setMemberId] = useState<number | null>(null);
@@ -36,11 +36,12 @@ export function LedgerScreen({
     try {
       setRows(
         await orgRecords({
-          status: status || undefined,
+          status: status && status !== "voided" ? status : undefined,
           kind: kind || undefined,
           purpose: purpose || undefined,
           created_by: memberId ?? undefined,
           q: search.trim() || undefined,
+          voided: status === "voided" ? true : status === "approved" ? false : undefined,
         }),
       );
     } catch (e) {
@@ -64,7 +65,7 @@ export function LedgerScreen({
         autoCapitalize="none"
       />
       <View style={styles.kinds}>
-        {(["", "pending", "approved", "rejected"] as const).map((s) => (
+        {(["", "pending", "approved", "rejected", "voided"] as const).map((s) => (
           <Chip key={s || "all"} label={s || "all"} on={status === s} onPress={() => setStatus(s)} />
         ))}
       </View>

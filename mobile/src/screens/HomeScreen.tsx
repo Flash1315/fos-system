@@ -47,7 +47,7 @@ export function HomeScreen({
   const [pendingCount, setPendingCount] = useState(0);
   const [settlementCount, setSettlementCount] = useState(0);
   const [rows, setRows] = useState<MoneyRecord[]>([]);
-  const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected">("");
+  const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected" | "voided">("");
   const [purpose, setPurpose] = useState("");
   const [search, setSearch] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -58,9 +58,10 @@ export function HomeScreen({
         myBalance(),
         myOrg(),
         myRecords({
-          status: status || undefined,
+          status: status && status !== "voided" ? status : undefined,
           purpose: purpose || undefined,
           q: search.trim() || undefined,
+          voided: status === "voided" ? true : status === "approved" ? false : undefined,
         }),
       ]);
       setBalance(formatMoney(b.cash_on_hand, b.currency));
@@ -176,7 +177,7 @@ export function HomeScreen({
         autoCapitalize="none"
       />
       <View style={styles.filters}>
-        {(["", "pending", "approved", "rejected"] as const).map((s) => (
+        {(["", "pending", "approved", "rejected", "voided"] as const).map((s) => (
           <Chip key={s || "all"} label={s || "all"} on={status === s} onPress={() => setStatus(s)} />
         ))}
       </View>

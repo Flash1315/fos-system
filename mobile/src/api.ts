@@ -260,12 +260,19 @@ export function teamBalances() {
   return request<TeamBalance[]>("/records/balance/team");
 }
 
-export function myRecords(params?: { kind?: string; status?: string; purpose?: string; q?: string }) {
+export function myRecords(params?: {
+  kind?: string;
+  status?: string;
+  purpose?: string;
+  q?: string;
+  voided?: boolean;
+}) {
   const q = new URLSearchParams();
   if (params?.kind) q.set("kind", params.kind);
   if (params?.status) q.set("status", params.status);
   if (params?.purpose) q.set("purpose", params.purpose);
   if (params?.q) q.set("q", params.q);
+  if (params?.voided != null) q.set("voided", String(params.voided));
   const suffix = q.toString() ? `?${q}` : "";
   return request<MoneyRecord[]>(`/records/mine${suffix}`);
 }
@@ -276,6 +283,7 @@ export function orgRecords(params?: {
   purpose?: string;
   created_by?: number;
   q?: string;
+  voided?: boolean;
 }) {
   const q = new URLSearchParams();
   if (params?.kind) q.set("kind", params.kind);
@@ -283,6 +291,7 @@ export function orgRecords(params?: {
   if (params?.purpose) q.set("purpose", params.purpose);
   if (params?.created_by != null) q.set("created_by", String(params.created_by));
   if (params?.q) q.set("q", params.q);
+  if (params?.voided != null) q.set("voided", String(params.voided));
   const suffix = q.toString() ? `?${q}` : "";
   return request<MoneyRecord[]>(`/records/org${suffix}`);
 }

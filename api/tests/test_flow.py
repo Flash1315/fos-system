@@ -1352,6 +1352,28 @@ def test_transfer_excluded_from_operating_report(client):
     assert report["net_result"] == 47000  # 50000 - 3000
 
 
+def test_voided_list_filter(client):
+    owner = _register(client, "flow-voidfilter", "voidfilter-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 900,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    ).json()
+    client.post(f"/records/{rec['id']}/void", headers=h, json={"note": "mistake"})
+    live = client.get("/records/mine?status=approved&voided=false", headers=h).json()
+    assert all(not x.get("is_voided") for x in live)
+    assert all(x["id"] != rec["id"] for x in live)
+    only_void = client.get("/records/mine?voided=true", headers=h).json()
+    assert any(x["id"] == rec["id"] and x["is_voided"] for x in only_void)
+
+
 def test_fuel_odometer_cannot_decrease(client):
     owner = _register(client, "flow-odo", "odo-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Alert, Text, StyleSheet, View } from "react-native";
+import { Alert, Share, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import { exportReportCsv, getToken, orgReport, type OrgReport, type ReportPeriod } from "../api";
 import { Btn, Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
@@ -59,7 +59,11 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
         URL.revokeObjectURL(url);
         Alert.alert("Fos", "CSV downloaded");
       } else {
-        Alert.alert("Fos", `Exported ${Math.max(0, text.split("\n").length - 1)} rows`);
+        const rows = Math.max(0, text.split("\n").length - 1);
+        await Share.share({
+          message: text,
+          title: `fos-export.csv (${rows} rows)`,
+        });
       }
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Export failed");

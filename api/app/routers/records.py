@@ -209,6 +209,7 @@ def my_records(
     status: RecordStatus | None = None,
     purpose: str | None = None,
     q: str | None = None,
+    voided: bool | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -220,6 +221,10 @@ def my_records(
         query = query.filter(MoneyRecord.kind == kind)
     if status:
         query = query.filter(MoneyRecord.status == status)
+    if voided is True:
+        query = query.filter(MoneyRecord.is_voided.is_(True))
+    elif voided is False:
+        query = query.filter(MoneyRecord.is_voided.is_(False))
     if purpose:
         query = query.filter(MoneyRecord.purpose == purpose)
     if q:
@@ -242,6 +247,7 @@ def org_records(
     purpose: str | None = None,
     created_by: int | None = None,
     q: str | None = None,
+    voided: bool | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -250,6 +256,10 @@ def org_records(
         query = query.filter(MoneyRecord.kind == kind)
     if status:
         query = query.filter(MoneyRecord.status == status)
+    if voided is True:
+        query = query.filter(MoneyRecord.is_voided.is_(True))
+    elif voided is False:
+        query = query.filter(MoneyRecord.is_voided.is_(False))
     if purpose:
         query = query.filter(MoneyRecord.purpose == purpose)
     if created_by is not None:

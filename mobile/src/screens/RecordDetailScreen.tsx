@@ -38,17 +38,23 @@ export function RecordDetailScreen({
   const [editAmount, setEditAmount] = useState("");
   const [editPlace, setEditPlace] = useState("");
   const [editComment, setEditComment] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const isManager = user.role === "owner" || user.role === "manager";
 
   const reload = async () => {
     try {
+      setLoadError("");
       const row = await getRecord(id);
       setRec(row);
       setEditAmount(String(row.amount));
       setEditPlace(row.place || "");
       setEditComment(row.comment || "");
     } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -156,8 +162,15 @@ export function RecordDetailScreen({
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Text style={styles.title}>Record #{id}</Text>
-      {!rec ? (
-        <Sub>Loading…</Sub>
+      {loading && !rec ? (
+        <Sub>Loading...</Sub>
+      ) : loadError && !rec ? (
+        <>
+          <Sub>Could not load — {loadError}</Sub>
+          <Btn title="Retry" variant="ghost" onPress={reload} />
+        </>
+      ) : !rec ? (
+        <Sub>Record not found</Sub>
       ) : (
         <>
           <Card>

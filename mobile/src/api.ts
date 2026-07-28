@@ -249,6 +249,7 @@ export type TeamBalance = {
   cash_on_hand: number;
   spendings: number;
   owed_to_employee: number;
+  currency?: string;
   pending_count: number;
   last_expense_payout_at?: string | null;
   last_income_handover_at?: string | null;

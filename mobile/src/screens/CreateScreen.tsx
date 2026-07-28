@@ -248,6 +248,7 @@ export function CreateScreen({
               held = row.cash_on_hand;
               available = row.available_cash ?? row.cash_on_hand;
               reserved = row.reserved_cash ?? 0;
+              if (row.currency) currency = row.currency;
             }
           } else {
             const bal = await myBalance();

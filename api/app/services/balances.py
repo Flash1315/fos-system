@@ -7,6 +7,7 @@ from app.models import (
     AdjustmentTrack,
     BalanceAdjustment,
     MoneyRecord,
+    Organization,
     Payout,
     PayoutKind,
     RecordKind,
@@ -241,6 +242,7 @@ def user_balance(db: Session, user: User) -> dict:
         .scalar()
         or 0
     )
+    org = db.get(Organization, org_id)
     return {
         "user_id": user.id,
         "full_name": user.full_name,
@@ -248,6 +250,7 @@ def user_balance(db: Session, user: User) -> dict:
         "cash_on_hand": cash_on_hand,
         "spendings": spendings,
         "owed_to_employee": spendings,
+        "currency": org.currency if org else "IDR",
         "pending_count": int(pending),
         "last_expense_payout_at": since_pay.isoformat() if since_pay else None,
         "last_income_handover_at": since_hand.isoformat() if since_hand else None,

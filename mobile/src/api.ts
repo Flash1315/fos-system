@@ -2,13 +2,21 @@ import { storageDelete, storageGet, storageSet } from "./storage";
 
 function resolveApiUrl(): string {
   const raw = (process.env.EXPO_PUBLIC_API_URL || "").trim().replace(/\/+$/, "");
+  const appEnv = (process.env.EXPO_PUBLIC_APP_ENV || "").trim().toLowerCase();
   const allowLocalFallback = typeof __DEV__ !== "undefined" && __DEV__;
+  const gatedRelease = appEnv === "production" || appEnv === "preview";
   if (!raw) {
+    if (gatedRelease) {
+      throw new Error("EXPO_PUBLIC_API_URL is required for preview/production builds");
+    }
     if (allowLocalFallback) return "http://127.0.0.1:8000";
     throw new Error("EXPO_PUBLIC_API_URL is required outside development builds");
   }
-  if (!allowLocalFallback) {
+  if (!allowLocalFallback || gatedRelease) {
     const isLoopbackHttp = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(raw);
+    if (gatedRelease && isLoopbackHttp) {
+      throw new Error("EXPO_PUBLIC_API_URL must not use loopback for preview/production builds");
+    }
     if (!/^https:\/\//i.test(raw) && !isLoopbackHttp) {
       throw new Error("EXPO_PUBLIC_API_URL must use https:// outside development builds");
     }

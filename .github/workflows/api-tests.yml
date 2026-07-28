@@ -43,6 +43,17 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npm run typecheck
+      - name: Expo config gate
+        run: |
+          set -euo pipefail
+          # Missing URL must fail for production env
+          if EXPO_PUBLIC_APP_ENV=production node -e "require('./app.config.js')()"; then
+            echo "expected production config without URL to fail" >&2
+            exit 1
+          fi
+          EXPO_PUBLIC_APP_ENV=production EXPO_PUBLIC_API_URL=https://api.example.com \
+            npx expo config --type public >/tmp/fos-expo-config.json
+          grep -q 'api.example.com' /tmp/fos-expo-config.json
 
   docker-api-smoke:
     runs-on: ubuntu-latest

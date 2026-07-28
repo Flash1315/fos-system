@@ -230,6 +230,7 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Mobile release builds require `EXPO_PUBLIC_API_URL` (https); upload media failures return 503
 - API Docker image includes Alembic + runs as non-root; Compose is for local/dev only
 - Compose Postgres binds `127.0.0.1` only; API healthcheck uses `start_period`
+- EAS preview/production require https EXPO_PUBLIC_API_URL (`docs/EAS.md`)
 - Production refuses SQLite `DATABASE_URL`; Alembic upgrade fails hard in production
 - Postgres pool/SSL knobs: `DB_POOL_*`, `DB_SSLMODE`; see `docs/DEPLOY.md`
 - Accept-invite allowed during billing freeze; money idempotency replays before writable gate

@@ -3,7 +3,7 @@
 **Fos** — multi-tenant field expenses for any small team.  
 Mobile (Expo) + API. Built to sell; Ride & Joy can be the first customer later.
 
-> Product: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Deploy: [`docs/DEPLOY.md`](docs/DEPLOY.md) · Rules: [`.cursorrules`](.cursorrules) · [`AGENTS.md`](AGENTS.md)  
+> Product: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Deploy: [`docs/DEPLOY.md`](docs/DEPLOY.md) · EAS: [`docs/EAS.md`](docs/EAS.md) · Rules: [`.cursorrules`](.cursorrules) · [`AGENTS.md`](AGENTS.md)  
 > RJ bot knowledge: [`docs/RJ_BOT_REFERENCE.md`](docs/RJ_BOT_REFERENCE.md) · snapshot [`reference/rj-spending-bot/`](reference/rj-spending-bot/)
 
 ## Monorepo
@@ -91,7 +91,7 @@ export EXPO_PUBLIC_API_URL=http://YOUR_LAN_IP:8000
 npx expo start
 ```
 
-Production EAS builds set `EXPO_PUBLIC_APP_ENV=production` and **require** `EXPO_PUBLIC_API_URL` as `https://…` (EAS secret or `eas.json` env). `app.config.js` fails the build if it is missing.
+Production EAS builds set `EXPO_PUBLIC_APP_ENV=production` and **require** `EXPO_PUBLIC_API_URL` as `https://…` (EAS secret or `eas.json` env). See [`docs/EAS.md`](docs/EAS.md). `app.config.js` fails the build if it is missing.
 
 ## Product v1 scope
 

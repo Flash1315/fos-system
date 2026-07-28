@@ -66,6 +66,7 @@ export function RecordDetailScreen({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [photoUri, setPhotoUri] = useState("");
+  const [photoError, setPhotoError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const cancelIdemRef = useRef<string | null>(null);
   const commentIdemRef = useRef<string | null>(null);
@@ -126,11 +127,19 @@ export function RecordDetailScreen({
         applyEditFields(row);
       }
       if (row.photo_url) {
-        const uri = await mediaUrlWithMediaToken(row.photo_url);
-        if (gen !== reloadGen.current) return;
-        setPhotoUri(uri);
+        try {
+          const uri = await mediaUrlWithMediaToken(row.photo_url);
+          if (gen !== reloadGen.current) return;
+          setPhotoUri(uri);
+          setPhotoError("");
+        } catch {
+          if (gen !== reloadGen.current) return;
+          setPhotoUri("");
+          setPhotoError("Receipt unavailable");
+        }
       } else {
         setPhotoUri("");
+        setPhotoError("");
       }
     } catch (e) {
       if (gen !== reloadGen.current) return;
@@ -288,6 +297,10 @@ export function RecordDetailScreen({
   };
 
   const onComment = async (note: string) => {
+    if (busy || billingReadonly) {
+      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     setBusy(true);
     try {
       const noteKey = note.replace(/\s+/g, " ").trim();
@@ -586,6 +599,9 @@ export function RecordDetailScreen({
               <Image source={{ uri: photoUri }} style={styles.photo} />
             </Card>
           )}
+          {!!rec.photo_url && !photoUri && !!photoError && (
+            <Sub>{photoError}</Sub>
+          )}
           {isManager && rec.status === "pending" && (
             <Row>
               <Btn
@@ -712,7 +728,7 @@ export function RecordDetailScreen({
             <Btn
               title="Add manager note"
               variant="ghost"
-              disabled={busy}
+              disabled={busy || billingReadonly}
               onPress={() => setCommentOpen(true)}
             />
           )}

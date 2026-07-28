@@ -57,6 +57,6 @@ Default image runs one uvicorn worker. For `uvicorn --workers N`:
 
 ## 7. Optional next
 
-- Shared rate limits: `RATE_LIMIT_REDIS_URL` (Redis INCR fixed-window; falls back to process-local on errors)
-- Hot-path DB indexes via Alembic `20260728_0002`
 - Managed Redis / object storage / observability outside this repo
+- CSV exports neutralize formula prefixes (including fullwidth) and ship a UTF-8 BOM for Excel
+- `ACCESS_TOKEN_EXPIRE_MINUTES` controls JWT lifetime; logout bumps `token_version` (revokes access + media JWTs on all devices)

@@ -16,6 +16,7 @@ from app.auth import (
     require_roles,
     verify_password,
 )
+from app.config import settings
 from app.db import get_db
 from app.models import BalanceAdjustment, MoneyRecord, Organization, Payout, User, UserRole
 from app.schemas import (
@@ -73,8 +74,10 @@ def _token_for(user: User) -> str:
 
 def _token_out(db: Session, user: User) -> TokenOut:
     org = db.get(Organization, user.organization_id)
+    expire_min = int(settings.access_token_expire_minutes or 0)
     return TokenOut(
         access_token=_token_for(user),
+        expires_in=max(60, expire_min * 60),
         user=UserOut.model_validate(user),
         organization_slug=org.slug if org else "",
     )

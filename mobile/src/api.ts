@@ -27,6 +27,17 @@ function resolveApiUrl(): string {
 /** Change to your machine LAN IP when testing on a phone. */
 export const API_URL = resolveApiUrl();
 
+/** Shared offline copy (boot / resume / fetch failures). */
+export const OFFLINE_MSG =
+  "Could not reach the server. Check your connection and try again.";
+
+function networkErrorFrom(e: unknown): Error {
+  if (e instanceof Error && e.name === "AbortError") {
+    return new Error("Request timed out — check connection and try again");
+  }
+  return new Error(OFFLINE_MSG);
+}
+
 const TOKEN_KEY = "fos_token";
 let cachedToken: string | null = null;
 let cachedMediaToken: string | null = null;
@@ -264,10 +275,7 @@ async function request<T>(
         signal: init.signal || controller.signal,
       });
     } catch (e) {
-      lastError =
-        e instanceof Error && e.name === "AbortError"
-          ? new Error("Request timed out — check connection and try again")
-          : new Error(e instanceof Error ? e.message : "Network request failed");
+      lastError = networkErrorFrom(e);
       if (attempt < maxAttempts && shouldSoftRetry(null, e)) {
         await sleep(Math.min(1500, 250 * attempt));
         continue;
@@ -339,10 +347,7 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
         signal: init.signal || controller.signal,
       });
     } catch (e) {
-      lastError =
-        e instanceof Error && e.name === "AbortError"
-          ? new Error("Request timed out — check connection and try again")
-          : new Error(e instanceof Error ? e.message : "Network request failed");
+      lastError = networkErrorFrom(e);
       if (attempt < maxAttempts && shouldSoftRetry(null, e)) {
         await sleep(Math.min(1500, 250 * attempt));
         continue;
@@ -471,6 +476,7 @@ function formatApiError(
 export type AuthToken = {
   access_token: string;
   token_type?: string;
+  expires_in?: number;
   user: User;
   organization_slug: string;
 };

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { acceptInvite, login, registerOrg, type User } from "../api";
-import { storageGet, storageSet } from "../storage";
+import { storageDelete, storageGet, storageSet } from "../storage";
 import { Brand, Btn, Card, Field, Label, LinkText, Screen, Sub } from "../components/ui";
 import { currencyCodeError, emailFormatError, passwordStrengthError } from "../format";
 
@@ -38,6 +38,7 @@ export function AuthScreen({
   const [inviteToken, setInviteToken] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberedSlug, setRememberedSlug] = useState<string | null>(null);
+  const [rememberedEmail, setRememberedEmail] = useState<string | null>(null);
   const submitLock = useRef(false);
 
   useEffect(() => {
@@ -51,12 +52,27 @@ export function AuthScreen({
           setOrgSlug(slug);
           setRememberedSlug(slug);
         }
-        if (mail) setEmail(mail);
+        if (mail) {
+          setEmail(mail);
+          setRememberedEmail(mail);
+        }
       } catch {
         /* ignore */
       }
     })();
   }, []);
+
+  const forgetRemembered = async () => {
+    try {
+      await Promise.all([storageDelete(LAST_SLUG_KEY), storageDelete(LAST_EMAIL_KEY)]);
+    } catch {
+      /* ignore */
+    }
+    setRememberedSlug(null);
+    setRememberedEmail(null);
+    setOrgSlug("");
+    setEmail("");
+  };
 
   const fillDemo = () => {
     setMode("login");
@@ -202,8 +218,15 @@ export function AuthScreen({
             ? "Paste the invite or password-reset token and choose your password."
             : "Creates your organization and owner account."}
       </Sub>
-      {mode === "login" && !!rememberedSlug && (
-        <Sub>Remembered company: /{rememberedSlug}</Sub>
+      {mode === "login" && (!!rememberedSlug || !!rememberedEmail) && (
+        <>
+          <Sub>
+            Remembered
+            {rememberedSlug ? ` company: /${rememberedSlug}` : ""}
+            {rememberedEmail ? ` · ${rememberedEmail}` : ""}
+          </Sub>
+          <LinkText onPress={() => void forgetRemembered()}>Forget remembered</LinkText>
+        </>
       )}
       <Card>
         {mode === "invite" ? (

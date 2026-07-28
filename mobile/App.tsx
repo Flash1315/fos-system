@@ -5,6 +5,7 @@ import {
   logout,
   me,
   notifyResumeRefresh,
+  OFFLINE_MSG,
   probeApiLive,
   saveToken,
   setUnauthorizedHandler,
@@ -66,7 +67,7 @@ export default function App() {
       setScreen("auth");
       Alert.alert(
         "Fos",
-        "Session ended — role changed, password reset, or signed out elsewhere. Log in again.",
+        "Session ended — expired, role changed, password reset, or signed out elsewhere. Log in again.",
       );
     });
     return () => setUnauthorizedHandler(null);
@@ -95,7 +96,7 @@ export default function App() {
         }
         Alert.alert(
           "Fos",
-          "Could not reach the server. Check your connection and try again.",
+          OFFLINE_MSG,
           [
             {
               text: "Retry",
@@ -130,7 +131,7 @@ export default function App() {
         offlineAlerted.current = true;
         Alert.alert(
           "Fos",
-          "Server unreachable — check your connection. Pull to refresh when back online.",
+          OFFLINE_MSG,
         );
       })();
     };

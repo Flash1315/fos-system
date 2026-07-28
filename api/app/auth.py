@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+from jose import ExpiredSignatureError, JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
@@ -88,6 +88,12 @@ def user_from_token(
         user_id = int(payload.get("sub", 0))
         token_ver = int(payload.get("ver", 0) or 0)
         typ = payload.get("typ") or "access"
+    except ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     except (JWTError, ValueError, TypeError):
         raise credentials_exc
     if typ not in ("access", "media"):

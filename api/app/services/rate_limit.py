@@ -90,6 +90,9 @@ class RedisFixedWindowLimiter:
 
     def check(self, key: str, *, limit: int, window_sec: int) -> tuple[bool, int]:
         rkey = f"fos:rl:{key}"
+        window = max(1, int(window_sec))
+        # INCR + TTL in one round-trip; always EXPIRE when missing/negative TTL
+        # so racey first hits cannot leave a key without an expiry.
         pipe = self._r.pipeline()
         pipe.incr(rkey)
         pipe.ttl(rkey)
@@ -97,10 +100,10 @@ class RedisFixedWindowLimiter:
         count = int(count or 0)
         ttl = int(ttl or -1)
         if count == 1 or ttl < 0:
-            self._r.expire(rkey, max(1, int(window_sec)))
-            ttl = max(1, int(window_sec))
+            self._r.expire(rkey, window)
+            ttl = window
         if count > limit:
-            return False, max(1, ttl if ttl > 0 else int(window_sec))
+            return False, max(1, ttl if ttl > 0 else window)
         return True, 0
 
     def reset(self) -> None:
@@ -250,6 +253,9 @@ def enforce_rate_limit(
 ) -> None:
     if not settings.rate_limit_enabled:
         return
+    # Cap cardinality of Redis/memory keys from long client-supplied suffixes.
+    if len(key) > 128:
+        key = key[:128]
     ok, retry_after = _limiter.check(key, limit=limit, window_sec=window_sec)
     if not ok:
         raise HTTPException(

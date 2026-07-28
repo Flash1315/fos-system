@@ -244,7 +244,11 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Account freeze UX covers settlement request/approve; Reports/MyReport resume-refresh; write screens re-check billing on resume
 - Auth client validates email/currency + submit lock; invite/reset offer Share after success
 - Validation errors return string `detail` + X-Request-Id; request logs use cardinality-safe paths; empty prod CORS refused
-- CI version sync + `/health/ready` docker smoke
+- CI version sync + `/health/ready` docker smoke (asserts container reports APP_VERSION)
+- RecordDetail gates comment/void under freeze; receipt soft-fails without blocking the record
+- Auth can forget remembered slug/email; shared offline copy across boot/resume/fetch
+- Login/register returns `expires_in`; expired JWT → Session expired; logout revokes media JWTs
+- CSV export strips NUL/fullwidth formula prefixes and adds UTF-8 BOM; Redis limiter always expires keys
 - Production refuses SQLite `DATABASE_URL`; Alembic upgrade fails hard in production
 - Postgres pool/SSL knobs: `DB_POOL_*`, `DB_SSLMODE`; see `docs/DEPLOY.md`
 - Accept-invite allowed during billing freeze; money idempotency replays before writable gate

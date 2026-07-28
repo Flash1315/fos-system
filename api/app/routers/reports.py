@@ -73,10 +73,17 @@ def _csv_text(value) -> str:
     """Neutralize spreadsheet formula injection for free-text cells."""
     if value is None:
         return ""
-    s = str(value).replace("\r", " ").replace("\n", " ").strip()
+    s = (
+        str(value)
+        .replace("\x00", "")
+        .replace("\r", " ")
+        .replace("\n", " ")
+        .strip()
+    )
     if len(s) > _CSV_CELL_MAX:
         s = s[: _CSV_CELL_MAX - 1] + "…"
-    if s and s[0] in ("=", "+", "-", "@", "\t"):
+    # ASCII + fullwidth ＝＋－＠ formula prefixes
+    if s and s[0] in ("=", "+", "-", "@", "\t", "\uff1d", "\uff0b", "\uff0d", "\uff20"):
         return "'" + s
     return s
 
@@ -612,7 +619,7 @@ def export_csv(
         f"filename*=UTF-8''{quote(filename)}"
     )
     return PlainTextResponse(
-        buf.getvalue(),
+        "\ufeff" + buf.getvalue(),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": disposition},
     )

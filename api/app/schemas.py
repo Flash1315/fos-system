@@ -153,6 +153,7 @@ class UserOut(BaseModel):
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    expires_in: int = 0
     user: UserOut
     organization_slug: str = ""
 

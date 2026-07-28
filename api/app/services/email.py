@@ -13,7 +13,7 @@ def email_configured() -> bool:
 def send_email(to: str, subject: str, body: str) -> bool:
     """Send plain-text email. Returns True if sent, False if skipped/failed."""
     if not email_configured():
-        print(f"email skipped (no SMTP): to={to} subject={subject}")
+        print(f"email skipped (no SMTP): subject={subject}")
         return False
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -27,10 +27,10 @@ def send_email(to: str, subject: str, body: str) -> bool:
             if settings.smtp_user:
                 server.login(settings.smtp_user, settings.smtp_password)
             server.send_message(msg)
-        print(f"email sent to={to} subject={subject}")
+        print(f"email sent subject={subject}")
         return True
     except Exception as exc:  # noqa: BLE001 — never fail the API path on mail
-        print(f"email failed to={to}: {exc}")
+        print(f"email failed subject={subject} err={type(exc).__name__}")
         return False
 
 

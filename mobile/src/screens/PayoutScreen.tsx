@@ -36,13 +36,20 @@ export function PayoutScreen({
     setBalances(await teamBalances());
   };
 
-  const boot = async () => {
+  const boot = async (opts?: { preserveSelection?: boolean }) => {
+    const selected = userId;
     try {
       setBootError("");
       const rows = await listMembers();
       const active = rows.filter((m) => m.is_active !== false);
       setMembers(active);
-      if (active[0]) setUserId(active[0].id);
+      if (opts?.preserveSelection && selected != null && active.some((m) => m.id === selected)) {
+        setUserId(selected);
+      } else if (active[0]) {
+        setUserId(active[0].id);
+      } else {
+        setUserId(null);
+      }
       await reloadBalances();
     } catch (e) {
       setBootError(e instanceof Error ? e.message : "Failed");
@@ -55,6 +62,11 @@ export function PayoutScreen({
   useEffect(() => {
     void boot();
   }, []);
+
+  const onPullRefresh = async () => {
+    setBooting(true);
+    await boot({ preserveSelection: true });
+  };
 
   const selectedBal = balances.find((b) => b.user_id === userId);
   const suggested =
@@ -273,7 +285,7 @@ export function PayoutScreen({
   };
 
   return (
-    <Screen scroll>
+    <Screen scroll refreshing={booting && members.length > 0} onRefresh={() => void onPullRefresh()}>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Settlements</Label>
       {booting ? (

@@ -541,6 +541,10 @@ def decide_batch(
             skipped += 1
             continue
         if body.approve:
+            creator = db.get(User, rec.created_by)
+            if creator is not None and not creator.is_active:
+                skipped += 1
+                continue
             spent = extra_cash_spent.get(rec.created_by, 0.0)
             if rec.kind == RecordKind.fuel:
                 try:
@@ -673,6 +677,12 @@ def decide_record(
             return _record_out(db, rec)
         raise HTTPException(400, "Already decided")
     if body.approve:
+        creator = db.get(User, rec.created_by)
+        if creator is not None and not creator.is_active:
+            raise HTTPException(
+                400,
+                "Cannot approve — record owner is inactive. Reject instead or reactivate them.",
+            )
         if rec.kind == RecordKind.fuel:
             _assert_odometer(
                 db,

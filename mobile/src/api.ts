@@ -46,6 +46,11 @@ function newIdemKey(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** Generate a stable Idempotency-Key for a confirmed mutation attempt. */
+export function makeIdempotencyKey(prefix = "idem"): string {
+  return newIdemKey(prefix);
+}
+
 export type User = {
   id: number;
   email: string;
@@ -525,28 +530,28 @@ export function getCategories(kind?: string) {
   }>(`/records/categories${suffix}`);
 }
 
-export function createRecord(body: {
-  kind: "expense" | "fuel" | "income";
-  amount: number;
-  category?: string;
-  purpose?: string;
-  place?: string;
-  bike?: string;
-  comment?: string;
-  photo_url?: string;
-  payment_method?: string;
-  payment_source?: string;
-  client_name?: string;
-  liters?: number;
-  odometer?: number;
-  created_for_user_id?: number;
-  occurred_at?: string;
-  approve_now?: boolean;
-}) {
-  const idem =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `rec-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+export function createRecord(
+  body: {
+    kind: "expense" | "fuel" | "income";
+    amount: number;
+    category?: string;
+    purpose?: string;
+    place?: string;
+    bike?: string;
+    comment?: string;
+    photo_url?: string;
+    payment_method?: string;
+    payment_source?: string;
+    client_name?: string;
+    liters?: number;
+    odometer?: number;
+    created_for_user_id?: number;
+    occurred_at?: string;
+    approve_now?: boolean;
+  },
+  opts?: { idempotencyKey?: string },
+) {
+  const idem = opts?.idempotencyKey || newIdemKey("rec");
   return request<MoneyRecord>("/records", {
     method: "POST",
     headers: { "Idempotency-Key": idem },
@@ -768,11 +773,11 @@ export function voidPayout(id: number, note: string) {
   });
 }
 
-export function transferCash(body: { to_email: string; amount: number; comment?: string }) {
-  const idem =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `xfer-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+export function transferCash(
+  body: { to_email: string; amount: number; comment?: string },
+  opts?: { idempotencyKey?: string },
+) {
+  const idem = opts?.idempotencyKey || newIdemKey("xfer");
   return request<{ sender_record: MoneyRecord; recipient_record: MoneyRecord }>("/transfers", {
     method: "POST",
     headers: { "Idempotency-Key": idem },
@@ -780,18 +785,18 @@ export function transferCash(body: { to_email: string; amount: number; comment?:
   });
 }
 
-export function createPayout(body: {
-  user_id: number;
-  kind: "expense_payout" | "income_handover";
-  amount: number;
-  payment_method?: string;
-  note?: string;
-  overpayment?: number;
-}) {
-  const idem =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `pay-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+export function createPayout(
+  body: {
+    user_id: number;
+    kind: "expense_payout" | "income_handover";
+    amount: number;
+    payment_method?: string;
+    note?: string;
+    overpayment?: number;
+  },
+  opts?: { idempotencyKey?: string },
+) {
+  const idem = opts?.idempotencyKey || newIdemKey("pay");
   return request("/payouts", {
     method: "POST",
     headers: { "Idempotency-Key": idem },
@@ -799,22 +804,16 @@ export function createPayout(body: {
   });
 }
 
-export function batchPaySpendings(payment_method = "cash") {
-  const idem =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `bpay-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+export function batchPaySpendings(payment_method = "cash", opts?: { idempotencyKey?: string }) {
+  const idem = opts?.idempotencyKey || newIdemKey("bpay");
   return request(`/payouts/batch-spendings?payment_method=${encodeURIComponent(payment_method)}`, {
     method: "POST",
     headers: { "Idempotency-Key": idem },
   });
 }
 
-export function batchTakeCash(payment_method = "cash") {
-  const idem =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `bcash-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+export function batchTakeCash(payment_method = "cash", opts?: { idempotencyKey?: string }) {
+  const idem = opts?.idempotencyKey || newIdemKey("bcash");
   return request(`/payouts/batch-cash?payment_method=${encodeURIComponent(payment_method)}`, {
     method: "POST",
     headers: { "Idempotency-Key": idem },
@@ -847,14 +846,17 @@ export function listMySettlementRequests(params?: {
   >(`/payouts/requests/mine${qs ? `?${qs}` : ""}`);
 }
 
-export function requestSettlement(body: {
-  kind: "expense_payout" | "income_handover";
-  amount: number;
-  note?: string;
-}) {
+export function requestSettlement(
+  body: {
+    kind: "expense_payout" | "income_handover";
+    amount: number;
+    note?: string;
+  },
+  opts?: { idempotencyKey?: string },
+) {
   return request("/payouts/requests", {
     method: "POST",
-    headers: { "Idempotency-Key": newIdemKey("sreq") },
+    headers: { "Idempotency-Key": opts?.idempotencyKey || newIdemKey("sreq") },
     body: JSON.stringify(body),
   });
 }
@@ -939,16 +941,19 @@ export function listAdjustments(params?: {
   return request<BalanceAdjustment[]>(`/adjustments${qs ? `?${qs}` : ""}`);
 }
 
-export function createAdjustment(body: {
-  user_id: number;
-  track: "cash_on_hand" | "spendings";
-  amount: number;
-  note: string;
-  occurred_at?: string;
-}) {
+export function createAdjustment(
+  body: {
+    user_id: number;
+    track: "cash_on_hand" | "spendings";
+    amount: number;
+    note: string;
+    occurred_at?: string;
+  },
+  opts?: { idempotencyKey?: string },
+) {
   return request<BalanceAdjustment>("/adjustments", {
     method: "POST",
-    headers: { "Idempotency-Key": newIdemKey("adj") },
+    headers: { "Idempotency-Key": opts?.idempotencyKey || newIdemKey("adj") },
     body: JSON.stringify(body),
   });
 }

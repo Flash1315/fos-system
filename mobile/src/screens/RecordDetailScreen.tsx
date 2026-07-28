@@ -53,6 +53,7 @@ export function RecordDetailScreen({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [photoUri, setPhotoUri] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const isManager = user.role === "owner" || user.role === "manager";
 
   const applyEditFields = (row: MoneyRecord) => {
@@ -71,12 +72,14 @@ export function RecordDetailScreen({
     setEditBike(row.bike || "");
   };
 
-  const reload = async () => {
+  const reload = async (opts?: { preserveEdits?: boolean }) => {
     try {
       setLoadError("");
       const row = await getRecord(id);
       setRec(row);
-      applyEditFields(row);
+      if (!opts?.preserveEdits) {
+        applyEditFields(row);
+      }
       if (row.photo_url) {
         setPhotoUri(await mediaUrlWithMediaToken(row.photo_url));
       } else {
@@ -90,7 +93,18 @@ export function RecordDetailScreen({
     }
   };
 
-  useFocusEffect(reload);
+  useFocusEffect(() => {
+    void reload();
+  });
+
+  const onPullRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await reload({ preserveEdits: editing });
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const decide = async (approve: boolean, note = "") => {
     if (approve && rec?.is_in_closed_cycle) {
@@ -263,7 +277,7 @@ export function RecordDetailScreen({
   const canVoid = !!rec && isManager && !!rec.can_void;
 
   return (
-    <Screen scroll>
+    <Screen scroll refreshing={refreshing} onRefresh={() => void onPullRefresh()}>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Text style={styles.title}>Record #{id}</Text>
       {loading && !rec ? (

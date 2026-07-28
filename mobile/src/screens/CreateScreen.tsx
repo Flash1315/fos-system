@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, View, StyleSheet } from "react-native";
+import { Alert, Platform, View, StyleSheet } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import {
   createRecord,
   getCategories,
   lastFuelOdometer,
   listMembers,
+  makeIdempotencyKey,
   myBalance,
   myOrg,
   teamBalances,
@@ -31,6 +32,7 @@ export function CreateScreen({
 }) {
   const isManager = user.role === "owner" || user.role === "manager";
   const submitLock = useRef(false);
+  const idemKeyRef = useRef<string | null>(null);
   const [kind, setKind] = useState<"expense" | "fuel" | "income">("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
@@ -207,6 +209,18 @@ export function CreateScreen({
         });
     if (shot.canceled || !shot.assets[0]) return;
     const asset = shot.assets[0];
+    const mime = (asset.mimeType || "").toLowerCase();
+    const fname = (asset.fileName || asset.uri || "").toLowerCase();
+    if (
+      Platform.OS === "web" &&
+      (mime.includes("heic") ||
+        mime.includes("heif") ||
+        fname.endsWith(".heic") ||
+        fname.endsWith(".heif"))
+    ) {
+      Alert.alert("Fos", "HEIC is not supported in the browser. Choose JPEG, PNG, or WebP.");
+      return;
+    }
     setBusy(true);
     try {
       const up = await uploadPhoto(asset.uri, {
@@ -378,26 +392,31 @@ export function CreateScreen({
     }
     if (submitLock.current) return;
     submitLock.current = true;
+    if (!idemKeyRef.current) idemKeyRef.current = makeIdempotencyKey("rec");
     setBusy(true);
     try {
-      await createRecord({
-        kind,
-        amount: value,
-        category,
-        purpose,
-        place,
-        bike,
-        comment,
-        photo_url: photoUrl,
-        payment_method: kind === "income" ? paymentMethod : "",
-        payment_source: kind === "income" ? "" : paymentSource,
-        client_name: kind === "income" ? clientName : "",
-        liters: kind === "fuel" && liters ? Number(liters.replace(",", ".")) : undefined,
-        odometer: kind === "fuel" && odometer ? Number(odometer.replace(",", ".")) : undefined,
-        created_for_user_id: forUserId ?? undefined,
-        occurred_at: occurredDate.trim() ? `${occurredDate.trim()}T12:00:00` : undefined,
-        approve_now: isManager && approveNow,
-      });
+      await createRecord(
+        {
+          kind,
+          amount: value,
+          category,
+          purpose,
+          place,
+          bike,
+          comment,
+          photo_url: photoUrl,
+          payment_method: kind === "income" ? paymentMethod : "",
+          payment_source: kind === "income" ? "" : paymentSource,
+          client_name: kind === "income" ? clientName : "",
+          liters: kind === "fuel" && liters ? Number(liters.replace(",", ".")) : undefined,
+          odometer: kind === "fuel" && odometer ? Number(odometer.replace(",", ".")) : undefined,
+          created_for_user_id: forUserId ?? undefined,
+          occurred_at: occurredDate.trim() ? `${occurredDate.trim()}T12:00:00` : undefined,
+          approve_now: isManager && approveNow,
+        },
+        { idempotencyKey: idemKeyRef.current },
+      );
+      idemKeyRef.current = null;
       onCreated();
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");

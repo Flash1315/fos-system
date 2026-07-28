@@ -13,7 +13,15 @@ from app.schemas import (
 )
 from app.auth import bump_token_version, get_current_user, require_roles, hash_password
 from app.db import get_db
-from app.models import Organization, User, UserRole
+from app.models import (
+    MoneyRecord,
+    Organization,
+    RecordStatus,
+    SettlementRequest,
+    SettlementRequestStatus,
+    User,
+    UserRole,
+)
 
 router = APIRouter(prefix="/orgs", tags=["team"])
 
@@ -77,6 +85,35 @@ def set_member_active(
         )
         if owners <= 1:
             raise HTTPException(400, "Cannot deactivate the last active owner")
+    if not body.is_active:
+        pending_recs = (
+            db.query(MoneyRecord.id)
+            .filter(
+                MoneyRecord.organization_id == user.organization_id,
+                MoneyRecord.created_by == member.id,
+                MoneyRecord.status == RecordStatus.pending,
+            )
+            .first()
+        )
+        if pending_recs:
+            raise HTTPException(
+                400,
+                "Cannot deactivate — teammate still has pending records to decide",
+            )
+        pending_req = (
+            db.query(SettlementRequest.id)
+            .filter(
+                SettlementRequest.organization_id == user.organization_id,
+                SettlementRequest.user_id == member.id,
+                SettlementRequest.status == SettlementRequestStatus.pending,
+            )
+            .first()
+        )
+        if pending_req:
+            raise HTTPException(
+                400,
+                "Cannot deactivate — teammate still has pending settlement requests",
+            )
     member.is_active = body.is_active
     if not body.is_active:
         bump_token_version(member)

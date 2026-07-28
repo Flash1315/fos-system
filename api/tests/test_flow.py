@@ -2596,7 +2596,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.6"
+    assert health.json()["version"] == "0.7.7"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -2933,4 +2933,123 @@ def test_auth_login_rate_limit(client, monkeypatch):
     assert "Retry-After" in last.headers
     reset_limiter_for_tests()
     monkeypatch.setattr(settings, "rate_limit_enabled", False)
+
+
+def test_cannot_deactivate_with_pending_and_org_name_trim(client):
+    owner = _register(client, "flow-deact", "deact-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "deact-emp@example.com",
+            "full_name": "Deact Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    assert inv.status_code == 200
+    emp_id = inv.json()["id"]
+    emp_login = client.post(
+        "/auth/login",
+        json={
+            "email": "deact-emp@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-deact",
+        },
+    )
+    eh = {"Authorization": f"Bearer {emp_login.json()['access_token']}"}
+    client.post(
+        "/records",
+        headers=eh,
+        json={
+            "kind": "expense",
+            "amount": 50,
+            "category": "Supplies",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    blocked = client.post(
+        f"/orgs/members/{emp_id}/active",
+        headers=h,
+        json={"is_active": False},
+    )
+    assert blocked.status_code == 400
+    assert "pending" in blocked.json()["detail"].lower()
+    # Whitespace-only org name rejected
+    bad = client.post(
+        "/orgs/register",
+        json={
+            "name": "   ",
+            "slug": "flow-blank-name",
+            "currency": "IDR",
+            "owner_email": "blank@example.com",
+            "owner_name": "Owner",
+            "owner_password": "secret12",
+        },
+    )
+    assert bad.status_code == 422
+    # Approve blocked for inactive creator after force-deactivate path:
+    # first decide the pending record, then invite another and deactivate cleanly.
+    pending = client.get("/records/pending", headers=h).json()
+    assert pending
+    rid = pending[0]["id"]
+    client.post(f"/records/{rid}/decide", headers=h, json={"approve": False, "note": "nope"})
+    ok = client.post(
+        f"/orgs/members/{emp_id}/active",
+        headers=h,
+        json={"is_active": False},
+    )
+    assert ok.status_code == 200
+
+
+def test_cannot_approve_inactive_creator_record(client):
+    owner = _register(client, "flow-inact-apr", "inactapr-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "inactapr-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    emp_id = inv.json()["id"]
+    emp_h = {
+        "Authorization": f"Bearer {client.post('/auth/login', json={'email': 'inactapr-emp@example.com', 'password': 'secret12', 'organization_slug': 'flow-inact-apr'}).json()['access_token']}"
+    }
+    rid = client.post(
+        "/records",
+        headers=emp_h,
+        json={
+            "kind": "expense",
+            "amount": 40,
+            "category": "Supplies",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    ).json()["id"]
+    # Directly mark inactive via DB to simulate legacy pending after deactivate was allowed
+    from app.db import SessionLocal
+    from app.models import User
+
+    db = SessionLocal()
+    try:
+        u = db.get(User, emp_id)
+        u.is_active = False
+        db.commit()
+    finally:
+        db.close()
+    bad = client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
+    assert bad.status_code == 400
+    assert "inactive" in bad.json()["detail"].lower()
+    ok = client.post(
+        f"/records/{rid}/decide",
+        headers=h,
+        json={"approve": False, "note": "inactive teammate"},
+    )
+    assert ok.status_code == 200
 

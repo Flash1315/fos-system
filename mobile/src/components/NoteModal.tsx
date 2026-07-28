@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors } from "../theme";
 import { Btn, Field, Label } from "./ui";
@@ -19,7 +19,7 @@ export function NoteModal({
   visible: boolean;
   title: string;
   onCancel: () => void;
-  onSubmit: (note: string) => void;
+  onSubmit: (note: string) => void | Promise<void>;
   required?: boolean;
   label?: string;
   placeholder?: string;
@@ -29,6 +29,8 @@ export function NoteModal({
 }) {
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel}>
@@ -45,22 +47,34 @@ export function NoteModal({
             secureTextEntry={secureTextEntry}
             autoCapitalize={secureTextEntry ? "none" : undefined}
             autoCorrect={!secureTextEntry}
+            editable={!submitting}
           />
           {!!error && <Text style={styles.error}>{error}</Text>}
           <View style={styles.row}>
-            <Btn title="Cancel" variant="ghost" onPress={onCancel} />
+            <Btn title="Cancel" variant="ghost" onPress={onCancel} disabled={submitting} />
             <Btn
-              title={confirmTitle}
+              title={submitting ? "…" : confirmTitle}
               variant={confirmVariant}
+              disabled={submitting}
               onPress={() => {
+                if (submitLock.current) return;
                 const trimmed = note.trim();
                 if (required && trimmed.length < 2) {
                   setError("Add a short reason (min 2 characters)");
                   return;
                 }
-                onSubmit(trimmed);
-                setNote("");
-                setError("");
+                submitLock.current = true;
+                setSubmitting(true);
+                Promise.resolve(onSubmit(trimmed))
+                  .catch(() => {
+                    /* caller shows errors */
+                  })
+                  .finally(() => {
+                    submitLock.current = false;
+                    setSubmitting(false);
+                    setNote("");
+                    setError("");
+                  });
               }}
             />
           </View>
@@ -83,6 +97,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   title: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 8 },
-  error: { color: colors.danger || "#e57373", marginBottom: 8, fontSize: 13 },
-  row: { flexDirection: "row", gap: 10 },
+  row: { flexDirection: "row", gap: 10, marginTop: 14, justifyContent: "flex-end" },
+  error: { color: colors.danger, marginTop: 6 },
 });

@@ -25,10 +25,10 @@ def send_telegram(chat_id: str, text: str) -> bool:
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             ok = 200 <= resp.status < 300
-            print(f"telegram notify chat={chat} ok={ok}")
+            print(f"telegram notify ok={ok}")
             return ok
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        print(f"telegram notify failed chat={chat} err={type(exc).__name__}")
+        print(f"telegram notify failed err={type(exc).__name__}")
         return False
 
 

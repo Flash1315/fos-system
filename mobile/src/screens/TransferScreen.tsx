@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
-import { me, myBalance, orgDirectory, transferCash, type User } from "../api";
+import { makeIdempotencyKey, me, myBalance, orgDirectory, transferCash, type User } from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
 export function TransferScreen({
@@ -25,6 +25,7 @@ export function TransferScreen({
   const [bootError, setBootError] = useState("");
   const [booting, setBooting] = useState(true);
   const submitLock = useRef(false);
+  const idemKeyRef = useRef<string | null>(null);
 
   const bootstrap = async () => {
     setBooting(true);
@@ -68,6 +69,7 @@ export function TransferScreen({
       return;
     }
     submitLock.current = true;
+    if (!idemKeyRef.current) idemKeyRef.current = makeIdempotencyKey("xfer");
     setBusy(true);
     Alert.alert(
       "Fos",
@@ -99,11 +101,15 @@ export function TransferScreen({
                 );
                 return;
               }
-              await transferCash({
-                to_email: email.trim(),
-                amount: value,
-                comment,
-              });
+              await transferCash(
+                {
+                  to_email: email.trim(),
+                  amount: value,
+                  comment,
+                },
+                { idempotencyKey: idemKeyRef.current || undefined },
+              );
+              idemKeyRef.current = null;
               Alert.alert("Fos", "Transfer recorded — cash balances updated");
               onDone();
             } catch (e) {

@@ -7,12 +7,20 @@ from app.models import RecordKind, RecordStatus, UserRole
 
 
 class OrgCreate(BaseModel):
-    name: str = Field(min_length=2, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=2, max_length=80, pattern=r"^[a-z0-9-]+$")
     currency: str = "IDR"
     owner_email: EmailStr
-    owner_name: str = Field(min_length=2, max_length=200)
+    owner_name: str = Field(min_length=1, max_length=200)
     owner_password: str = Field(min_length=6, max_length=128)
+
+    @field_validator("name", "owner_name")
+    @classmethod
+    def strip_required_name(cls, v: str) -> str:
+        cleaned = (v or "").strip()
+        if len(cleaned) < 2:
+            raise ValueError("must be at least 2 characters")
+        return cleaned
 
 
 class OrgOut(BaseModel):
@@ -26,8 +34,18 @@ class OrgOut(BaseModel):
 
 
 class OrgUpdate(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=2, max_length=200)
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     currency: Optional[str] = Field(default=None, min_length=1, max_length=8)
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        cleaned = v.strip()
+        if len(cleaned) < 2:
+            raise ValueError("must be at least 2 characters")
+        return cleaned
 
 
 class UserOut(BaseModel):

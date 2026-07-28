@@ -179,7 +179,7 @@ export function TransferScreen({
       <Label>Amount</Label>
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
       <Label>Comment</Label>
-      <Field value={comment} onChangeText={setComment} />
+      <Field value={comment} onChangeText={setComment} maxLength={2000} />
       <Btn
         title={busy ? "…" : "Submit transfer"}
         onPress={submit}

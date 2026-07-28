@@ -90,7 +90,7 @@ export function PayoutScreen({
 
   useEffect(() => {
     payoutIdemRef.current = null;
-  }, [userId, kind, method, amount]);
+  }, [userId, kind, method, amount, note]);
 
   useEffect(() => {
     batchSpendIdemRef.current = null;
@@ -400,7 +400,7 @@ export function PayoutScreen({
         <Chip label="transfer" on={method === "transfer"} onPress={() => setMethod("transfer")} />
       </View>
       <Label>Note</Label>
-      <Field value={note} onChangeText={setNote} />
+      <Field value={note} onChangeText={setNote} maxLength={2000} />
       <Btn title={busy ? "…" : "Record settlement"} onPress={submit} disabled={busy} />
         </>
       )}

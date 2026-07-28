@@ -25,7 +25,7 @@ Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.7.32")
+app = FastAPI(title=settings.app_name, version="0.7.33")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 # Bearer-token auth does not use cookies; credentials+wildcard is unnecessary.
@@ -33,9 +33,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins if origins != ["*"] else ["*"],
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["Content-Disposition", "X-Request-Id"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Idempotency-Key",
+        "X-Request-Id",
+        "Accept",
+    ],
+    expose_headers=["Content-Disposition", "X-Request-Id", "Retry-After"],
 )
 
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{8,128}$")
@@ -97,7 +103,7 @@ def health():
     return {
         "ok": db_status == "ok",
         "app": settings.app_name,
-        "version": "0.7.32",
+        "version": "0.7.33",
         "db": db_status,
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }

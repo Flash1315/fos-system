@@ -365,13 +365,14 @@ export function AccountScreen({
             Owners can rename the company. Currency can change only before the first money record,
             settlement, or balance adjustment. Slug stays fixed for login.
           </Sub>
-          <Field value={orgName} onChangeText={setOrgName} placeholder="Company name" />
+          <Field value={orgName} onChangeText={setOrgName} placeholder="Company name" maxLength={200} />
           <Field
             value={currency}
             onChangeText={setCurrency}
             placeholder="Currency (IDR)"
             autoCapitalize="characters"
             editable={!currencyLocked}
+            maxLength={3}
           />
           {currencyLocked ? (
             <Sub>Currency locked after money activity — rename only.</Sub>
@@ -391,7 +392,7 @@ export function AccountScreen({
             </Sub>
           )}
           <Label>Telegram chat id</Label>
-          <Field value={tgChat} onChangeText={setTgChat} placeholder="-100…" autoCapitalize="none" />
+          <Field value={tgChat} onChangeText={setTgChat} placeholder="-100…" autoCapitalize="none" maxLength={64} />
           <Btn
             title={busy ? "…" : "Save Telegram chat"}
             variant="ghost"
@@ -457,7 +458,7 @@ export function AccountScreen({
         />
       </View>
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
-      <Field value={note} onChangeText={setNote} placeholder="Optional note" />
+      <Field value={note} onChangeText={setNote} placeholder="Optional note" maxLength={2000} />
       <Btn title={busy ? "…" : "Send request"} onPress={onRequest} disabled={busy} />
 
       <Label>My requests</Label>

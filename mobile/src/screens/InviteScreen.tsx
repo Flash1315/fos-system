@@ -127,9 +127,9 @@ export function InviteScreen({
         </>
       )}
       <Label>Full name</Label>
-      <Field value={fullName} onChangeText={setFullName} />
+      <Field value={fullName} onChangeText={setFullName} maxLength={200} />
       <Label>Email</Label>
-      <Field autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
+      <Field autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} maxLength={254} />
       <View style={styles.kinds}>
         <Chip
           label="Invite token (recommended)"

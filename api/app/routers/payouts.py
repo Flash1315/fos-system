@@ -372,6 +372,13 @@ def my_payouts(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"payouts-mine:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     q = db.query(Payout).filter(
         Payout.organization_id == user.organization_id, Payout.user_id == user.id
     )
@@ -395,6 +402,13 @@ def org_payouts(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"payouts-org:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     q = db.query(Payout).filter(Payout.organization_id == user.organization_id)
     if voided is True:
         q = q.filter(Payout.is_voided.is_(True))
@@ -611,6 +625,11 @@ def batch_pay_all_spendings(
         window_sec=60,
     )
 
+    method = (payment_method or "cash").strip().lower() or "cash"
+    if method not in PAYMENT_METHODS:
+        raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
+    payment_method = method
+
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint({"payment_method": payment_method}) if key else None
     if key:
@@ -716,6 +735,11 @@ def batch_take_all_cash(
         window_sec=60,
     )
 
+    method = (payment_method or "cash").strip().lower() or "cash"
+    if method not in PAYMENT_METHODS:
+        raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
+    payment_method = method
+
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint({"payment_method": payment_method}) if key else None
     if key:
@@ -804,6 +828,13 @@ def my_settlement_requests(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"settle-mine:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     q = db.query(SettlementRequest).filter(
         SettlementRequest.organization_id == user.organization_id,
         SettlementRequest.user_id == user.id,
@@ -954,6 +985,13 @@ def list_settlement_requests(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"settle-list:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     q = db.query(SettlementRequest).filter(
         SettlementRequest.organization_id == user.organization_id,
     )

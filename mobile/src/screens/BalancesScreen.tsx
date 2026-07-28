@@ -318,7 +318,7 @@ export function BalancesScreen({
               placeholder="e.g. 100000 or -5000"
             />
             <Label>Note</Label>
-            <Field value={note} onChangeText={setNote} placeholder="Opening balance / correction" />
+            <Field value={note} onChangeText={setNote} placeholder="Opening balance / correction" maxLength={2000} />
             <Btn title={isBusy ? "…" : "Post adjustment"} onPress={postAdjustment} disabled={isBusy} />
             <Label>Adjustments</Label>
             <View style={styles.chips}>

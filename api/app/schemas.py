@@ -14,6 +14,13 @@ def _strip_optional(v: Optional[str]) -> Optional[str]:
     return v.strip()
 
 
+def _collapse_ws(v: str, *, max_len: int | None = None) -> str:
+    text = re.sub(r"\s+", " ", (v or "").strip())
+    if max_len is not None:
+        return text[:max_len]
+    return text
+
+
 def _require_finite(v: Optional[float], *, field: str) -> Optional[float]:
     if v is None:
         return None
@@ -273,7 +280,6 @@ class RecordCreate(BaseModel):
         "purpose",
         "place",
         "bike",
-        "comment",
         "photo_url",
         "client_name",
         "payment_method",
@@ -282,6 +288,11 @@ class RecordCreate(BaseModel):
     @classmethod
     def strip_text_fields(cls, v: str) -> str:
         return (v or "").strip()
+
+    @field_validator("comment")
+    @classmethod
+    def collapse_comment(cls, v: str) -> str:
+        return _collapse_ws(v, max_len=4000)
 
     @field_validator("liters")
     @classmethod
@@ -320,7 +331,6 @@ class RecordUpdate(BaseModel):
         "purpose",
         "place",
         "bike",
-        "comment",
         "photo_url",
         "client_name",
         "payment_method",
@@ -332,6 +342,13 @@ class RecordUpdate(BaseModel):
         if v is None:
             return ""
         return v.strip()
+
+    @field_validator("comment")
+    @classmethod
+    def collapse_optional_comment(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return ""
+        return _collapse_ws(v, max_len=4000)
 
     @field_validator("liters")
     @classmethod
@@ -400,7 +417,7 @@ class DecideIn(BaseModel):
     @field_validator("note")
     @classmethod
     def note_trim(cls, v: str) -> str:
-        return (v or "").strip()
+        return _collapse_ws(v, max_len=2000)
 
 
 class DecideBatchIn(BaseModel):
@@ -411,7 +428,7 @@ class DecideBatchIn(BaseModel):
     @field_validator("note")
     @classmethod
     def note_trim(cls, v: str) -> str:
-        return (v or "").strip()
+        return _collapse_ws(v, max_len=2000)
 
     @field_validator("ids")
     @classmethod
@@ -441,7 +458,7 @@ class CommentIn(BaseModel):
     @field_validator("note")
     @classmethod
     def note_trimmed(cls, v: str) -> str:
-        note = (v or "").strip()
+        note = _collapse_ws(v, max_len=2000)
         if len(note) < 2:
             raise ValueError("Note is required (min 2 characters)")
         return note

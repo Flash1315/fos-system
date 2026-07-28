@@ -37,6 +37,13 @@ def list_members(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"members-list:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     rows = (
         db.query(User)
         .filter(User.organization_id == user.organization_id)
@@ -52,6 +59,13 @@ def org_directory(
     user: User = Depends(get_current_user),
 ):
     """Active teammates visible to everyone (for transfers / filing)."""
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"org-directory:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     rows = (
         db.query(User)
         .filter(User.organization_id == user.organization_id, User.is_active.is_(True))

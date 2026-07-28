@@ -479,6 +479,11 @@ def create_record(
     return _record_out(db, rec)
 
 
+def _bound_purpose(purpose: str | None) -> str | None:
+    value = (purpose or "").strip()[:80]
+    return value or None
+
+
 @router.get("/mine", response_model=list[RecordOut])
 def my_records(
     kind: RecordKind | None = None,
@@ -491,6 +496,14 @@ def my_records(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"records-mine:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
+    purpose = _bound_purpose(purpose)
     query = db.query(MoneyRecord).filter(
         MoneyRecord.organization_id == user.organization_id,
         MoneyRecord.created_by == user.id,
@@ -536,6 +549,14 @@ def org_records(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"records-org:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
+    purpose = _bound_purpose(purpose)
     query = db.query(MoneyRecord).filter(MoneyRecord.organization_id == user.organization_id)
     if kind:
         query = query.filter(MoneyRecord.kind == kind)
@@ -576,6 +597,14 @@ def pending_records(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"records-pending:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
+    purpose = _bound_purpose(purpose)
     q = db.query(MoneyRecord).filter(
         MoneyRecord.organization_id == user.organization_id,
         MoneyRecord.status == RecordStatus.pending,
@@ -595,6 +624,7 @@ def pending_count(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    purpose = _bound_purpose(purpose)
     q = db.query(func.count(MoneyRecord.id)).filter(
         MoneyRecord.organization_id == user.organization_id,
         MoneyRecord.status == RecordStatus.pending,
@@ -624,6 +654,13 @@ def my_balance(
     user: User = Depends(get_current_user),
 ):
     """RJ-inspired dual track with payout cutoffs (per user, approved only)."""
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"balance-me:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
     bal = user_balance(db, user)
@@ -647,6 +684,13 @@ def team_balances(
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
     """All active teammates' cash/spendings — RJ manager balances view."""
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"balance-team:{user.organization_id}:{user.id}",
+        limit=60,
+        window_sec=60,
+    )
     members = (
         db.query(User)
         .filter(User.organization_id == user.organization_id, User.is_active.is_(True))
@@ -666,6 +710,15 @@ def last_fuel_odometer(
     user: User = Depends(get_current_user),
 ):
     """Hint for fuel form — latest or neighbor bounds around optional `at` (ISO date/datetime)."""
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"fuel-odo:{user.organization_id}:{user.id}",
+        limit=60,
+        window_sec=60,
+    )
+    if at is not None and len(at) > 40:
+        raise HTTPException(400, "at is too long")
     owner_id = user.id
     if user_id is not None and user_id != user.id:
         if user.role not in (UserRole.owner, UserRole.manager):

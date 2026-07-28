@@ -108,6 +108,13 @@ def list_adjustments(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"adjustments-list:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     q = db.query(BalanceAdjustment).filter(
         BalanceAdjustment.organization_id == user.organization_id
     )

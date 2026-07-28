@@ -200,7 +200,14 @@ async function request<T>(
     if (res.status === 401) {
       await notifyUnauthorized(requestToken);
     }
-    throw new Error(formatApiError(data, res.statusText || `HTTP ${res.status}`, res.status));
+    throw new Error(
+      formatApiError(
+        data,
+        res.statusText || `HTTP ${res.status}`,
+        res.status,
+        res.headers.get("Retry-After"),
+      ),
+    );
   }
   return data as T;
 }
@@ -239,11 +246,21 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
     let detail = text;
     try {
       const data = JSON.parse(text);
-      detail = formatApiError(data, res.statusText || `HTTP ${res.status}`, res.status);
+      detail = formatApiError(
+        data,
+        res.statusText || `HTTP ${res.status}`,
+        res.status,
+        res.headers.get("Retry-After"),
+      );
     } catch {
       detail =
         res.status === 429
-          ? "Too many requests — wait a moment and try again"
+          ? formatApiError(
+              null,
+              res.statusText || `HTTP ${res.status}`,
+              429,
+              res.headers.get("Retry-After"),
+            )
           : res.statusText || `HTTP ${res.status}`;
     }
     throw new Error(detail);
@@ -251,13 +268,38 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
   return text;
 }
 
-function formatApiError(data: unknown, fallback: string, status?: number): string {
+function formatApiError(
+  data: unknown,
+  fallback: string,
+  status?: number,
+  retryAfter?: string | null,
+): string {
   if (status === 429) {
+    let base = "Too many requests — wait a moment and try again";
     if (typeof data === "object" && data && "detail" in data) {
       const d = (data as { detail: unknown }).detail;
-      if (typeof d === "string" && d.trim()) return d;
+      if (typeof d === "string" && d.trim()) base = d;
     }
-    return "Too many requests — wait a moment and try again";
+    const sec =
+      retryAfter && /^\d+$/.test(retryAfter.trim()) ? Number(retryAfter.trim()) : null;
+    if (sec != null && sec > 0) return `${base} (retry in ~${sec}s)`;
+    return base;
+  }
+  if (status != null && status >= 500) {
+    const reqId =
+      typeof data === "object" && data && "request_id" in data
+        ? String((data as { request_id: unknown }).request_id || "")
+        : "";
+    const msg =
+      typeof data === "object" && data && "detail" in data
+        ? (data as { detail: unknown }).detail
+        : null;
+    if (typeof msg === "string" && msg.trim()) {
+      return reqId ? `${msg} (ref ${reqId})` : msg;
+    }
+    return reqId
+      ? `Server error — try again (ref ${reqId})`
+      : fallback || "Server error — try again";
   }
   if (typeof data !== "object" || !data || !("detail" in data)) return fallback;
   const detail = (data as { detail: unknown }).detail;

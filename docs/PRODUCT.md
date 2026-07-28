@@ -233,6 +233,10 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - EAS preview/production require https EXPO_PUBLIC_API_URL (`docs/EAS.md`)
 - Optional Redis rate limiter + composite indexes for money/payout/idempotency lists
 - Approving into a settled cycle requires `allow_closed_cycle`; photo uploads support Idempotency-Key
+- Invite/reset issuer always receives the raw token (email is best-effort)
+- Mobile soft-retries mutations on network/502/503/429 keeping Idempotency-Key; honors Retry-After
+- Closed-cycle Approve anyway sends allow_closed_cycle; AppState probes /health/live on resume
+- Production requires METRICS_TOKEN for /metrics
 - Production refuses SQLite `DATABASE_URL`; Alembic upgrade fails hard in production
 - Postgres pool/SSL knobs: `DB_POOL_*`, `DB_SSLMODE`; see `docs/DEPLOY.md`
 - Accept-invite allowed during billing freeze; money idempotency replays before writable gate

@@ -298,7 +298,7 @@ class MemberResetTokenOut(BaseModel):
     email: EmailStr
     full_name: str
     organization_slug: str
-    invite_token: str
+    invite_token: Optional[str] = None
     must_set_password: bool = True
     email_sent: bool = False
 

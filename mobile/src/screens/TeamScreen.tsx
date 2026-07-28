@@ -238,9 +238,7 @@ export function TeamScreen({
                               setLastReset(payload);
                               Alert.alert(
                                 "Fos",
-                                res.email_sent && !res.invite_token
-                                  ? "Reset email was sent — share the company slug if needed."
-                                  : `Reset token issued${res.email_sent ? " (email sent)" : ""}. Keep the details below to share.`,
+                                `Reset token issued${res.email_sent ? " (email sent)" : ""}. Keep the details below to share.`,
                               );
                               await reload();
                             } catch (e) {
@@ -268,14 +266,10 @@ export function TeamScreen({
       {lastReset && (
         <View style={styles.card}>
           <Label>
-            {lastReset.token
-              ? "Last reset token — share before leaving"
-              : "Last reset — email sent"}
+            Last reset token — share before leaving
           </Label>
           <Sub>
-            {lastReset.token
-              ? `Share with ${lastReset.name}:\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\nReset token: ${lastReset.token}\n\nThey open Accept invite and set a new password.`
-              : `Reset email sent to ${lastReset.email} (${lastReset.slug}). Ask them to check their inbox.`}
+            {`Share with ${lastReset.name}:\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\nReset token: ${lastReset.token}\n\nThey open Accept invite and set a new password.`}
           </Sub>
           {lastReset.emailSent ? <Sub>Email delivery attempted.</Sub> : null}
           <Btn
@@ -284,11 +278,9 @@ export function TeamScreen({
             onPress={async () => {
               try {
                 await Share.share({
-                  message: lastReset.token
-                    ? `Fos password reset\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\n` +
-                      `Reset token: ${lastReset.token}\n\nOpen Accept invite and set a new password.`
-                    : `Fos password reset\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\n` +
-                      `Reset email was sent — check your inbox.`,
+                  message:
+                    `Fos password reset\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\n` +
+                    `Reset token: ${lastReset.token}\n\nOpen Accept invite and set a new password.`,
                 });
               } catch (e) {
                 Alert.alert("Fos", e instanceof Error ? e.message : "Share failed");

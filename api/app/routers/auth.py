@@ -433,7 +433,7 @@ def invite_user(
         organization_id=invited.organization_id,
         organization_slug=org.slug if org else "",
         must_set_password=must_set,
-        # Do not echo the secret when email delivery already carried it.
-        invite_token=None if emailed else raw_invite,
+        # Always return the raw token to the issuer — email is best-effort delivery.
+        invite_token=raw_invite,
         email_sent=emailed,
     )

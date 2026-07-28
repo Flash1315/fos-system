@@ -34,6 +34,7 @@ export function CreateScreen({
   const isManager = user.role === "owner" || user.role === "manager";
   const submitLock = useRef(false);
   const idemKeyRef = useRef<string | null>(null);
+  const photoIdemRef = useRef<string | null>(null);
   const [kind, setKind] = useState<"expense" | "fuel" | "income">("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
@@ -269,10 +270,13 @@ export function CreateScreen({
     }
     setBusy(true);
     try {
+      if (!photoIdemRef.current) photoIdemRef.current = makeIdempotencyKey("photo");
       const up = await uploadPhoto(asset.uri, {
         name: asset.fileName || undefined,
         type: asset.mimeType || undefined,
+        idempotencyKey: photoIdemRef.current,
       });
+      photoIdemRef.current = null;
       setPhotoUrl(up.photo_url);
       Alert.alert("Fos", "Receipt photo attached");
     } catch (e) {

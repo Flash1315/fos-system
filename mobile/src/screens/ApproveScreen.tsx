@@ -127,7 +127,7 @@ export function ApproveScreen({
             { text: "Cancel", style: "cancel" },
             {
               text: "Approve anyway",
-              onPress: () => void doDecide(id, true, note),
+              onPress: () => void doDecide(id, true, note, true),
             },
           ],
         );
@@ -135,14 +135,14 @@ export function ApproveScreen({
       }
       Alert.alert("Fos", "Approve this record?", [
         { text: "Cancel", style: "cancel" },
-        { text: "Approve", onPress: () => void doDecide(id, true, note) },
+        { text: "Approve", onPress: () => void doDecide(id, true, note, false) },
       ]);
       return;
     }
     await doDecide(id, approve, note);
   };
 
-  const doDecide = async (id: number, approve: boolean, note = "") => {
+  const doDecide = async (id: number, approve: boolean, note = "", allowClosedCycle = false) => {
     if (busy) return;
     const noteKey = note.replace(/\s+/g, " ").trim();
     const key = idemKeyFor(
@@ -153,7 +153,7 @@ export function ApproveScreen({
     );
     setBusy(true);
     try {
-      await decideRecord(id, approve, note, { idempotencyKey: key });
+      await decideRecord(id, approve, note, { idempotencyKey: key, allowClosedCycle });
       decideIdemRef.current = null;
       decideSlotRef.current = null;
       await reload();
@@ -183,17 +183,22 @@ export function ApproveScreen({
           rows.map((r) => r.id),
           true,
           "",
-          { idempotencyKey: approveBatchIdemRef.current },
+          {
+            idempotencyKey: approveBatchIdemRef.current,
+            allowClosedCycle: closed.length > 0,
+          },
         );
         approveBatchIdemRef.current = null;
         approveBatchSlotRef.current = null;
         if (res.skipped > 0) {
           const cash = res.skipped_insufficient_cash || 0;
           const inactive = res.skipped_inactive || 0;
-          const other = res.skipped - cash - inactive;
+          const closedSkip = res.skipped_closed_cycle || 0;
+          const other = res.skipped - cash - inactive - closedSkip;
           const parts = [`Approved ${res.decided.length}`];
           if (cash > 0) parts.push(`skipped ${cash} (insufficient cash)`);
           if (inactive > 0) parts.push(`skipped ${inactive} (inactive teammate)`);
+          if (closedSkip > 0) parts.push(`skipped ${closedSkip} (settled period)`);
           if (other > 0) parts.push(`skipped ${other} (already decided or missing)`);
           Alert.alert("Fos", parts.join("; "));
         }

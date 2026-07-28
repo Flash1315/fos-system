@@ -201,62 +201,109 @@ function newClientRequestId(): string {
   return `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function parseRetryAfterSec(raw: string | null): number | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(30, n);
+}
+
+function shouldSoftRetry(status: number | null, err: unknown): boolean {
+  if (status === 429 || status === 502 || status === 503) return true;
+  if (err instanceof Error) {
+    const msg = err.message || "";
+    if (err.name === "AbortError") return true;
+    if (/timed out|network request failed|failed to fetch|network error/i.test(msg)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function request<T>(
   path: string,
   init: RequestInit = {},
-  opts?: { timeoutMs?: number },
+  opts?: { timeoutMs?: number; retries?: number },
 ): Promise<T> {
-  const auth = await authHeaders();
-  const requestToken = auth.Authorization?.startsWith("Bearer ")
-    ? auth.Authorization.slice(7)
-    : null;
-  const headers: Record<string, string> = {
-    ...(isFormDataBody(init.body) ? {} : { "Content-Type": "application/json" }),
-    ...auth,
-    ...((init.headers as Record<string, string>) || {}),
-  };
-  if (!headers["X-Request-Id"]) headers["X-Request-Id"] = newClientRequestId();
-  const controller = new AbortController();
-  const timeoutMs = opts?.timeoutMs ?? REQUEST_TIMEOUT_MS;
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let res: Response;
-  try {
-    res = await fetch(`${API_URL}${path}`, {
-      ...init,
-      headers,
-      signal: init.signal || controller.signal,
-    });
-  } catch (e) {
-    if (e instanceof Error && e.name === "AbortError") {
-      throw new Error("Request timed out — check connection and try again");
+  const maxAttempts = Math.max(1, (opts?.retries ?? 2) + 1);
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const auth = await authHeaders();
+    const requestToken = auth.Authorization?.startsWith("Bearer ")
+      ? auth.Authorization.slice(7)
+      : null;
+    const headers: Record<string, string> = {
+      ...(isFormDataBody(init.body) ? {} : { "Content-Type": "application/json" }),
+      ...auth,
+      ...((init.headers as Record<string, string>) || {}),
+    };
+    // Keep the same client request id + Idempotency-Key across soft retries.
+    if (!headers["X-Request-Id"]) headers["X-Request-Id"] = newClientRequestId();
+    const controller = new AbortController();
+    const timeoutMs = opts?.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let res: Response | null = null;
+    try {
+      res = await fetch(`${API_URL}${path}`, {
+        ...init,
+        headers,
+        signal: init.signal || controller.signal,
+      });
+    } catch (e) {
+      lastError =
+        e instanceof Error && e.name === "AbortError"
+          ? new Error("Request timed out — check connection and try again")
+          : new Error(e instanceof Error ? e.message : "Network request failed");
+      if (attempt < maxAttempts && shouldSoftRetry(null, e)) {
+        await sleep(Math.min(1500, 250 * attempt));
+        continue;
+      }
+      throw lastError;
+    } finally {
+      clearTimeout(timer);
     }
-    throw new Error(e instanceof Error ? e.message : "Network request failed");
-  } finally {
-    clearTimeout(timer);
-  }
-  const text = await res.text();
-  let data: unknown = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = { detail: text };
-  }
-  if (!res.ok) {
-    if (res.status === 401) {
-      await notifyUnauthorized(requestToken);
+    const text = await res.text();
+    let data: unknown = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { detail: text };
     }
-    // Billing freeze (403) keeps the session so read-only + cancel-pending still work.
-    throw new Error(
-      formatApiError(
-        data,
-        res.statusText || `HTTP ${res.status}`,
-        res.status,
-        res.headers.get("Retry-After"),
-        res.headers.get("X-Request-Id") || headers["X-Request-Id"],
-      ),
-    );
+    if (!res.ok) {
+      if (res.status === 401) {
+        await notifyUnauthorized(requestToken);
+      }
+      if (
+        attempt < maxAttempts &&
+        shouldSoftRetry(res.status, null) &&
+        res.status !== 401
+      ) {
+        const retryAfter = parseRetryAfterSec(res.headers.get("Retry-After"));
+        const waitMs =
+          retryAfter != null ? retryAfter * 1000 : Math.min(1500, 300 * attempt);
+        await sleep(waitMs);
+        continue;
+      }
+      throw new Error(
+        formatApiError(
+          data,
+          res.statusText || `HTTP ${res.status}`,
+          res.status,
+          res.headers.get("Retry-After"),
+          res.headers.get("X-Request-Id") || headers["X-Request-Id"],
+        ),
+      );
+    }
+    return data as T;
   }
-  return data as T;
+  throw lastError instanceof Error ? lastError : new Error("Request failed");
 }
 
 async function requestText(path: string, init: RequestInit = {}): Promise<string> {
@@ -426,6 +473,23 @@ export function login(body: {
 export function me() {
   return request<User>("/auth/me");
 }
+
+/** Cheap liveness probe (no auth) for reconnect UX. */
+export async function probeApiLive(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(`${API_URL}/health/live`, { signal: controller.signal });
+      return res.ok;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return false;
+  }
+}
+
 
 export function changePassword(
   current_password: string,
@@ -804,12 +868,16 @@ export function decideRecord(
   id: number,
   approve: boolean,
   note = "",
-  opts?: { idempotencyKey?: string },
+  opts?: { idempotencyKey?: string; allowClosedCycle?: boolean },
 ) {
   return request<MoneyRecord>(`/records/${id}/decide`, {
     method: "POST",
     headers: { "Idempotency-Key": opts?.idempotencyKey || newIdemKey("decide") },
-    body: JSON.stringify({ approve, note }),
+    body: JSON.stringify({
+      approve,
+      note,
+      allow_closed_cycle: !!opts?.allowClosedCycle,
+    }),
   });
 }
 
@@ -817,17 +885,23 @@ export function decideBatch(
   ids: number[],
   approve: boolean,
   note = "",
-  opts?: { idempotencyKey?: string },
+  opts?: { idempotencyKey?: string; allowClosedCycle?: boolean },
 ) {
   return request<{
     decided: MoneyRecord[];
     skipped: number;
     skipped_insufficient_cash?: number;
     skipped_inactive?: number;
+    skipped_closed_cycle?: number;
   }>("/records/decide-batch", {
     method: "POST",
     headers: { "Idempotency-Key": opts?.idempotencyKey || newIdemKey("dbatch") },
-    body: JSON.stringify({ ids, approve, note }),
+    body: JSON.stringify({
+      ids,
+      approve,
+      note,
+      allow_closed_cycle: !!opts?.allowClosedCycle,
+    }),
   });
 }
 

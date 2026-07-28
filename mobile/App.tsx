@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Alert } from "react-native";
+import { Alert, AppState, type AppStateStatus } from "react-native";
 import {
   getToken,
   logout,
   me,
+  probeApiLive,
   saveToken,
   setUnauthorizedHandler,
   type User,
@@ -111,6 +112,29 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const offlineAlerted = { current: false };
+    const onChange = (next: AppStateStatus) => {
+      if (next !== "active") return;
+      if (screen === "boot" || screen === "auth") return;
+      void (async () => {
+        const ok = await probeApiLive();
+        if (ok) {
+          offlineAlerted.current = false;
+          return;
+        }
+        if (offlineAlerted.current) return;
+        offlineAlerted.current = true;
+        Alert.alert(
+          "Fos",
+          "Server unreachable — check your connection. Pull to refresh when back online.",
+        );
+      })();
+    };
+    const sub = AppState.addEventListener("change", onChange);
+    return () => sub.remove();
+  }, [screen]);
 
   if (screen === "boot") return <Loading />;
 

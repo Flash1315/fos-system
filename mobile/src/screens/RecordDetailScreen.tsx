@@ -70,6 +70,7 @@ export function RecordDetailScreen({
   const voidIdemRef = useRef<string | null>(null);
   const voidSlotRef = useRef<string | null>(null);
   const editIdemRef = useRef<string | null>(null);
+  const photoIdemRef = useRef<string | null>(null);
   const reloadGen = useRef(0);
   const isManager = user.role === "owner" || user.role === "manager";
 
@@ -163,7 +164,7 @@ export function RecordDetailScreen({
           { text: "Cancel", style: "cancel" },
           {
             text: "Approve anyway",
-            onPress: () => void doDecide(true, note),
+            onPress: () => void doDecide(true, note, true),
           },
         ],
       );
@@ -172,14 +173,14 @@ export function RecordDetailScreen({
     if (approve) {
       Alert.alert("Fos", "Approve this record?", [
         { text: "Cancel", style: "cancel" },
-        { text: "Approve", onPress: () => void doDecide(true, note) },
+        { text: "Approve", onPress: () => void doDecide(true, note, false) },
       ]);
       return;
     }
     await doDecide(approve, note);
   };
 
-  const doDecide = async (approve: boolean, note = "") => {
+  const doDecide = async (approve: boolean, note = "", allowClosedCycle = false) => {
     if (busy) return;
     const noteKey = note.replace(/\s+/g, " ").trim();
     const key = idemKeyFor(
@@ -191,7 +192,12 @@ export function RecordDetailScreen({
     setBusy(true);
     try {
       reloadGen.current += 1;
-      setRec(await decideRecord(id, approve, note, { idempotencyKey: key }));
+      setRec(
+        await decideRecord(id, approve, note, {
+          idempotencyKey: key,
+          allowClosedCycle,
+        }),
+      );
       decideIdemRef.current = null;
       decideSlotRef.current = null;
     } catch (e) {
@@ -416,10 +422,13 @@ export function RecordDetailScreen({
     }
     setBusy(true);
     try {
+      if (!photoIdemRef.current) photoIdemRef.current = makeIdempotencyKey("photo");
       const up = await uploadPhoto(asset.uri, {
         name: asset.fileName || undefined,
         type: asset.mimeType || undefined,
+        idempotencyKey: photoIdemRef.current,
       });
+      photoIdemRef.current = null;
       setEditPhotoUrl(up.photo_url);
       setPhotoUri(await mediaUrlWithMediaToken(up.photo_url));
       Alert.alert("Fos", "Receipt photo ready — tap Save to apply");

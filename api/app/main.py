@@ -84,6 +84,10 @@ def _validate_runtime_settings() -> str:
             raise RuntimeError("DB_POOL_SIZE must be between 1 and 100")
         if max_overflow < 0 or max_overflow > 100:
             raise RuntimeError("DB_MAX_OVERFLOW must be between 0 and 100")
+        if not (settings.metrics_token or "").strip():
+            raise RuntimeError(
+                "METRICS_TOKEN is required in production (protect GET /metrics)"
+            )
     elif not secret or secret in _INSECURE_SECRETS:
         logger.warning("SECRET_KEY is insecure — set a strong SECRET_KEY in production")
     elif media == "s3" and not (settings.s3_bucket or "").strip():

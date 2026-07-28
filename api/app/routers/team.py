@@ -364,8 +364,8 @@ def issue_member_reset_token(
     ):
         raise HTTPException(
             409,
-            "Active reset/invite token already exists — share the previous token "
-            "or pass force=true to rotate",
+            "Active reset/invite token already exists — pass force=true to rotate "
+            "(previous token cannot be re-fetched; it is stored hashed only)",
         )
     org = db.get(Organization, user.organization_id)
     raw_token = secrets.token_urlsafe(24)
@@ -398,7 +398,7 @@ def issue_member_reset_token(
         email=member.email,
         full_name=member.full_name,
         organization_slug=org.slug if org else "",
-        invite_token="" if emailed else raw_token,
+        invite_token=raw_token,
         must_set_password=True,
         email_sent=emailed,
     )

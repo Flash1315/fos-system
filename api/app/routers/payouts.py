@@ -2,7 +2,6 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles
@@ -18,7 +17,7 @@ from app.models import (
     UserRole,
 )
 from app.routers.records import _utcnow
-from app.services.balances import last_payout, user_balance
+from app.services.balances import last_payout, pending_reserved, user_balance
 
 router = APIRouter(prefix="/payouts", tags=["payouts"])
 
@@ -104,20 +103,6 @@ def _payout_out(db: Session, row: Payout, user_name: str) -> PayoutOut:
         created_by=row.created_by,
         created_at=row.created_at,
     )
-
-
-def _pending_reserved(
-    db: Session, user_id: int, org_id: int, kind: PayoutKind, exclude_id: int | None = None
-) -> float:
-    q = db.query(func.coalesce(func.sum(SettlementRequest.amount), 0.0)).filter(
-        SettlementRequest.organization_id == org_id,
-        SettlementRequest.user_id == user_id,
-        SettlementRequest.kind == kind,
-        SettlementRequest.status == SettlementRequestStatus.pending,
-    )
-    if exclude_id is not None:
-        q = q.filter(SettlementRequest.id != exclude_id)
-    return float(q.scalar() or 0)
 
 
 def _request_out(row: SettlementRequest, user_name: str) -> SettlementRequestOut:
@@ -393,7 +378,7 @@ def request_settlement(
     else:
         available = float(bal.get("cash_on_hand") or 0)
         label = "cash on hand"
-    reserved = _pending_reserved(db, user.id, user.organization_id, body.kind)
+    reserved = pending_reserved(db, user.id, user.organization_id, body.kind)
     open_to_request = max(0.0, available - reserved)
     if body.amount > open_to_request + 1e-6:
         raise HTTPException(

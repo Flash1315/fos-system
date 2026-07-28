@@ -222,13 +222,21 @@ export function resetMemberPassword(id: number, new_password: string) {
   });
 }
 
+export type BalanceInfo = {
+  cash_on_hand: number;
+  spendings: number;
+  currency: string;
+  pending_count: number;
+  last_expense_payout_at?: string | null;
+  last_income_handover_at?: string | null;
+  reserved_spendings?: number;
+  reserved_cash?: number;
+  available_spendings?: number;
+  available_cash?: number;
+};
+
 export function myBalance() {
-  return request<{
-    cash_on_hand: number;
-    spendings: number;
-    currency: string;
-    pending_count: number;
-  }>("/records/balance/me");
+  return request<BalanceInfo>("/records/balance/me");
 }
 
 export type TeamBalance = {
@@ -239,6 +247,12 @@ export type TeamBalance = {
   spendings: number;
   owed_to_employee: number;
   pending_count: number;
+  last_expense_payout_at?: string | null;
+  last_income_handover_at?: string | null;
+  reserved_spendings?: number;
+  reserved_cash?: number;
+  available_spendings?: number;
+  available_cash?: number;
 };
 
 export function teamBalances() {

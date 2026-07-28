@@ -13,7 +13,7 @@ import {
 } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
-import { formatMoney } from "../format";
+import { formatMoney, formatWhen } from "../format";
 import { colors } from "../theme";
 
 export function BalancesScreen({
@@ -193,10 +193,26 @@ export function BalancesScreen({
               {item.full_name} · {item.role}
             </Text>
             <Text style={styles.meta}>
-              Cash {formatMoney(item.cash_on_hand, currency)} · Spendings{" "}
-              {formatMoney(item.spendings, currency)}
+              Cash {formatMoney(item.cash_on_hand, currency)}
+              {item.last_income_handover_at
+                ? ` (since ${formatWhen(item.last_income_handover_at)})`
+                : ""}
+              {" · "}
+              Spendings {formatMoney(item.spendings, currency)}
+              {item.last_expense_payout_at
+                ? ` (since ${formatWhen(item.last_expense_payout_at)})`
+                : ""}
               {item.pending_count ? ` · ${item.pending_count} pending` : ""}
             </Text>
+            {((item.reserved_spendings || 0) > 0 || (item.reserved_cash || 0) > 0) && (
+              <Text style={styles.meta}>
+                Reserved spendings {formatMoney(item.reserved_spendings || 0, currency)} · available{" "}
+                {formatMoney(item.available_spendings ?? item.spendings, currency)}
+                {(item.reserved_cash || 0) > 0
+                  ? ` · reserved cash ${formatMoney(item.reserved_cash || 0, currency)}`
+                  : ""}
+              </Text>
+            )}
             <View style={styles.actions}>
               <Btn
                 title="Pay spendings"

@@ -142,6 +142,12 @@ class BalanceOut(BaseModel):
     spendings: float = 0.0
     currency: str
     pending_count: int
+    last_expense_payout_at: str | None = None
+    last_income_handover_at: str | None = None
+    reserved_spendings: float = 0.0
+    reserved_cash: float = 0.0
+    available_spendings: float = 0.0
+    available_cash: float = 0.0
 
 
 class DecideIn(BaseModel):

@@ -11,6 +11,8 @@ from app.models import (
     PayoutKind,
     RecordKind,
     RecordStatus,
+    SettlementRequest,
+    SettlementRequestStatus,
     User,
 )
 
@@ -113,6 +115,21 @@ def can_void_adjustment(db: Session, adj: BalanceAdjustment) -> bool:
     return not adjustment_locked_by_settlement(db, adj)
 
 
+def pending_reserved(
+    db: Session, user_id: int, org_id: int, kind: PayoutKind, exclude_id: int | None = None
+) -> float:
+    """Sum of pending settlement-request amounts reserved against a track."""
+    q = db.query(func.coalesce(func.sum(SettlementRequest.amount), 0.0)).filter(
+        SettlementRequest.organization_id == org_id,
+        SettlementRequest.user_id == user_id,
+        SettlementRequest.kind == kind,
+        SettlementRequest.status == SettlementRequestStatus.pending,
+    )
+    if exclude_id is not None:
+        q = q.filter(SettlementRequest.id != exclude_id)
+    return float(q.scalar() or 0)
+
+
 def _sum_adjustments(db: Session, org_id: int, user_id: int, track: AdjustmentTrack, since) -> float:
     q = db.query(func.coalesce(func.sum(BalanceAdjustment.amount), 0.0)).filter(
         BalanceAdjustment.organization_id == org_id,
@@ -171,6 +188,11 @@ def user_balance(db: Session, user: User) -> dict:
     spendings = max(0.0, spendings_raw + carry_spend - overpay + adj_spend)
     cash_on_hand = income_cash - from_cash + carry_cash + adj_cash
 
+    reserved_spendings = pending_reserved(db, user.id, org_id, PayoutKind.expense_payout)
+    reserved_cash = pending_reserved(db, user.id, org_id, PayoutKind.income_handover)
+    available_spendings = max(0.0, spendings - reserved_spendings)
+    available_cash = max(0.0, cash_on_hand - reserved_cash)
+
     pending = (
         db.query(func.count(MoneyRecord.id))
         .filter(
@@ -190,4 +212,10 @@ def user_balance(db: Session, user: User) -> dict:
         "spendings": spendings,
         "owed_to_employee": spendings,
         "pending_count": int(pending),
+        "last_expense_payout_at": since_pay.isoformat() if since_pay else None,
+        "last_income_handover_at": since_hand.isoformat() if since_hand else None,
+        "reserved_spendings": reserved_spendings,
+        "reserved_cash": reserved_cash,
+        "available_spendings": available_spendings,
+        "available_cash": available_cash,
     }

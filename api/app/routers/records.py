@@ -299,6 +299,12 @@ def my_balance(
         spendings=bal["spendings"],
         currency=currency,
         pending_count=bal["pending_count"],
+        last_expense_payout_at=bal.get("last_expense_payout_at"),
+        last_income_handover_at=bal.get("last_income_handover_at"),
+        reserved_spendings=float(bal.get("reserved_spendings") or 0),
+        reserved_cash=float(bal.get("reserved_cash") or 0),
+        available_spendings=float(bal.get("available_spendings") or 0),
+        available_cash=float(bal.get("available_cash") or 0),
     )
 
 

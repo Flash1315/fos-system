@@ -79,7 +79,11 @@ export function AccountScreen({
       await reloadOrg();
       try {
         const b = await myBalance();
-        setAmount(String(kind === "expense_payout" ? b.spendings : b.cash_on_hand));
+        const available =
+          kind === "expense_payout"
+            ? (b.available_spendings ?? b.spendings)
+            : (b.available_cash ?? b.cash_on_hand);
+        setAmount(available > 0 ? String(available) : "");
       } catch {
         /* ignore */
       }
@@ -178,7 +182,10 @@ export function AccountScreen({
       <Btn title={busy ? "…" : "Update password"} onPress={onPassword} disabled={busy} />
 
       <Label>Request settlement</Label>
-      <Sub>Ask a manager to pay your spendings or take your cash on hand.</Sub>
+      <Sub>
+        Amount defaults to available balance (track minus pending requests). Ask a manager to pay
+        spendings or take cash on hand.
+      </Sub>
       <View style={styles.kinds}>
         <Chip
           label="Pay my spendings"

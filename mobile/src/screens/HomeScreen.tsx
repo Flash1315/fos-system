@@ -41,6 +41,7 @@ export function HomeScreen({
 }) {
   const [balance, setBalance] = useState("—");
   const [spendings, setSpendings] = useState("—");
+  const [cycleHint, setCycleHint] = useState("");
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
@@ -64,6 +65,23 @@ export function HomeScreen({
       ]);
       setBalance(formatMoney(b.cash_on_hand, b.currency));
       setSpendings(formatMoney(b.spendings ?? 0, b.currency));
+      const hints: string[] = [];
+      if ((b.reserved_spendings || 0) > 0 || (b.reserved_cash || 0) > 0) {
+        hints.push(
+          `Reserved spendings ${formatMoney(b.reserved_spendings || 0, b.currency)} · available ${formatMoney(b.available_spendings ?? b.spendings, b.currency)}`,
+        );
+        if ((b.reserved_cash || 0) > 0) {
+          hints.push(
+            `Reserved cash ${formatMoney(b.reserved_cash || 0, b.currency)} · available ${formatMoney(b.available_cash ?? b.cash_on_hand, b.currency)}`,
+          );
+        }
+      }
+      if (b.last_expense_payout_at || b.last_income_handover_at) {
+        hints.push(
+          `Since payout ${formatWhen(b.last_expense_payout_at)} · handover ${formatWhen(b.last_income_handover_at)}`,
+        );
+      }
+      setCycleHint(hints.join("\n"));
       setOrgName(org.name);
       setOrgSlug(org.slug);
       if (user?.role === "owner" || user?.role === "manager") {
@@ -115,6 +133,7 @@ export function HomeScreen({
         <Text style={styles.balance}>{balance}</Text>
         <Label>Spendings (my pocket)</Label>
         <Text style={styles.spend}>{spendings}</Text>
+        {!!cycleHint && <Sub>{cycleHint}</Sub>}
       </Card>
       <Row>
         <Btn title="New record" onPress={onCreate} />

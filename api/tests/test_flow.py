@@ -1221,12 +1221,22 @@ def test_settlement_reserve_and_record_lock(client):
             "approve_now": True,
         },
     )
+    before = client.get("/records/balance/me", headers=h).json()
+    assert before["spendings"] == 10000
+    assert before["available_spendings"] == 10000
+    assert before["reserved_spendings"] == 0
+    assert before["last_expense_payout_at"] is None
+
     r1 = client.post(
         "/payouts/requests",
         headers=h,
         json={"kind": "expense_payout", "amount": 6000, "note": "first"},
     )
     assert r1.status_code == 200
+    mid = client.get("/records/balance/me", headers=h).json()
+    assert mid["spendings"] == 10000
+    assert mid["reserved_spendings"] == 6000
+    assert mid["available_spendings"] == 4000
     r2 = client.post(
         "/payouts/requests",
         headers=h,
@@ -1239,6 +1249,9 @@ def test_settlement_reserve_and_record_lock(client):
         json={"kind": "expense_payout", "amount": 4000, "note": "second"},
     )
     assert r2ok.status_code == 200
+    reserved_both = client.get("/records/balance/me", headers=h).json()
+    assert reserved_both["reserved_spendings"] == 10000
+    assert reserved_both["available_spendings"] == 0
 
     rid = client.post(
         "/records",
@@ -1262,6 +1275,10 @@ def test_settlement_reserve_and_record_lock(client):
         json={"user_id": uid, "kind": "expense_payout", "amount": 10111},
     )
     assert pay.status_code == 200
+    after = client.get("/records/balance/me", headers=h).json()
+    assert after["spendings"] == 0
+    assert after["reserved_spendings"] == 0
+    assert after["last_expense_payout_at"] is not None
     locked = client.get(f"/records/{rid}", headers=h).json()
     assert locked["can_void"] is False
     denied = client.post(f"/records/{rid}/void", headers=h, json={"note": "nope"})

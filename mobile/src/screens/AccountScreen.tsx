@@ -21,7 +21,7 @@ import {
 } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
-import { parseFiniteMoney } from "../format";
+import { parseFiniteMoney, passwordStrengthError } from "../format";
 
 type ReqRow = {
   id: number;
@@ -212,11 +212,16 @@ export function AccountScreen({
 
   const onPassword = async () => {
     if (busy) return;
-    if (!current || next.length < 6) {
-      Alert.alert("Fos", "Enter current password and new password (min 6)");
+    if (!current) {
+      Alert.alert("Fos", "Enter current password and new password (min 8, letter + digit)");
       return;
     }
-    if (next.length > 128 || current.length > 128) {
+    const pwErr = passwordStrengthError(next);
+    if (pwErr) {
+      Alert.alert("Fos", pwErr);
+      return;
+    }
+    if (current.length > 128) {
       Alert.alert("Fos", "Password is too long (max 128 characters)");
       return;
     }

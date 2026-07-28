@@ -11,6 +11,7 @@ import {
 } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Label, Screen, Sub, TopBar } from "../components/ui";
+import { passwordStrengthError } from "../format";
 import { colors } from "../theme";
 
 export function TeamScreen({
@@ -289,14 +290,14 @@ export function TeamScreen({
       )}
       <NoteModal
         visible={resetId != null}
-        title="New password (min 6)"
+        title="New password (min 8)"
         required
         secureTextEntry
         confirmField
-        minLength={6}
+        minLength={8}
         maxLength={128}
         label="New password"
-        placeholder="min 6 characters"
+        placeholder="min 8 characters, letter + digit"
         confirmLabel="Confirm password"
         confirmPlaceholder="repeat password"
         onCancel={() => setResetId(null)}
@@ -304,12 +305,9 @@ export function TeamScreen({
           const id = resetId;
           setResetId(null);
           if (id == null) return;
-          if (!pwd || pwd.length < 6) {
-            Alert.alert("Fos", "Password must be at least 6 characters");
-            return;
-          }
-          if (pwd.length > 128) {
-            Alert.alert("Fos", "Password is too long (max 128 characters)");
+          const pwErr = passwordStrengthError(pwd);
+          if (pwErr) {
+            Alert.alert("Fos", pwErr);
             return;
           }
           setBusy(true);

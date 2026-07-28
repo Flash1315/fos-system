@@ -572,15 +572,15 @@ def test_password_and_settlement_request(client):
         headers=h,
         json={
             "current_password": "wrong",
-            "new_password": "newsecret",
-            "password_confirm": "newsecret",
+            "new_password": "newsecret1",
+            "password_confirm": "newsecret1",
         },
     )
     assert bad.status_code == 400
     missing = client.post(
         "/auth/password",
         headers=h,
-        json={"current_password": "secret12", "new_password": "newsecret"},
+        json={"current_password": "secret12", "new_password": "newsecret1"},
     )
     assert missing.status_code == 422
     ok = client.post(
@@ -588,8 +588,8 @@ def test_password_and_settlement_request(client):
         headers=h,
         json={
             "current_password": "secret12",
-            "new_password": "newsecret",
-            "password_confirm": "newsecret",
+            "new_password": "newsecret1",
+            "password_confirm": "newsecret1",
         },
     )
     assert ok.status_code == 200
@@ -1703,7 +1703,7 @@ def test_reject_requires_note(client):
         json={"kind": "expense", "amount": 100, "category": "Taxi", "payment_source": "my_pocket"},
     ).json()["id"]
     bare = client.post(f"/records/{rid}/decide", headers=h, json={"approve": False, "note": ""})
-    assert bare.status_code == 400
+    assert bare.status_code in (400, 422)
     ok = client.post(
         f"/records/{rid}/decide",
         headers=h,
@@ -2769,7 +2769,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -5168,7 +5168,7 @@ def test_login_slug_norm_telegram_and_security_headers(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
     assert health.headers.get("x-content-type-options") == "nosniff"
     assert health.headers.get("x-frame-options") == "DENY"
     assert health.headers.get("referrer-policy") == "no-referrer"
@@ -5235,7 +5235,7 @@ def test_login_bounds_password_same_and_transfer_email(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
     assert health.headers.get("cache-control") == "no-store"
 
     # Seed cash via income then transfer with mixed-case email
@@ -5338,7 +5338,7 @@ def test_idem_charset_invite_email_and_org_patch(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
 
 
 def test_logout_bike_normalize_and_register_slug(client):
@@ -5348,7 +5348,7 @@ def test_logout_bike_normalize_and_register_slug(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
     assert health.json()["db"] == "ok"
     assert health.json()["ok"] is True
 
@@ -5415,7 +5415,7 @@ def test_place_client_normalize_and_coop_header(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
     assert health.headers.get("cross-origin-opener-policy") == "same-origin"
 
     rec = client.post(
@@ -5470,7 +5470,7 @@ def test_slug_shape_category_collapse(client):
     owner = _register(client, "flow-0731", "v0731-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
 
     rec = client.post(
         "/records",
@@ -5501,7 +5501,7 @@ def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
     """v0.7.32: X-Request-Id, note whitespace collapse, team mutation rate limit."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
     assert "X-Request-Id" in health.headers
     rid = health.headers["X-Request-Id"]
     assert len(rid) >= 8
@@ -5625,7 +5625,7 @@ def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
 def test_list_rate_limits_comment_collapse_batch_method(client, monkeypatch):
     """v0.7.33: list GET rate limits, decide/comment collapse, batch payment_method."""
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
     assert "X-Request-Id" in health.headers
 
     owner = _register(client, "flow-0733", "v0733-owner@example.com")
@@ -5689,7 +5689,7 @@ def test_list_rate_limits_comment_collapse_batch_method(client, monkeypatch):
 def test_control_chars_read_limits_and_request_id_header(client, monkeypatch):
     """v0.7.34: reject control chars, rate-limit remaining reads."""
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
     assert health.headers.get("X-Request-Id")
 
     owner = _register(client, "flow-0734", "v0734-owner@example.com")
@@ -5762,7 +5762,7 @@ def test_health_controls_before_collapse_and_export_names(client, monkeypatch):
     """v0.7.35: health readiness, control-char order, CSV export still works."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
     assert health.json()["ok"] is True
     assert health.json()["db"] == "ok"
 
@@ -5824,7 +5824,7 @@ def test_login_timing_media_token_bound_and_export_cap(client):
     """v0.7.36: dummy-hash login path, media token bound, health version."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
 
     # Missing account still 401 (dummy hash path)
     missing = client.post(
@@ -5853,7 +5853,7 @@ def test_preauth_429_body_limit_purpose_and_settings(client, monkeypatch, tmp_pa
     """v0.7.37: middleware 429 JSON, body size, purpose reject, settings guard."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
 
     from app.config import settings
     from app.services.rate_limit import reset_limiter_for_tests
@@ -5913,7 +5913,7 @@ def test_org_cap_jwt_bind_pagination_csv_and_plaintext_invite(client, monkeypatc
     """v0.7.38: invite ceiling, JWT org bind, pagination, CSV defaults, hashed-only invites."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
 
     from app.config import settings
     from app.db import SessionLocal
@@ -6037,7 +6037,7 @@ def test_reset_force_accept_message_reports_default_and_amount(client):
     """v0.7.39: reset 409/force, accept message, reports default window, amount schema."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.39"
+    assert health.json()["version"] == "0.7.40"
 
     owner = _register(client, "flow-0739", "v0739-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -6111,3 +6111,70 @@ def test_reset_force_accept_message_reports_default_and_amount(client):
         },
     )
     assert tiny.status_code == 422
+
+
+def test_password_strength_hsts_reject_note_and_media_path(client, monkeypatch):
+    """v0.7.40: password rules, optional HSTS, reject note min 2, media path guard."""
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["version"] == "0.7.40"
+
+    weak = client.post(
+        "/orgs/register",
+        json={
+            "name": "Acme",
+            "slug": "flow-0740-weak",
+            "currency": "IDR",
+            "owner_email": "weak-0740@example.com",
+            "owner_name": "Owner",
+            "owner_password": "password",
+            "owner_password_confirm": "password",
+        },
+    )
+    assert weak.status_code == 422
+
+    owner = _register(client, "flow-0740", "v0740-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "enable_hsts", True)
+    monkeypatch.setattr(settings, "hsts_max_age", 60)
+    try:
+        gated = client.get("/health")
+        assert gated.status_code == 200
+        assert "max-age=60" in gated.headers.get("Strict-Transport-Security", "")
+    finally:
+        monkeypatch.setattr(settings, "enable_hsts", False)
+
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 10,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert rec.status_code == 200, rec.text
+    rid = rec.json()["id"]
+    short = client.post(
+        f"/records/{rid}/decide",
+        headers=h,
+        json={"approve": False, "note": "x"},
+    )
+    assert short.status_code == 422
+
+    from app.services.storage import local_path
+
+    raised = False
+    try:
+        local_path(1, "../etc/passwd")
+    except ValueError:
+        raised = True
+    assert raised
+
+    team = client.get("/records/balance/team", headers=h)
+    assert team.status_code == 200
+    assert isinstance(team.json(), list)

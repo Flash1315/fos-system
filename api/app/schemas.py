@@ -17,6 +17,21 @@ def _strip_optional(v: Optional[str]) -> Optional[str]:
 _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
 
+def _normalize_email(v) -> str:
+    return str(v or "").strip().lower()
+
+
+def _require_strong_password(v: str) -> str:
+    password = v or ""
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters")
+    if len(password) > 128:
+        raise ValueError("Password too long (max 128)")
+    if not re.search(r"[A-Za-z]", password) or not re.search(r"\d", password):
+        raise ValueError("Password must include a letter and a digit")
+    return password
+
+
 def _collapse_ws(v: str, *, max_len: int | None = None) -> str:
     raw = v or ""
     # Reject controls before whitespace collapse so VT/FF cannot vanish silently.
@@ -42,8 +57,8 @@ class OrgCreate(BaseModel):
     currency: str = "IDR"
     owner_email: EmailStr
     owner_name: str = Field(min_length=1, max_length=200)
-    owner_password: str = Field(min_length=6, max_length=128)
-    owner_password_confirm: str = Field(min_length=6, max_length=128)
+    owner_password: str = Field(min_length=8, max_length=128)
+    owner_password_confirm: str = Field(min_length=8, max_length=128)
 
     @field_validator("slug", mode="before")
     @classmethod
@@ -53,7 +68,12 @@ class OrgCreate(BaseModel):
     @field_validator("owner_email", mode="before")
     @classmethod
     def owner_email_norm(cls, v):
-        return str(v or "").strip().lower()
+        return _normalize_email(v)
+
+    @field_validator("owner_password", "owner_password_confirm")
+    @classmethod
+    def strong_owner_password(cls, v: str) -> str:
+        return _require_strong_password(v)
 
     @field_validator("name", "owner_name")
     @classmethod
@@ -145,7 +165,7 @@ class LoginIn(BaseModel):
     @field_validator("email", mode="before")
     @classmethod
     def email_norm(cls, v):
-        return str(v or "").strip().lower()
+        return _normalize_email(v)
 
     @field_validator("organization_slug", mode="before")
     @classmethod
@@ -165,13 +185,20 @@ class InviteIn(BaseModel):
     full_name: str = Field(min_length=1, max_length=200)
     role: UserRole = UserRole.employee
     # Optional: omit to generate a one-time invite token (preferred)
-    password: Optional[str] = Field(default=None, min_length=6, max_length=128)
-    password_confirm: Optional[str] = Field(default=None, min_length=6, max_length=128)
+    password: Optional[str] = Field(default=None, min_length=8, max_length=128)
+    password_confirm: Optional[str] = Field(default=None, min_length=8, max_length=128)
 
     @field_validator("email", mode="before")
     @classmethod
     def email_norm(cls, v):
-        return str(v or "").strip().lower()
+        return _normalize_email(v)
+
+    @field_validator("password", "password_confirm")
+    @classmethod
+    def strong_temp_password(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _require_strong_password(v)
 
     @field_validator("full_name")
     @classmethod
@@ -208,8 +235,8 @@ class InviteOut(BaseModel):
 
 class AcceptInviteIn(BaseModel):
     token: str = Field(min_length=16, max_length=128)
-    password: str = Field(min_length=6, max_length=128)
-    password_confirm: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
+    password_confirm: str = Field(min_length=8, max_length=128)
 
     @field_validator("token", mode="before")
     @classmethod
@@ -218,6 +245,11 @@ class AcceptInviteIn(BaseModel):
         if token and not re.fullmatch(r"[A-Za-z0-9_-]+", token):
             raise ValueError("invite token has invalid characters")
         return token
+
+    @field_validator("password", "password_confirm")
+    @classmethod
+    def strong_password(cls, v: str) -> str:
+        return _require_strong_password(v)
 
     @model_validator(mode="after")
     def confirm_matches(self):
@@ -228,8 +260,13 @@ class AcceptInviteIn(BaseModel):
 
 class PasswordChangeIn(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
-    new_password: str = Field(min_length=6, max_length=128)
-    password_confirm: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+    password_confirm: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password", "password_confirm")
+    @classmethod
+    def strong_password(cls, v: str) -> str:
+        return _require_strong_password(v)
 
     @model_validator(mode="after")
     def confirm_matches(self):
@@ -241,8 +278,13 @@ class PasswordChangeIn(BaseModel):
 
 
 class MemberPasswordResetIn(BaseModel):
-    new_password: str = Field(min_length=6, max_length=128)
-    password_confirm: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+    password_confirm: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password", "password_confirm")
+    @classmethod
+    def strong_password(cls, v: str) -> str:
+        return _require_strong_password(v)
 
     @model_validator(mode="after")
     def confirm_matches(self):
@@ -448,6 +490,12 @@ class DecideIn(BaseModel):
     def note_trim(cls, v: str) -> str:
         return _collapse_ws(v, max_len=2000)
 
+    @model_validator(mode="after")
+    def reject_needs_note(self):
+        if not self.approve and len(self.note or "") < 2:
+            raise ValueError("Reject requires a note (min 2 characters)")
+        return self
+
 
 class DecideBatchIn(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=100)
@@ -472,6 +520,12 @@ class DecideBatchIn(BaseModel):
         if not out:
             raise ValueError("ids required")
         return out
+
+    @model_validator(mode="after")
+    def reject_needs_note(self):
+        if not self.approve and len(self.note or "") < 2:
+            raise ValueError("Reject requires a note (min 2 characters)")
+        return self
 
 
 class DecideBatchOut(BaseModel):

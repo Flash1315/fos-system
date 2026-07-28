@@ -73,7 +73,10 @@ def get_photo(
     if "/" in filename or ".." in filename or not _MEDIA_NAME_RE.match(filename):
         raise HTTPException(400, "Invalid filename")
     if storage.media_backend() == "local":
-        path = storage.local_path(org_id, filename)
+        try:
+            path = storage.local_path(org_id, filename)
+        except ValueError:
+            raise HTTPException(400, "Invalid filename") from None
         if not path.is_file():
             raise HTTPException(404, "Not found")
         return FileResponse(path)

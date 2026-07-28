@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     # Soft ceiling for org-wide member loops (balances / directory / reports)
     max_org_members: int = 300
+    # Optional HSTS (enable only behind HTTPS terminators)
+    enable_hsts: bool = False
+    hsts_max_age: int = 31_536_000
 
 
 settings = Settings()

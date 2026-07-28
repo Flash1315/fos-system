@@ -725,10 +725,13 @@ def team_balances(
         window_sec=60,
     )
     require_org_member_capacity(db, user.organization_id, active_only=True)
+    from app.services.org_limits import org_member_limit
+
     members = (
         db.query(User)
         .filter(User.organization_id == user.organization_id, User.is_active.is_(True))
         .order_by(User.full_name.asc(), User.id.asc())
+        .limit(org_member_limit())
         .all()
     )
     return [user_balance(db, m) for m in members]
@@ -833,8 +836,8 @@ def decide_batch(
         window_sec=60,
     )
 
-    if not body.approve and not (body.note or "").strip():
-        raise HTTPException(400, "Reject requires a note")
+    if not body.approve and len(body.note or "") < 2:
+        raise HTTPException(400, "Reject requires a note (min 2 characters)")
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None
     if key:
@@ -1216,6 +1219,26 @@ def decide_record(
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
+    peek = (
+        db.query(MoneyRecord)
+        .filter(
+            MoneyRecord.id == record_id,
+            MoneyRecord.organization_id == user.organization_id,
+        )
+        .first()
+    )
+    if not peek or peek.organization_id != user.organization_id:
+        raise HTTPException(404, "Record not found")
+    if peek.status != RecordStatus.pending:
+        desired = RecordStatus.approved if body.approve else RecordStatus.rejected
+        if peek.status == desired and not peek.is_voided:
+            return _record_out(db, peek)
+        raise HTTPException(400, "Already decided")
+    if body.approve:
+        from app.services.locks import lock_users
+
+        # Lock users before record rows — same order as transfers (avoids PG deadlocks).
+        lock_users(db, peek.created_by)
     rec = (
         db.query(MoneyRecord)
         .filter(
@@ -1233,9 +1256,6 @@ def decide_record(
             return _record_out(db, rec)
         raise HTTPException(400, "Already decided")
     if body.approve:
-        from app.services.locks import lock_users
-
-        lock_users(db, rec.created_by)
         creator = db.get(User, rec.created_by)
         if creator is not None and not creator.is_active:
             raise HTTPException(
@@ -1254,8 +1274,8 @@ def decide_record(
             )
         _assert_cash_for_approve(db, rec)
     else:
-        if not (body.note or "").strip():
-            raise HTTPException(400, "Reject requires a note")
+        if len(body.note or "") < 2:
+            raise HTTPException(400, "Reject requires a note (min 2 characters)")
     rec.status = RecordStatus.approved if body.approve else RecordStatus.rejected
     rec.decided_at = _utcnow()
     rec.decided_by = user.id
@@ -1429,6 +1449,41 @@ def void_approved_record(
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
+    peek = (
+        db.query(MoneyRecord)
+        .filter(
+            MoneyRecord.id == record_id,
+            MoneyRecord.organization_id == user.organization_id,
+        )
+        .first()
+    )
+    if not peek or peek.organization_id != user.organization_id:
+        raise HTTPException(404, "Record not found")
+    if peek.status != RecordStatus.approved:
+        raise HTTPException(400, "Only approved records can be voided")
+    if peek.is_voided:
+        return _record_out(db, peek)
+    if not can_void_record(db, peek):
+        raise HTTPException(
+            400,
+            "Record is locked by a settlement. Void the latest payout first.",
+        )
+    owner_ids = {peek.created_by}
+    if peek.transfer_group_id:
+        owner_ids = {
+            uid
+            for (uid,) in db.query(MoneyRecord.created_by)
+            .filter(
+                MoneyRecord.organization_id == user.organization_id,
+                MoneyRecord.transfer_group_id == peek.transfer_group_id,
+                MoneyRecord.is_voided.is_(False),
+            )
+            .all()
+        } or owner_ids
+    from app.services.locks import lock_users
+
+    # Users before record rows — matches create_transfer lock order.
+    lock_users(db, *sorted(owner_ids))
     rec = (
         db.query(MoneyRecord)
         .filter(
@@ -1466,9 +1521,6 @@ def void_approved_record(
             .all()
         )
         targets = siblings or [rec]
-    from app.services.locks import lock_users
-
-    lock_users(db, *[t.created_by for t in targets])
     for row in targets:
         if not can_void_record(db, row):
             raise HTTPException(

@@ -56,6 +56,14 @@ def store_photo(org_id: int, filename: str, data: bytes, content_type: str = "im
     return f"/media/files/{org_id}/{filename}"
 
 
+def local_path(org_id: int, filename: str) -> Path:
+    org_root = (UPLOAD_ROOT / str(org_id)).resolve()
+    path = (UPLOAD_ROOT / str(org_id) / filename).resolve()
+    if not path.is_relative_to(org_root):
+        raise ValueError("invalid media path")
+    return path
+
+
 def load_photo(org_id: int, filename: str) -> tuple[bytes | None, str | None]:
     """Return (bytes, content_type) or (None, None). For S3 may return redirect URL in second."""
     if media_backend() == "s3":
@@ -72,11 +80,10 @@ def load_photo(org_id: int, filename: str) -> tuple[bytes | None, str | None]:
         except Exception as exc:  # noqa: BLE001
             logger.warning("s3 get failed org=%s err=%s", org_id, type(exc).__name__)
             return None, None
-    path = UPLOAD_ROOT / str(org_id) / filename
+    try:
+        path = local_path(org_id, filename)
+    except ValueError:
+        return None, None
     if not path.is_file():
         return None, None
     return path.read_bytes(), "application/octet-stream"
-
-
-def local_path(org_id: int, filename: str) -> Path:
-    return UPLOAD_ROOT / str(org_id) / filename

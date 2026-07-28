@@ -3,6 +3,7 @@ import { Alert } from "react-native";
 import { acceptInvite, login, registerOrg, type User } from "../api";
 import { storageGet, storageSet } from "../storage";
 import { Brand, Btn, Card, Field, Label, LinkText, Screen, Sub } from "../components/ui";
+import { passwordStrengthError } from "../format";
 
 const LAST_SLUG_KEY = "fos_last_org_slug";
 const LAST_EMAIL_KEY = "fos_last_email";
@@ -69,12 +70,9 @@ export function AuthScreen({
         Alert.alert("Fos", "Paste the invite token from your manager");
         return;
       }
-      if (password.length < 6) {
-        Alert.alert("Fos", "Password must be at least 6 characters");
-        return;
-      }
-      if (password.length > 128) {
-        Alert.alert("Fos", "Password is too long (max 128 characters)");
+      const invitePwErr = passwordStrengthError(password);
+      if (invitePwErr) {
+        Alert.alert("Fos", invitePwErr);
         return;
       }
       if (password !== passwordConfirm) {
@@ -108,15 +106,12 @@ export function AuthScreen({
       Alert.alert("Fos", "Email and password are required");
       return;
     }
-    if (password.length < 6) {
-      Alert.alert("Fos", "Password must be at least 6 characters");
-      return;
-    }
-    if (password.length > 128) {
-      Alert.alert("Fos", "Password is too long (max 128 characters)");
-      return;
-    }
     if (mode === "register") {
+      const regPwErr = passwordStrengthError(password);
+      if (regPwErr) {
+        Alert.alert("Fos", regPwErr);
+        return;
+      }
       if (!orgName.trim() || orgName.trim().length < 2) {
         Alert.alert("Fos", "Company name must be at least 2 characters");
         return;
@@ -133,6 +128,9 @@ export function AuthScreen({
         Alert.alert("Fos", "Passwords do not match");
         return;
       }
+    } else if (password.length > 128) {
+      Alert.alert("Fos", "Password is too long (max 128 characters)");
+      return;
     }
     const slug = orgSlug.toLowerCase().trim();
     const mail = email.trim().toLowerCase();
@@ -207,7 +205,7 @@ export function AuthScreen({
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
-              placeholder="min 6 characters"
+              placeholder="min 8 characters, letter + digit"
               maxLength={128}
             />
             <Label>Confirm password</Label>
@@ -251,7 +249,7 @@ export function AuthScreen({
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
-              placeholder="min 6 characters"
+              placeholder="min 8 characters, letter + digit"
               maxLength={128}
             />
             {mode === "register" && (

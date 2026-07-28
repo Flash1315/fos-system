@@ -214,6 +214,8 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Soft org size ceiling: `MAX_ORG_MEMBERS` (default 300) for invites, team balances / directory / org report
 - JWT `org` claim must match the user's organization; invite tokens stored hashed only
 - Logout bumps `token_version` and revokes **all** sessions for the account
+- Passwords: min 8 characters with at least one letter and one digit
+- Optional `ENABLE_HSTS` behind HTTPS terminators
 - CSV / report exports default to the last 365 days when no window is given; free-text cells truncated
 - Rate limits are process-local (not shared across workers)
 - All record mutations scoped to caller’s `organization_id`

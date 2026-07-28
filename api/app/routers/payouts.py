@@ -505,6 +505,7 @@ def void_payout(
             SettlementRequest.organization_id == manager.organization_id,
             SettlementRequest.payout_id == row.id,
         )
+        .with_for_update()
         .first()
     )
     if linked is not None:
@@ -1274,13 +1275,13 @@ def cancel_settlement_request(
             return _request_out(req, u.full_name if u else "")
         raise HTTPException(400, "Request already decided")
     # Manager cancelling someone else's request must leave a note
-    if req.user_id != user.id and not (body.note or "").strip():
-        raise HTTPException(400, "Cancel requires a note")
+    if req.user_id != user.id and len(body.note or "") < 2:
+        raise HTTPException(400, "Cancel requires a note (min 2 characters)")
     req.status = SettlementRequestStatus.cancelled
     req.decided_at = _utcnow()
     req.decided_by = user.id
-    if (body.note or "").strip():
-        req.note = _append_text(req.note, f"[cancelled] {body.note.strip()}", label="Note")
+    if body.note:
+        req.note = _append_text(req.note, f"[cancelled] {body.note}", label="Note")
     if key:
         store_idem(
             db,

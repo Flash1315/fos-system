@@ -57,6 +57,16 @@ export function formatWhen(iso: string | null | undefined) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** Client-side password rule aligned with API (min 8, letter + digit). */
+export function passwordStrengthError(password: string): string | null {
+  if (password.length < 8) return "Password must be at least 8 characters";
+  if (password.length > 128) return "Password is too long (max 128 characters)";
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+    return "Password must include a letter and a digit";
+  }
+  return null;
+}
+
 export function statusColor(status: string, isVoided = false) {
   if (isVoided) return "#6B7280";
   if (status === "approved") return "#1DB954";

@@ -6,7 +6,7 @@ import { isValidYmd } from "../dates";
 import { colors } from "../theme";
 
 const PERIODS: { label: string; days?: number }[] = [
-  { label: "all" },
+  { label: "365d", days: 365 },
   { label: "7d", days: 7 },
   { label: "30d", days: 30 },
   { label: "90d", days: 90 },
@@ -14,7 +14,7 @@ const PERIODS: { label: string; days?: number }[] = [
 
 export function ReportsScreen({ onBack }: { onBack: () => void }) {
   const [report, setReport] = useState<OrgReport | null>(null);
-  const [days, setDays] = useState<number | undefined>(undefined);
+  const [days, setDays] = useState<number | undefined>(365);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [dateFromDebounced, setDateFromDebounced] = useState("");

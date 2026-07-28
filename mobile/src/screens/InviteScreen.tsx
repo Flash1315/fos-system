@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Alert, Share, View, StyleSheet } from "react-native";
 import { inviteUser, myOrg, type InviteResult, type User } from "../api";
 import { Btn, Chip, Field, Label, LinkText, Screen, Sub, TopBar } from "../components/ui";
+import { passwordStrengthError } from "../format";
 
 export function InviteScreen({
   busy,
@@ -80,17 +81,16 @@ export function InviteScreen({
       Alert.alert("Fos", "Name and email required");
       return;
     }
-    if (setTempPassword && password.length < 6) {
-      Alert.alert("Fos", "Temporary password must be at least 6 characters");
-      return;
-    }
-    if (setTempPassword && password.length > 128) {
-      Alert.alert("Fos", "Password is too long (max 128 characters)");
-      return;
-    }
-    if (setTempPassword && password !== passwordConfirm) {
-      Alert.alert("Fos", "Passwords do not match");
-      return;
+    if (setTempPassword) {
+      const pwErr = passwordStrengthError(password);
+      if (pwErr) {
+        Alert.alert("Fos", pwErr);
+        return;
+      }
+      if (password !== passwordConfirm) {
+        Alert.alert("Fos", "Passwords do not match");
+        return;
+      }
     }
     const mode = setTempPassword ? "temporary password" : "invite token";
     Alert.alert(
@@ -178,7 +178,7 @@ export function InviteScreen({
             secureTextEntry={!showPassword}
             value={password}
             onChangeText={setPassword}
-            placeholder="min 6 characters"
+            placeholder="min 8 characters, letter + digit"
             maxLength={128}
           />
           <Label>Confirm password</Label>

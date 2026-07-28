@@ -54,10 +54,12 @@ export function CreateScreen({
   const [closedCycleHint, setClosedCycleHint] = useState("");
   const [teamBals, setTeamBals] = useState<TeamBalance[]>([]);
   const [myCurrency, setMyCurrency] = useState("IDR");
+  const [categoriesError, setCategoriesError] = useState("");
 
   useEffect(() => {
     (async () => {
       try {
+        setCategoriesError("");
         const res = await getCategories(kind);
         const list = res.categories[kind] || [];
         setCategories(list);
@@ -66,8 +68,9 @@ export function CreateScreen({
           setPurposes(res.purposes);
           setPurpose(res.purposes[0]);
         }
-      } catch {
+      } catch (e) {
         setCategories([]);
+        setCategoriesError(e instanceof Error ? e.message : "Categories failed to load");
       }
     })();
   }, [kind]);
@@ -402,11 +405,17 @@ export function CreateScreen({
       <Field autoCapitalize="none" value={occurredDate} onChangeText={setOccurredDate} placeholder="leave empty = now" />
       {!!closedCycleHint && <Sub>{closedCycleHint}</Sub>}
       <Label>Category</Label>
+      {!!categoriesError && (
+        <Sub>Could not load categories — {categoriesError}. You can still type a category below if needed.</Sub>
+      )}
       <View style={styles.kinds}>
         {categories.map((c) => (
           <Chip key={c} label={c} on={category === c} onPress={() => setCategory(c)} />
         ))}
       </View>
+      {categories.length === 0 && (
+        <Field value={category} onChangeText={setCategory} placeholder="Category" />
+      )}
       <Label>Place</Label>
       <Field value={place} onChangeText={setPlace} placeholder="Station / shop (optional)" />
       {(kind === "fuel" || kind === "expense") && (

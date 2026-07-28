@@ -66,20 +66,32 @@ export function TransferScreen({
       );
       return;
     }
-    setBusy(true);
-    try {
-      await transferCash({
-        to_email: email.trim(),
-        amount: value,
-        comment,
-      });
-      Alert.alert("Fos", "Transfer recorded — cash balances updated");
-      onDone();
-    } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
+    Alert.alert(
+      "Fos",
+      `Transfer ${value.toLocaleString()} ${currency} to ${email.trim()}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Transfer",
+          onPress: async () => {
+            setBusy(true);
+            try {
+              await transferCash({
+                to_email: email.trim(),
+                amount: value,
+                comment,
+              });
+              Alert.alert("Fos", "Transfer recorded — cash balances updated");
+              onDone();
+            } catch (e) {
+              Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   return (

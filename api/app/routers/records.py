@@ -28,6 +28,7 @@ _PHOTO_RE = re.compile(r"^/media/files/(\d+)/([0-9a-f]{32}\.(?:jpg|png|webp))$")
 _SEARCH_MAX = 80
 _COMMENT_MAX = 4000
 _BIKE_MAX = 120
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
 
 def _utcnow() -> datetime:
@@ -36,6 +37,8 @@ def _utcnow() -> datetime:
 
 def _normalize_bike(bike: str | None) -> str:
     cleaned = re.sub(r"\s+", " ", (bike or "").strip())
+    if _CTRL_RE.search(cleaned):
+        raise HTTPException(400, "bike contains invalid characters")
     if len(cleaned) > _BIKE_MAX:
         raise HTTPException(400, f"bike too long (max {_BIKE_MAX})")
     return cleaned
@@ -43,6 +46,8 @@ def _normalize_bike(bike: str | None) -> str:
 
 def _normalize_spaced(value: str | None, *, field: str, max_len: int) -> str:
     cleaned = re.sub(r"\s+", " ", (value or "").strip())
+    if _CTRL_RE.search(cleaned):
+        raise HTTPException(400, f"{field} contains invalid characters")
     if len(cleaned) > max_len:
         raise HTTPException(400, f"{field} too long (max {max_len})")
     return cleaned
@@ -324,7 +329,13 @@ def list_categories(
     kind: RecordKind | None = None,
     user: User = Depends(get_current_user),
 ):
-    _ = user
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"categories:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     return CategoriesOut(
         categories=categories_for(kind),
         purposes=PURPOSES,
@@ -624,6 +635,13 @@ def pending_count(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"records-pending-count:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     purpose = _bound_purpose(purpose)
     q = db.query(func.count(MoneyRecord.id)).filter(
         MoneyRecord.organization_id == user.organization_id,
@@ -974,6 +992,13 @@ def get_record(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"record-get:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     rec = db.get(MoneyRecord, record_id)
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")

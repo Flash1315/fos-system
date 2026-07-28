@@ -3,6 +3,7 @@ import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-n
 import {
   createAdjustment,
   createPayout,
+  idemKeyFor,
   listAdjustments,
   makeIdempotencyKey,
   myOrg,
@@ -474,14 +475,11 @@ export function BalancesScreen({
           const id = voidId;
           setVoidId(null);
           if (id == null) return;
-          if (voidAdjSlotRef.current !== id) {
-            voidAdjSlotRef.current = id;
-            voidAdjIdemRef.current = null;
-          }
-          if (!voidAdjIdemRef.current) voidAdjIdemRef.current = makeIdempotencyKey("avoid");
+          const noteKey = voidNote.replace(/\s+/g, " ").trim();
+          const key = idemKeyFor(voidAdjIdemRef, voidAdjSlotRef, "avoid", `${id}:${noteKey}`);
           markBusy(true);
           try {
-            await voidAdjustment(id, voidNote, { idempotencyKey: voidAdjIdemRef.current });
+            await voidAdjustment(id, voidNote, { idempotencyKey: key });
             voidAdjIdemRef.current = null;
             voidAdjSlotRef.current = null;
             await reload();

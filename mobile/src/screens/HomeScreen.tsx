@@ -315,6 +315,7 @@ export function HomeScreen({
         onChangeText={setSearch}
         placeholder="Search my records…"
         autoCapitalize="none"
+        maxLength={80}
       />
       {(!!status || !!purpose || !!search) && (
         <Btn

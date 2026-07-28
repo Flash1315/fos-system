@@ -77,8 +77,8 @@ def _effective_at():
 @router.get("/me", response_model=MyReportOut)
 def my_report(
     days: int | None = Query(default=None, ge=1, le=3650),
-    date_from: str | None = Query(default=None),
-    date_to: str | None = Query(default=None),
+    date_from: str | None = Query(default=None, max_length=32),
+    date_to: str | None = Query(default=None, max_length=32),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -167,8 +167,8 @@ def my_report(
 @router.get("/org", response_model=OrgReportOut)
 def org_report(
     days: int | None = Query(default=None, ge=1, le=3650),
-    date_from: str | None = Query(default=None),
-    date_to: str | None = Query(default=None),
+    date_from: str | None = Query(default=None, max_length=32),
+    date_to: str | None = Query(default=None, max_length=32),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -319,8 +319,8 @@ def org_report(
 @router.get("/export.csv", response_class=PlainTextResponse)
 def export_csv(
     days: int | None = Query(default=None, ge=1, le=3650),
-    date_from: str | None = Query(default=None),
-    date_to: str | None = Query(default=None),
+    date_from: str | None = Query(default=None, max_length=32),
+    date_to: str | None = Query(default=None, max_length=32),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):

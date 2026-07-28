@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.33"
+    assert health.json()["version"] == "0.7.34"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -5160,7 +5160,7 @@ def test_login_slug_norm_telegram_and_security_headers(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.33"
+    assert health.json()["version"] == "0.7.34"
     assert health.headers.get("x-content-type-options") == "nosniff"
     assert health.headers.get("x-frame-options") == "DENY"
     assert health.headers.get("referrer-policy") == "no-referrer"
@@ -5227,7 +5227,7 @@ def test_login_bounds_password_same_and_transfer_email(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.33"
+    assert health.json()["version"] == "0.7.34"
     assert health.headers.get("cache-control") == "no-store"
 
     # Seed cash via income then transfer with mixed-case email
@@ -5330,7 +5330,7 @@ def test_idem_charset_invite_email_and_org_patch(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.33"
+    assert health.json()["version"] == "0.7.34"
 
 
 def test_logout_bike_normalize_and_register_slug(client):
@@ -5340,7 +5340,7 @@ def test_logout_bike_normalize_and_register_slug(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.33"
+    assert health.json()["version"] == "0.7.34"
     assert health.json()["db"] == "ok"
     assert health.json()["ok"] is True
 
@@ -5407,7 +5407,7 @@ def test_place_client_normalize_and_coop_header(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.33"
+    assert health.json()["version"] == "0.7.34"
     assert health.headers.get("cross-origin-opener-policy") == "same-origin"
 
     rec = client.post(
@@ -5462,7 +5462,7 @@ def test_slug_shape_category_collapse(client):
     owner = _register(client, "flow-0731", "v0731-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.33"
+    assert health.json()["version"] == "0.7.34"
 
     rec = client.post(
         "/records",
@@ -5493,7 +5493,7 @@ def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
     """v0.7.32: X-Request-Id, note whitespace collapse, team mutation rate limit."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.33"
+    assert health.json()["version"] == "0.7.34"
     assert "X-Request-Id" in health.headers
     rid = health.headers["X-Request-Id"]
     assert len(rid) >= 8
@@ -5617,7 +5617,7 @@ def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
 def test_list_rate_limits_comment_collapse_batch_method(client, monkeypatch):
     """v0.7.33: list GET rate limits, decide/comment collapse, batch payment_method."""
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.33"
+    assert health.json()["version"] == "0.7.34"
     assert "X-Request-Id" in health.headers
 
     owner = _register(client, "flow-0733", "v0733-owner@example.com")
@@ -5673,6 +5673,78 @@ def test_list_rate_limits_comment_collapse_batch_method(client, monkeypatch):
         assert limited is not None and limited.status_code == 429
         assert limited.headers.get("Retry-After")
         assert "Too many" in limited.json()["detail"]
+    finally:
+        monkeypatch.setattr(settings, "rate_limit_enabled", False)
+        reset_limiter_for_tests()
+
+
+def test_control_chars_read_limits_and_request_id_header(client, monkeypatch):
+    """v0.7.34: reject control chars, rate-limit remaining reads."""
+    health = client.get("/health")
+    assert health.json()["version"] == "0.7.34"
+    assert health.headers.get("X-Request-Id")
+
+    owner = _register(client, "flow-0734", "v0734-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    bad = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 5,
+            "category": "Supplies",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "comment": "ok\x00bad",
+        },
+    )
+    assert bad.status_code == 422
+
+    bad_name = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0734-emp@example.com",
+            "full_name": "Emp\x07Name",
+            "role": "employee",
+        },
+    )
+    assert bad_name.status_code == 422
+
+    ok = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 5,
+            "category": "Supplies",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "comment": "  clean   note  ",
+        },
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["comment"] == "clean note"
+    rid = ok.json()["id"]
+
+    got = client.get(f"/records/{rid}", headers=h)
+    assert got.status_code == 200
+    assert got.headers.get("X-Request-Id")
+
+    from app.config import settings
+    from app.services.rate_limit import reset_limiter_for_tests
+
+    reset_limiter_for_tests()
+    monkeypatch.setattr(settings, "rate_limit_enabled", True)
+    try:
+        limited = None
+        for _ in range(130):
+            limited = client.get("/auth/me", headers=h)
+            if limited.status_code == 429:
+                break
+        assert limited is not None and limited.status_code == 429
+        assert limited.headers.get("Retry-After")
     finally:
         monkeypatch.setattr(settings, "rate_limit_enabled", False)
         reset_limiter_for_tests()

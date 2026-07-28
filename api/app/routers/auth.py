@@ -161,6 +161,13 @@ def login_form(
 
 @router.get("/auth/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"auth-me:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     return UserOut.model_validate(user)
 
 
@@ -252,6 +259,13 @@ def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(
 
 @router.get("/orgs/me", response_model=OrgOut)
 def my_org(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"org-me:{user.organization_id}:{user.id}",
+        limit=60,
+        window_sec=60,
+    )
     org = db.get(Organization, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")

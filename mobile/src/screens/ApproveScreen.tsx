@@ -3,6 +3,7 @@ import { Alert, FlatList, RefreshControl, Text, View, StyleSheet } from "react-n
 import {
   decideBatch,
   decideRecord,
+  idemKeyFor,
   makeIdempotencyKey,
   pendingRecords,
   pendingSettlementCount,
@@ -143,15 +144,16 @@ export function ApproveScreen({
 
   const doDecide = async (id: number, approve: boolean, note = "") => {
     if (busy) return;
-    const slot = `${id}:${approve ? "a" : "r"}`;
-    if (decideSlotRef.current !== slot) {
-      decideSlotRef.current = slot;
-      decideIdemRef.current = null;
-    }
-    if (!decideIdemRef.current) decideIdemRef.current = makeIdempotencyKey("decide");
+    const noteKey = note.replace(/\s+/g, " ").trim();
+    const key = idemKeyFor(
+      decideIdemRef,
+      decideSlotRef,
+      "decide",
+      `${id}:${approve ? "a" : "r"}:${noteKey}`,
+    );
     setBusy(true);
     try {
-      await decideRecord(id, approve, note, { idempotencyKey: decideIdemRef.current });
+      await decideRecord(id, approve, note, { idempotencyKey: key });
       decideIdemRef.current = null;
       decideSlotRef.current = null;
       await reload();
@@ -223,19 +225,18 @@ export function ApproveScreen({
     if (busy || !rows.length) return;
     setBusy(true);
     try {
-      const slot = `r:${rows.map((r) => r.id).join(",")}`;
-      if (rejectBatchSlotRef.current !== slot) {
-        rejectBatchSlotRef.current = slot;
-        rejectBatchIdemRef.current = null;
-      }
-      if (!rejectBatchIdemRef.current) {
-        rejectBatchIdemRef.current = makeIdempotencyKey("dbatch-r");
-      }
+      const noteKey = (note || "batch reject").replace(/\s+/g, " ").trim();
+      const key = idemKeyFor(
+        rejectBatchIdemRef,
+        rejectBatchSlotRef,
+        "dbatch-r",
+        `r:${rows.map((r) => r.id).join(",")}:${noteKey}`,
+      );
       const res = await decideBatch(
         rows.map((r) => r.id),
         false,
         note || "batch reject",
-        { idempotencyKey: rejectBatchIdemRef.current },
+        { idempotencyKey: key },
       );
       rejectBatchIdemRef.current = null;
       rejectBatchSlotRef.current = null;

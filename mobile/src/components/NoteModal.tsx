@@ -72,6 +72,7 @@ export function NoteModal({
             autoCapitalize={secureTextEntry ? "none" : undefined}
             autoCorrect={!secureTextEntry}
             editable={!submitting}
+            maxLength={maxLength}
           />
           {confirmField && (
             <>
@@ -87,6 +88,7 @@ export function NoteModal({
                 autoCapitalize={secureTextEntry ? "none" : undefined}
                 autoCorrect={!secureTextEntry}
                 editable={!submitting}
+                maxLength={maxLength}
               />
             </>
           )}

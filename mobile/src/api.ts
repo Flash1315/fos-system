@@ -61,6 +61,21 @@ export function makeIdempotencyKey(prefix = "idem"): string {
   return newIdemKey(prefix);
 }
 
+/** Keep the same key for identical retries; rotate when the payload slot changes. */
+export function idemKeyFor(
+  keyRef: { current: string | null },
+  slotRef: { current: string | number | null },
+  prefix: string,
+  slot: string | number,
+): string {
+  if (slotRef.current !== slot) {
+    slotRef.current = slot;
+    keyRef.current = null;
+  }
+  if (!keyRef.current) keyRef.current = makeIdempotencyKey(prefix);
+  return keyRef.current;
+}
+
 export type MoneyRecord = {
   id: number;
   kind: "expense" | "fuel" | "income";
@@ -206,6 +221,7 @@ async function request<T>(
         res.statusText || `HTTP ${res.status}`,
         res.status,
         res.headers.get("Retry-After"),
+        res.headers.get("X-Request-Id"),
       ),
     );
   }
@@ -251,6 +267,7 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
         res.statusText || `HTTP ${res.status}`,
         res.status,
         res.headers.get("Retry-After"),
+        res.headers.get("X-Request-Id"),
       );
     } catch {
       detail =
@@ -260,8 +277,15 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
               res.statusText || `HTTP ${res.status}`,
               429,
               res.headers.get("Retry-After"),
+              res.headers.get("X-Request-Id"),
             )
-          : res.statusText || `HTTP ${res.status}`;
+          : formatApiError(
+              null,
+              res.statusText || `HTTP ${res.status}`,
+              res.status,
+              null,
+              res.headers.get("X-Request-Id"),
+            );
     }
     throw new Error(detail);
   }
@@ -273,7 +297,9 @@ function formatApiError(
   fallback: string,
   status?: number,
   retryAfter?: string | null,
+  requestId?: string | null,
 ): string {
+  const reqId = (requestId || "").trim();
   if (status === 429) {
     let base = "Too many requests — wait a moment and try again";
     if (typeof data === "object" && data && "detail" in data) {
@@ -282,26 +308,20 @@ function formatApiError(
     }
     const sec =
       retryAfter && /^\d+$/.test(retryAfter.trim()) ? Number(retryAfter.trim()) : null;
-    if (sec != null && sec > 0) return `${base} (retry in ~${sec}s)`;
+    if (sec != null && sec > 0) base = `${base} (retry in ~${sec}s)`;
     return base;
   }
   if (status != null && status >= 500) {
-    const reqId =
-      typeof data === "object" && data && "request_id" in data
-        ? String((data as { request_id: unknown }).request_id || "")
-        : "";
-    const msg =
-      typeof data === "object" && data && "detail" in data
-        ? (data as { detail: unknown }).detail
-        : null;
-    if (typeof msg === "string" && msg.trim()) {
-      return reqId ? `${msg} (ref ${reqId})` : msg;
+    let msg = fallback || "Server error — try again";
+    if (typeof data === "object" && data && "detail" in data) {
+      const d = (data as { detail: unknown }).detail;
+      if (typeof d === "string" && d.trim()) msg = d;
     }
-    return reqId
-      ? `Server error — try again (ref ${reqId})`
-      : fallback || "Server error — try again";
+    return reqId ? `${msg} (ref ${reqId})` : msg;
   }
-  if (typeof data !== "object" || !data || !("detail" in data)) return fallback;
+  if (typeof data !== "object" || !data || !("detail" in data)) {
+    return reqId && status != null && status >= 400 ? `${fallback} (ref ${reqId})` : fallback;
+  }
   const detail = (data as { detail: unknown }).detail;
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) {

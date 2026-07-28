@@ -5,6 +5,7 @@ import {
   changePassword,
   listSettlementRequests,
   listMySettlementRequests,
+  idemKeyFor,
   makeIdempotencyKey,
   myBalance,
   myOrg,
@@ -617,15 +618,12 @@ export function AccountScreen({
           const id = cancelId;
           setCancelId(null);
           if (id == null) return;
-          if (cancelSlotRef.current !== id) {
-            cancelSlotRef.current = id;
-            cancelIdemRef.current = null;
-          }
-          if (!cancelIdemRef.current) cancelIdemRef.current = makeIdempotencyKey("scancel");
+          const noteKey = cancelNote.replace(/\s+/g, " ").trim();
+          const key = idemKeyFor(cancelIdemRef, cancelSlotRef, "scancel", `${id}:${noteKey}`);
           setBusy(true);
           try {
             await cancelSettlementRequest(id, cancelNote, {
-              idempotencyKey: cancelIdemRef.current,
+              idempotencyKey: key,
             });
             cancelIdemRef.current = null;
             cancelSlotRef.current = null;

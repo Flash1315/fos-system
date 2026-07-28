@@ -14,8 +14,13 @@ def _strip_optional(v: Optional[str]) -> Optional[str]:
     return v.strip()
 
 
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+
+
 def _collapse_ws(v: str, *, max_len: int | None = None) -> str:
     text = re.sub(r"\s+", " ", (v or "").strip())
+    if _CTRL_RE.search(text):
+        raise ValueError("contains invalid control characters")
     if max_len is not None:
         return text[:max_len]
     return text
@@ -51,7 +56,7 @@ class OrgCreate(BaseModel):
     @field_validator("name", "owner_name")
     @classmethod
     def strip_required_name(cls, v: str) -> str:
-        cleaned = re.sub(r"\s+", " ", (v or "").strip())
+        cleaned = _collapse_ws(v)
         if len(cleaned) < 2:
             raise ValueError("must be at least 2 characters")
         return cleaned
@@ -97,7 +102,7 @@ class OrgUpdate(BaseModel):
     def strip_name(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        cleaned = re.sub(r"\s+", " ", v.strip())
+        cleaned = _collapse_ws(v)
         if len(cleaned) < 2:
             raise ValueError("must be at least 2 characters")
         return cleaned
@@ -169,7 +174,7 @@ class InviteIn(BaseModel):
     @field_validator("full_name")
     @classmethod
     def strip_full_name(cls, v: str) -> str:
-        cleaned = re.sub(r"\s+", " ", (v or "").strip())
+        cleaned = _collapse_ws(v)
         if len(cleaned) < 2:
             raise ValueError("must be at least 2 characters")
         return cleaned

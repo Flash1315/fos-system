@@ -616,7 +616,7 @@ export function CreateScreen({
       <Label>Amount</Label>
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
       <Label>When (optional YYYY-MM-DD)</Label>
-      <Field autoCapitalize="none" value={occurredDate} onChangeText={setOccurredDate} placeholder="leave empty = now" />
+      <Field autoCapitalize="none" value={occurredDate} onChangeText={setOccurredDate} placeholder="leave empty = now" maxLength={10} />
       {!!closedCycleHint && <Sub>{closedCycleHint}</Sub>}
       <Label>Category</Label>
       {!!categoriesError && (
@@ -628,14 +628,14 @@ export function CreateScreen({
         ))}
       </View>
       {categories.length === 0 && (
-        <Field value={category} onChangeText={setCategory} placeholder="Category" />
+        <Field value={category} onChangeText={setCategory} placeholder="Category" maxLength={120} />
       )}
       <Label>Place</Label>
-      <Field value={place} onChangeText={setPlace} placeholder="Station / shop (optional)" />
+      <Field value={place} onChangeText={setPlace} placeholder="Station / shop (optional)" maxLength={200} />
       {(kind === "fuel" || kind === "expense") && (
         <>
           <Label>Bike</Label>
-          <Field value={bike} onChangeText={setBike} placeholder="Optional bike name" />
+          <Field value={bike} onChangeText={setBike} placeholder="Optional bike name" maxLength={120} />
         </>
       )}
       {kind !== "income" && (
@@ -677,7 +677,7 @@ export function CreateScreen({
       {kind === "income" && (
         <>
           <Label>Client name</Label>
-          <Field value={clientName} onChangeText={setClientName} />
+          <Field value={clientName} onChangeText={setClientName} maxLength={200} />
           <Label>Payment method</Label>
           <View style={styles.kinds}>
             {(["cash", "transfer"] as const).map((m) => (
@@ -687,7 +687,7 @@ export function CreateScreen({
         </>
       )}
       <Label>Comment</Label>
-      <Field value={comment} onChangeText={setComment} />
+      <Field value={comment} onChangeText={setComment} maxLength={4000} />
       {isManager && (
         <>
           <Label>After submit</Label>

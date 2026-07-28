@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User
-from app.schemas import RecordOut
+from app.schemas import RecordOut, _collapse_ws
 from app.routers.records import _record_out, _utcnow
 from app.services.balances import user_balance
 from app.services.idempotency import (
@@ -43,9 +43,7 @@ class TransferIn(BaseModel):
     @field_validator("comment")
     @classmethod
     def strip_comment(cls, v: str) -> str:
-        import re
-
-        return re.sub(r"\s+", " ", (v or "").strip())[:2000]
+        return _collapse_ws(v, max_len=2000)
 
     @field_validator("amount")
     @classmethod

@@ -7,6 +7,7 @@ import {
   commentRecord,
   decideRecord,
   getRecord,
+  idemKeyFor,
   lastFuelOdometer,
   makeIdempotencyKey,
   mediaUrlWithMediaToken,
@@ -63,9 +64,11 @@ export function RecordDetailScreen({
   const [refreshing, setRefreshing] = useState(false);
   const cancelIdemRef = useRef<string | null>(null);
   const commentIdemRef = useRef<string | null>(null);
+  const commentSlotRef = useRef<string | null>(null);
   const decideIdemRef = useRef<string | null>(null);
   const decideSlotRef = useRef<string | null>(null);
   const voidIdemRef = useRef<string | null>(null);
+  const voidSlotRef = useRef<string | null>(null);
   const editIdemRef = useRef<string | null>(null);
   const isManager = user.role === "owner" || user.role === "manager";
 
@@ -172,15 +175,16 @@ export function RecordDetailScreen({
 
   const doDecide = async (approve: boolean, note = "") => {
     if (busy) return;
-    const slot = approve ? "a" : "r";
-    if (decideSlotRef.current !== slot) {
-      decideSlotRef.current = slot;
-      decideIdemRef.current = null;
-    }
-    if (!decideIdemRef.current) decideIdemRef.current = makeIdempotencyKey("decide");
+    const noteKey = note.replace(/\s+/g, " ").trim();
+    const key = idemKeyFor(
+      decideIdemRef,
+      decideSlotRef,
+      "decide",
+      `${approve ? "a" : "r"}:${noteKey}`,
+    );
     setBusy(true);
     try {
-      setRec(await decideRecord(id, approve, note, { idempotencyKey: decideIdemRef.current }));
+      setRec(await decideRecord(id, approve, note, { idempotencyKey: key }));
       decideIdemRef.current = null;
       decideSlotRef.current = null;
     } catch (e) {
@@ -236,9 +240,11 @@ export function RecordDetailScreen({
         Alert.alert("Fos", fresh.void_blocked_reason || "This record cannot be voided now");
         return;
       }
-      if (!voidIdemRef.current) voidIdemRef.current = makeIdempotencyKey("void");
-      setRec(await voidRecord(id, note, { idempotencyKey: voidIdemRef.current }));
+      const noteKey = note.replace(/\s+/g, " ").trim();
+      const key = idemKeyFor(voidIdemRef, voidSlotRef, "void", `${id}:${noteKey}`);
+      setRec(await voidRecord(id, note, { idempotencyKey: key }));
       voidIdemRef.current = null;
+      voidSlotRef.current = null;
       Alert.alert("Fos", "Record voided");
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -250,9 +256,11 @@ export function RecordDetailScreen({
   const onComment = async (note: string) => {
     setBusy(true);
     try {
-      if (!commentIdemRef.current) commentIdemRef.current = makeIdempotencyKey("cmt");
-      setRec(await commentRecord(id, note, { idempotencyKey: commentIdemRef.current }));
+      const noteKey = note.replace(/\s+/g, " ").trim();
+      const key = idemKeyFor(commentIdemRef, commentSlotRef, "cmt", `${id}:${noteKey}`);
+      setRec(await commentRecord(id, note, { idempotencyKey: key }));
       commentIdemRef.current = null;
+      commentSlotRef.current = null;
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
@@ -556,7 +564,7 @@ export function RecordDetailScreen({
               <Label>Edit amount</Label>
               <Field keyboardType="decimal-pad" value={editAmount} onChangeText={setEditAmount} />
               <Label>Category</Label>
-              <Field value={editCategory} onChangeText={setEditCategory} />
+              <Field value={editCategory} onChangeText={setEditCategory} maxLength={120} />
               {(rec.kind === "expense" || rec.kind === "fuel") && (
                 <>
                   <Label>Purpose</Label>
@@ -596,13 +604,13 @@ export function RecordDetailScreen({
                     />
                   </Row>
                   <Label>Client</Label>
-                  <Field value={editClient} onChangeText={setEditClient} />
+                  <Field value={editClient} onChangeText={setEditClient} maxLength={200} />
                 </>
               )}
               {rec.kind === "fuel" && (
                 <>
                   <Label>Bike</Label>
-                  <Field value={editBike} onChangeText={setEditBike} />
+                  <Field value={editBike} onChangeText={setEditBike} maxLength={120} />
                   <Label>Liters</Label>
                   <Field keyboardType="decimal-pad" value={editLiters} onChangeText={setEditLiters} />
                   <Label>Odometer</Label>
@@ -614,7 +622,7 @@ export function RecordDetailScreen({
                 </>
               )}
               <Label>Place</Label>
-              <Field value={editPlace} onChangeText={setEditPlace} />
+              <Field value={editPlace} onChangeText={setEditPlace} maxLength={200} />
               <Label>When (optional YYYY-MM-DD)</Label>
               <Field
                 autoCapitalize="none"
@@ -639,7 +647,7 @@ export function RecordDetailScreen({
                 )}
               </Row>
               <Label>Comment</Label>
-              <Field value={editComment} onChangeText={setEditComment} />
+              <Field value={editComment} onChangeText={setEditComment} maxLength={4000} />
               <Row>
                 <Btn title="Save" disabled={busy} onPress={onSaveEdit} />
                 <Btn title="Cancel edit" variant="ghost" onPress={() => setEditing(false)} />

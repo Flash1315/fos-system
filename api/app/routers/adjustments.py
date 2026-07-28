@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
+from app.schemas import _collapse_ws
 from app.auth import require_roles
 from app.db import get_db
 from app.models import AdjustmentTrack, BalanceAdjustment, PayoutKind, User, UserRole
@@ -21,12 +22,10 @@ router = APIRouter(prefix="/adjustments", tags=["adjustments"])
 
 
 def _require_note(value: str) -> str:
-    import re
-
-    note = re.sub(r"\s+", " ", (value or "").strip())
+    note = _collapse_ws(value, max_len=2000)
     if len(note) < 2:
         raise ValueError("Note is required (min 2 characters)")
-    return note[:2000]
+    return note
 
 
 class AdjustmentIn(BaseModel):

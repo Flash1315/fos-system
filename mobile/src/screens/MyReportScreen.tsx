@@ -171,9 +171,9 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
       {custom && (
         <>
           <Label>From (YYYY-MM-DD)</Label>
-          <Field autoCapitalize="none" value={dateFrom} onChangeText={setDateFrom} placeholder="optional" />
+          <Field autoCapitalize="none" value={dateFrom} onChangeText={setDateFrom} placeholder="optional" maxLength={10} />
           <Label>To (YYYY-MM-DD)</Label>
-          <Field autoCapitalize="none" value={dateTo} onChangeText={setDateTo} placeholder="optional" />
+          <Field autoCapitalize="none" value={dateTo} onChangeText={setDateTo} placeholder="optional" maxLength={10} />
         </>
       )}
       {(custom || days != null) && (

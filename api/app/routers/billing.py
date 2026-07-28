@@ -48,6 +48,13 @@ class PlanIn(BaseModel):
 
 @router.get("/billing/me", response_model=BillingOut)
 def billing_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"billing-me:{user.organization_id}:{user.id}",
+        limit=60,
+        window_sec=60,
+    )
     org = db.get(Organization, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")

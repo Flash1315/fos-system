@@ -253,6 +253,7 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
             onChangeText={setDateFrom}
             placeholder="From YYYY-MM-DD"
             autoCapitalize="none"
+            maxLength={10}
           />
           <Field
             style={{ flex: 1 }}
@@ -260,6 +261,7 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
             onChangeText={setDateTo}
             placeholder="To YYYY-MM-DD"
             autoCapitalize="none"
+            maxLength={10}
           />
         </View>
       )}

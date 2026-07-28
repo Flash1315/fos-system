@@ -17,6 +17,7 @@ from app.models import (
     UserRole,
 )
 from app.routers.records import _append_text, _utcnow
+from app.schemas import _collapse_ws
 from app.services.balances import last_payout, pending_reserved, user_balance
 
 router = APIRouter(prefix="/payouts", tags=["payouts"])
@@ -38,9 +39,7 @@ class PayoutCreate(BaseModel):
     @field_validator("note")
     @classmethod
     def note_trim(cls, v: str) -> str:
-        import re
-
-        return re.sub(r"\s+", " ", (v or "").strip())[:2000]
+        return _collapse_ws(v, max_len=2000)
 
     @field_validator("amount")
     @classmethod
@@ -94,12 +93,10 @@ class VoidIn(BaseModel):
     @field_validator("note")
     @classmethod
     def note_trimmed(cls, v: str) -> str:
-        import re
-
-        note = re.sub(r"\s+", " ", (v or "").strip())
+        note = _collapse_ws(v, max_len=2000)
         if len(note) < 2:
             raise ValueError("Note is required (min 2 characters)")
-        return note[:2000]
+        return note
 
 
 class CancelRequestIn(BaseModel):
@@ -108,9 +105,7 @@ class CancelRequestIn(BaseModel):
     @field_validator("note")
     @classmethod
     def note_trim(cls, v: str) -> str:
-        import re
-
-        return re.sub(r"\s+", " ", (v or "").strip())[:2000]
+        return _collapse_ws(v, max_len=2000)
 
 
 class SettlementRequestIn(BaseModel):
@@ -121,9 +116,7 @@ class SettlementRequestIn(BaseModel):
     @field_validator("note")
     @classmethod
     def note_trim(cls, v: str) -> str:
-        import re
-
-        return re.sub(r"\s+", " ", (v or "").strip())[:2000]
+        return _collapse_ws(v, max_len=2000)
 
     @field_validator("amount")
     @classmethod
@@ -861,6 +854,13 @@ def my_pending_settlement_count(
 ):
     from sqlalchemy import func
 
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"settle-mine-count:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     count = (
         db.query(func.count(SettlementRequest.id))
         .filter(
@@ -1022,6 +1022,13 @@ def org_pending_settlement_count(
 ):
     from sqlalchemy import func
 
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"settle-org-count:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
     count = (
         db.query(func.count(SettlementRequest.id))
         .filter(

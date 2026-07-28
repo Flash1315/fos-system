@@ -200,6 +200,7 @@ export function AuthScreen({
               value={inviteToken}
               onChangeText={setInviteToken}
               placeholder="paste token from manager"
+              maxLength={128}
             />
             <Label>New password</Label>
             <Field
@@ -207,6 +208,7 @@ export function AuthScreen({
               value={password}
               onChangeText={setPassword}
               placeholder="min 6 characters"
+              maxLength={128}
             />
             <Label>Confirm password</Label>
             <Field
@@ -214,6 +216,7 @@ export function AuthScreen({
               value={passwordConfirm}
               onChangeText={setPasswordConfirm}
               placeholder="repeat password"
+              maxLength={128}
             />
             <LinkText onPress={() => setShowPassword((v) => !v)}>
               {showPassword ? "Hide password" : "Show password"}
@@ -223,15 +226,15 @@ export function AuthScreen({
         ) : (
           <>
             <Label>Organization slug</Label>
-            <Field autoCapitalize="none" value={orgSlug} onChangeText={setOrgSlug} placeholder="my-company" />
+            <Field autoCapitalize="none" value={orgSlug} onChangeText={setOrgSlug} placeholder="my-company" maxLength={80} />
             {mode === "register" && (
               <>
                 <Label>Company name</Label>
-                <Field value={orgName} onChangeText={setOrgName} placeholder="Acme Field Ops" />
+                <Field value={orgName} onChangeText={setOrgName} placeholder="Acme Field Ops" maxLength={200} />
                 <Label>Currency</Label>
-                <Field autoCapitalize="characters" value={currency} onChangeText={setCurrency} placeholder="IDR" />
+                <Field autoCapitalize="characters" value={currency} onChangeText={setCurrency} placeholder="IDR" maxLength={3} />
                 <Label>Your name</Label>
-                <Field value={name} onChangeText={setName} placeholder="Alex" />
+                <Field value={name} onChangeText={setName} placeholder="Alex" maxLength={200} />
               </>
             )}
             <Label>Email</Label>
@@ -241,6 +244,7 @@ export function AuthScreen({
               value={email}
               onChangeText={setEmail}
               placeholder="you@example.com"
+              maxLength={254}
             />
             <Label>Password</Label>
             <Field
@@ -248,6 +252,7 @@ export function AuthScreen({
               value={password}
               onChangeText={setPassword}
               placeholder="min 6 characters"
+              maxLength={128}
             />
             {mode === "register" && (
               <>
@@ -257,6 +262,7 @@ export function AuthScreen({
                   value={passwordConfirm}
                   onChangeText={setPasswordConfirm}
                   placeholder="repeat password"
+                  maxLength={128}
                 />
               </>
             )}

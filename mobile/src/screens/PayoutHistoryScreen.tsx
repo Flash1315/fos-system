@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
-import { listMembers, listMyPayouts, listOrgPayouts, makeIdempotencyKey, voidPayout, type User } from "../api";
+import { listMembers, listMyPayouts, listOrgPayouts, idemKeyFor, makeIdempotencyKey, voidPayout, type User } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
@@ -284,14 +284,11 @@ export function PayoutHistoryScreen({
           const id = voidId;
           setVoidId(null);
           if (id == null) return;
-          if (voidSlotRef.current !== id) {
-            voidSlotRef.current = id;
-            voidIdemRef.current = null;
-          }
-          if (!voidIdemRef.current) voidIdemRef.current = makeIdempotencyKey("pvoid");
+          const noteKey = note.replace(/\s+/g, " ").trim();
+          const key = idemKeyFor(voidIdemRef, voidSlotRef, "pvoid", `${id}:${noteKey}`);
           setBusy(true);
           try {
-            await voidPayout(id, note, { idempotencyKey: voidIdemRef.current });
+            await voidPayout(id, note, { idempotencyKey: key });
             voidIdemRef.current = null;
             voidSlotRef.current = null;
             await reload();

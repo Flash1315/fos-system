@@ -108,6 +108,7 @@ export function LedgerScreen({
         onChangeText={setSearch}
         placeholder="Search category, place, bike, comment…"
         autoCapitalize="none"
+        maxLength={80}
       />
       {(!!status || !!kind || !!purpose || memberId != null || !!search) && (
         <Btn

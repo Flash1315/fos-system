@@ -166,6 +166,7 @@ export function PayoutScreen({
         );
         return;
       }
+      let confirmed = false;
       Alert.alert(
         "Fos",
         `Amount exceeds spendings owed (${formatMoney(total, selectedBal?.currency || "IDR")}). Extra ${
@@ -173,8 +174,20 @@ export function PayoutScreen({
         } will be recorded as overpayment. Continue?`,
         [
           { text: "Cancel", style: "cancel", onPress: () => setBusy(false) },
-          { text: "Continue", onPress: () => void doSubmit(value) },
+          {
+            text: "Continue",
+            onPress: () => {
+              confirmed = true;
+              void doSubmit(value);
+            },
+          },
         ],
+        {
+          cancelable: true,
+          onDismiss: () => {
+            if (!confirmed) setBusy(false);
+          },
+        },
       );
       setBusy(true);
       return;
@@ -185,10 +198,27 @@ export function PayoutScreen({
         ? `Pay ${who} expense reimbursement ${formatMoney(value, selectedBal?.currency || "IDR")} via ${method}?`
         : `Take cash handover ${formatMoney(value, selectedBal?.currency || "IDR")} from ${who} via ${method}?`;
     setBusy(true);
-    Alert.alert("Fos", label, [
-      { text: "Cancel", style: "cancel", onPress: () => setBusy(false) },
-      { text: "Confirm", onPress: () => void doSubmit(value) },
-    ]);
+    let confirmed = false;
+    Alert.alert(
+      "Fos",
+      label,
+      [
+        { text: "Cancel", style: "cancel", onPress: () => setBusy(false) },
+        {
+          text: "Confirm",
+          onPress: () => {
+            confirmed = true;
+            void doSubmit(value);
+          },
+        },
+      ],
+      {
+        cancelable: true,
+        onDismiss: () => {
+          if (!confirmed) setBusy(false);
+        },
+      },
+    );
   };
 
   const doSubmit = async (value: number) => {
@@ -280,6 +310,7 @@ export function PayoutScreen({
         setBusy(false);
         return;
       }
+      let confirmed = false;
       Alert.alert(
         "Fos",
         `Pay available spendings for ${payable.length} teammate(s) · ${formatMoney(total, payable[0]?.currency || selectedBal?.currency || "IDR")} via ${method}?`,
@@ -288,6 +319,7 @@ export function PayoutScreen({
           {
             text: "Pay all",
             onPress: async () => {
+              confirmed = true;
               try {
                 try {
                   const b = await billingMe();
@@ -319,6 +351,12 @@ export function PayoutScreen({
             },
           },
         ],
+        {
+          cancelable: true,
+          onDismiss: () => {
+            if (!confirmed) setBusy(false);
+          },
+        },
       );
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Could not load spendings");
@@ -346,6 +384,7 @@ export function PayoutScreen({
         setBusy(false);
         return;
       }
+      let confirmed = false;
       Alert.alert(
         "Fos",
         `Take available cash from ${payable.length} teammate(s) · ${formatMoney(total, payable[0]?.currency || selectedBal?.currency || "IDR")} via ${method}?`,
@@ -354,6 +393,7 @@ export function PayoutScreen({
           {
             text: "Take all",
             onPress: async () => {
+              confirmed = true;
               try {
                 try {
                   const b = await billingMe();
@@ -385,6 +425,12 @@ export function PayoutScreen({
             },
           },
         ],
+        {
+          cancelable: true,
+          onDismiss: () => {
+            if (!confirmed) setBusy(false);
+          },
+        },
       );
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Could not load cash");

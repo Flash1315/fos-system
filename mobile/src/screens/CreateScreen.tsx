@@ -22,6 +22,58 @@ import { alertFosError } from "../alertError";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { isValidYmd } from "../dates";
 import { formatWhen, parseFiniteLiters, parseFiniteMoney, parseFiniteOdometer } from "../format";
+import { asyncStorageDelete, asyncStorageGet, asyncStorageSet } from "../storage";
+
+const CREATE_DRAFT_KEY = "fos_create_draft_v1";
+
+type CreateDraft = {
+  kind: "expense" | "fuel" | "income";
+  amount: string;
+  category: string;
+  purpose: string;
+  place: string;
+  bike: string;
+  comment: string;
+  liters: string;
+  odometer: string;
+  clientName: string;
+  paymentMethod: "cash" | "transfer";
+  paymentSource: "my_pocket" | "cash_on_hand";
+  occurredDate: string;
+  forUserId: number | null;
+};
+
+function parseCreateDraft(raw: string): CreateDraft | null {
+  try {
+    const value = JSON.parse(raw) as Partial<CreateDraft>;
+    if (!value || typeof value !== "object") return null;
+    const text = (field: keyof CreateDraft) =>
+      typeof value[field] === "string" ? (value[field] as string) : "";
+    return {
+      kind: ["expense", "fuel", "income"].includes(value.kind || "")
+        ? (value.kind as CreateDraft["kind"])
+        : "expense",
+      amount: text("amount"),
+      category: text("category"),
+      purpose: text("purpose") || "Other",
+      place: text("place"),
+      bike: text("bike"),
+      comment: text("comment"),
+      liters: text("liters"),
+      odometer: text("odometer"),
+      clientName: text("clientName"),
+      paymentMethod: value.paymentMethod === "transfer" ? "transfer" : "cash",
+      paymentSource: value.paymentSource === "cash_on_hand" ? "cash_on_hand" : "my_pocket",
+      occurredDate: text("occurredDate"),
+      forUserId:
+        typeof value.forUserId === "number" && Number.isInteger(value.forUserId)
+          ? value.forUserId
+          : null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function CreateScreen({
   busy,
@@ -40,6 +92,11 @@ export function CreateScreen({
   const submitLock = useRef(false);
   const idemKeyRef = useRef<string | null>(null);
   const photoIdemRef = useRef<string | null>(null);
+  const draftReadyRef = useRef(false);
+  const draftDirtyRef = useRef(false);
+  const draftRevisionRef = useRef(0);
+  const draftWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const draftKey = `${CREATE_DRAFT_KEY}:${user.organization_id}:${user.id}`;
   const [kind, setKind] = useState<"expense" | "fuel" | "income">("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
@@ -77,12 +134,131 @@ export function CreateScreen({
   const teamGen = useRef(0);
   const kindRef = useRef(kind);
   kindRef.current = kind;
+  const markDraftDirty = () => {
+    draftDirtyRef.current = true;
+  };
+  const editDraftField = <T,>(
+    setter: React.Dispatch<React.SetStateAction<T>>,
+    value: NoInfer<T>,
+  ) => {
+    markDraftDirty();
+    setter(value);
+  };
 
   useEffect(() => {
     void billingMe()
       .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    draftReadyRef.current = false;
+    draftDirtyRef.current = false;
+    void asyncStorageGet(draftKey)
+      .then((raw) => {
+        if (!active) return;
+        if (!raw) {
+          draftReadyRef.current = true;
+          return;
+        }
+        const draft = parseCreateDraft(raw);
+        if (!draft) {
+          draftReadyRef.current = true;
+          void asyncStorageDelete(draftKey);
+          return;
+        }
+        Alert.alert(
+          "Restore draft?",
+          "Restore your saved record fields? Receipt photos are not stored in drafts.",
+          [
+            {
+              text: "Discard",
+              style: "destructive",
+              onPress: () => {
+                draftReadyRef.current = true;
+                draftDirtyRef.current = false;
+                ++draftRevisionRef.current;
+                void asyncStorageDelete(draftKey);
+              },
+            },
+            {
+              text: "Restore",
+              onPress: () => {
+                setKind(draft.kind);
+                setAmount(draft.amount);
+                setCategory(draft.category);
+                setPurpose(draft.purpose);
+                setPlace(draft.place);
+                setBike(draft.bike);
+                setComment(draft.comment);
+                setLiters(draft.liters);
+                setOdometer(draft.odometer);
+                setClientName(draft.clientName);
+                setPaymentMethod(draft.paymentMethod);
+                setPaymentSource(draft.paymentSource);
+                setOccurredDate(draft.occurredDate);
+                setForUserId(draft.forUserId);
+                draftReadyRef.current = true;
+                draftDirtyRef.current = true;
+              },
+            },
+          ],
+          { cancelable: false },
+        );
+      })
+      .catch(() => {
+        if (active) draftReadyRef.current = true;
+      });
+    return () => {
+      active = false;
+    };
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftReadyRef.current || !draftDirtyRef.current) return;
+    const revision = ++draftRevisionRef.current;
+    const handle = setTimeout(() => {
+      if (revision !== draftRevisionRef.current || !draftDirtyRef.current) return;
+      const draft: CreateDraft = {
+        kind,
+        amount,
+        category,
+        purpose,
+        place,
+        bike,
+        comment,
+        liters,
+        odometer,
+        clientName,
+        paymentMethod,
+        paymentSource,
+        occurredDate,
+        forUserId,
+      };
+      // photoUrl is deliberately omitted. An uploaded photo can remain on the
+      // server if the user leaves before submitting; drafts must not restore it.
+      const write = asyncStorageSet(draftKey, JSON.stringify(draft));
+      draftWriteRef.current = write.catch(() => {});
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [
+    draftKey,
+    kind,
+    amount,
+    category,
+    purpose,
+    place,
+    bike,
+    comment,
+    liters,
+    odometer,
+    clientName,
+    paymentMethod,
+    paymentSource,
+    occurredDate,
+    forUserId,
+  ]);
 
   useEffect(() => {
     idemKeyRef.current = null;
@@ -570,6 +746,10 @@ export function CreateScreen({
         { idempotencyKey: idemKeyRef.current },
       );
       idemKeyRef.current = null;
+      draftDirtyRef.current = false;
+      ++draftRevisionRef.current;
+      await draftWriteRef.current;
+      await asyncStorageDelete(draftKey).catch(() => {});
       onCreated();
     } catch (e) {
       alertFosError(e);
@@ -659,7 +839,11 @@ export function CreateScreen({
             </>
           )}
           <View style={styles.kinds}>
-            <Chip label="Myself" on={forUserId == null} onPress={() => setForUserId(null)} />
+            <Chip
+              label="Myself"
+              on={forUserId == null}
+              onPress={() => editDraftField(setForUserId, null)}
+            />
             {members
               .filter((m) => m.id !== user.id)
               .map((m) => (
@@ -667,7 +851,7 @@ export function CreateScreen({
                   key={m.id}
                   label={m.full_name.split(" ")[0] || m.full_name}
                   on={forUserId === m.id}
-                  onPress={() => setForUserId(m.id)}
+                  onPress={() => editDraftField(setForUserId, m.id)}
                 />
               ))}
           </View>
@@ -675,19 +859,35 @@ export function CreateScreen({
       )}
       <View style={styles.kinds}>
         {(["expense", "fuel", "income"] as const).map((k) => (
-          <Chip key={k} label={k} on={kind === k} onPress={() => setKind(k)} />
+          <Chip key={k} label={k} on={kind === k} onPress={() => editDraftField(setKind, k)} />
         ))}
       </View>
       <Label>Purpose</Label>
       <View style={styles.kinds}>
         {purposes.map((p) => (
-          <Chip key={p} label={p} on={purpose === p} onPress={() => setPurpose(p)} />
+          <Chip
+            key={p}
+            label={p}
+            on={purpose === p}
+            onPress={() => editDraftField(setPurpose, p)}
+          />
         ))}
       </View>
       <Label>Amount</Label>
-      <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} maxLength={24} />
+      <Field
+        keyboardType="decimal-pad"
+        value={amount}
+        onChangeText={(value) => editDraftField(setAmount, value)}
+        maxLength={24}
+      />
       <Label>When (optional YYYY-MM-DD)</Label>
-      <Field autoCapitalize="none" value={occurredDate} onChangeText={setOccurredDate} placeholder="leave empty = now" maxLength={10} />
+      <Field
+        autoCapitalize="none"
+        value={occurredDate}
+        onChangeText={(value) => editDraftField(setOccurredDate, value)}
+        placeholder="leave empty = now"
+        maxLength={10}
+      />
       {!!closedCycleHint && <Sub>{closedCycleHint}</Sub>}
       <Label>Category</Label>
       {!!categoriesError && (
@@ -698,18 +898,38 @@ export function CreateScreen({
       )}
       <View style={styles.kinds}>
         {categories.map((c) => (
-          <Chip key={c} label={c} on={category === c} onPress={() => setCategory(c)} />
+          <Chip
+            key={c}
+            label={c}
+            on={category === c}
+            onPress={() => editDraftField(setCategory, c)}
+          />
         ))}
       </View>
       {categories.length === 0 && (
-        <Field value={category} onChangeText={setCategory} placeholder="Category" maxLength={120} />
+        <Field
+          value={category}
+          onChangeText={(value) => editDraftField(setCategory, value)}
+          placeholder="Category"
+          maxLength={120}
+        />
       )}
       <Label>Place</Label>
-      <Field value={place} onChangeText={setPlace} placeholder="Station / shop (optional)" maxLength={200} />
+      <Field
+        value={place}
+        onChangeText={(value) => editDraftField(setPlace, value)}
+        placeholder="Station / shop (optional)"
+        maxLength={200}
+      />
       {(kind === "fuel" || kind === "expense") && (
         <>
           <Label>Bike</Label>
-          <Field value={bike} onChangeText={setBike} placeholder="Optional bike name" maxLength={120} />
+          <Field
+            value={bike}
+            onChangeText={(value) => editDraftField(setBike, value)}
+            placeholder="Optional bike name"
+            maxLength={120}
+          />
         </>
       )}
       {kind !== "income" && (
@@ -719,12 +939,12 @@ export function CreateScreen({
             <Chip
               label="My pocket"
               on={paymentSource === "my_pocket"}
-              onPress={() => setPaymentSource("my_pocket")}
+              onPress={() => editDraftField(setPaymentSource, "my_pocket")}
             />
             <Chip
               label="Cash on hand"
               on={paymentSource === "cash_on_hand"}
-              onPress={() => setPaymentSource("cash_on_hand")}
+              onPress={() => editDraftField(setPaymentSource, "cash_on_hand")}
             />
           </View>
         </>
@@ -732,9 +952,19 @@ export function CreateScreen({
       {kind === "fuel" && (
         <>
           <Label>Liters</Label>
-          <Field keyboardType="decimal-pad" value={liters} onChangeText={setLiters} maxLength={12} />
+          <Field
+            keyboardType="decimal-pad"
+            value={liters}
+            onChangeText={(value) => editDraftField(setLiters, value)}
+            maxLength={12}
+          />
           <Label>Odometer</Label>
-          <Field keyboardType="decimal-pad" value={odometer} onChangeText={setOdometer} maxLength={12} />
+          <Field
+            keyboardType="decimal-pad"
+            value={odometer}
+            onChangeText={(value) => editDraftField(setOdometer, value)}
+            maxLength={12}
+          />
           {minOdo != null && maxOdo != null && (
             <Sub>
               Allowed range {minOdo.toLocaleString()}–{maxOdo.toLocaleString()}.
@@ -751,17 +981,30 @@ export function CreateScreen({
       {kind === "income" && (
         <>
           <Label>Client name</Label>
-          <Field value={clientName} onChangeText={setClientName} maxLength={200} />
+          <Field
+            value={clientName}
+            onChangeText={(value) => editDraftField(setClientName, value)}
+            maxLength={200}
+          />
           <Label>Payment method</Label>
           <View style={styles.kinds}>
             {(["cash", "transfer"] as const).map((m) => (
-              <Chip key={m} label={m} on={paymentMethod === m} onPress={() => setPaymentMethod(m)} />
+              <Chip
+                key={m}
+                label={m}
+                on={paymentMethod === m}
+                onPress={() => editDraftField(setPaymentMethod, m)}
+              />
             ))}
           </View>
         </>
       )}
       <Label>Comment</Label>
-      <Field value={comment} onChangeText={setComment} maxLength={4000} />
+      <Field
+        value={comment}
+        onChangeText={(value) => editDraftField(setComment, value)}
+        maxLength={4000}
+      />
       {isManager && (
         <>
           <Label>After submit</Label>

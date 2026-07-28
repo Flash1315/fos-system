@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Share, Text, StyleSheet, View } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { downloadReportCsv, onResumeRefresh, orgReport, type OrgReport, type ReportPeriod } from "../api";
 import { Btn, Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { isValidYmd } from "../dates";
@@ -131,6 +133,14 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
     setExporting(true);
     try {
       const text = await downloadReportCsv(exportPeriod);
+      const MAX_EXPORT_BYTES = 15 * 1024 * 1024;
+      const exportBytes = new Blob([text]).size;
+      if (exportBytes > MAX_EXPORT_BYTES) {
+        setExportError(
+          `Export is ~${Math.round(exportBytes / 1024 / 1024)} MB — the 15 MB safety limit was exceeded. Narrow the date range.`,
+        );
+        return;
+      }
       if (typeof document !== "undefined") {
         const blob = new Blob([text], { type: "text/csv" });
         const url = URL.createObjectURL(blob);
@@ -141,18 +151,38 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
         URL.revokeObjectURL(url);
         setExportStatus("CSV downloaded");
       } else {
-        const MAX_SHARE_CHARS = 80_000;
-        if (text.length > MAX_SHARE_CHARS) {
-          setExportError(
-            `Export is ~${Math.round(text.length / 1024)} KB — too large to share here. Narrow the date range or download from web.`,
-          );
-          return;
+        let sharedFile = false;
+        let sharingAvailable = false;
+        try {
+          sharingAvailable = await Sharing.isAvailableAsync();
+        } catch {
+          // Treat a failed capability check as unavailable and use text share.
         }
-        const rows = Math.max(0, text.split("\n").length - 1);
-        await Share.share({
-          message: text,
-          title: `fos-export.csv (${rows} rows)`,
-        });
+        if (sharingAvailable) {
+          let uri: string | null = null;
+          try {
+            if (!FileSystem.cacheDirectory) throw new Error("Cache directory unavailable");
+            const candidate = `${FileSystem.cacheDirectory}fos-export.csv`;
+            await FileSystem.writeAsStringAsync(candidate, text);
+            uri = candidate;
+          } catch {
+            // Fall through to text sharing when the cache file cannot be written.
+          }
+          if (uri) {
+            await Sharing.shareAsync(uri, {
+              mimeType: "text/csv",
+              dialogTitle: "fos-export.csv",
+            });
+            sharedFile = true;
+          }
+        }
+        if (!sharedFile) {
+          const rows = Math.max(0, text.split("\n").length - 1);
+          await Share.share({
+            message: text,
+            title: `fos-export.csv (${rows} rows)`,
+          });
+        }
         setExportStatus("CSV export ready");
       }
     } catch (e) {

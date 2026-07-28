@@ -22,3 +22,16 @@ export async function storageDelete(key: string) {
   if (Platform.OS === "web") return AsyncStorage.removeItem(key);
   return SecureStore.deleteItemAsync(key, secureOpts);
 }
+
+/** Non-sensitive, potentially larger values such as form drafts. */
+export function asyncStorageGet(key: string) {
+  return AsyncStorage.getItem(key);
+}
+
+export function asyncStorageSet(key: string, value: string) {
+  return AsyncStorage.setItem(key, value);
+}
+
+export function asyncStorageDelete(key: string) {
+  return AsyncStorage.removeItem(key);
+}

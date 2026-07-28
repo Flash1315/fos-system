@@ -105,6 +105,11 @@ export function TransferScreen({
     submitLock.current = true;
     if (!idemKeyRef.current) idemKeyRef.current = makeIdempotencyKey("xfer");
     setBusy(true);
+    let confirmed = false;
+    const cancelConfirm = () => {
+      submitLock.current = false;
+      setBusy(false);
+    };
     Alert.alert(
       "Fos",
       `Transfer ${formatMoney(value, currency)} to ${email.trim()}?`,
@@ -112,14 +117,12 @@ export function TransferScreen({
         {
           text: "Cancel",
           style: "cancel",
-          onPress: () => {
-            submitLock.current = false;
-            setBusy(false);
-          },
+          onPress: cancelConfirm,
         },
         {
           text: "Transfer",
           onPress: async () => {
+            confirmed = true;
             try {
               try {
                 const b = await billingMe();
@@ -165,6 +168,12 @@ export function TransferScreen({
           },
         },
       ],
+      {
+        cancelable: true,
+        onDismiss: () => {
+          if (!confirmed) cancelConfirm();
+        },
+      },
     );
   };
 

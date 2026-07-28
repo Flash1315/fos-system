@@ -20,6 +20,14 @@ import { formatMoney, formatWhen } from "../format";
 import { hasMorePage, mergeById } from "../listUtil";
 import { colors } from "../theme";
 
+const BATCH_PAGE = 40;
+const BATCH_MAX = 100;
+
+type PendingBatch = {
+  records: MoneyRecord[];
+  hasMoreAvailable: boolean;
+};
+
 export function ApproveScreen({
   busy,
   setBusy,
@@ -40,7 +48,7 @@ export function ApproveScreen({
   const [hasMore, setHasMore] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [rejectId, setRejectId] = useState<number | null>(null);
-  const [rejectAllOpen, setRejectAllOpen] = useState(false);
+  const [rejectBatch, setRejectBatch] = useState<PendingBatch | null>(null);
   const [purpose, setPurpose] = useState("");
   const [kind, setKind] = useState<"" | "expense" | "fuel" | "income">("");
   const [settlementPending, setSettlementPending] = useState(0);
@@ -53,6 +61,57 @@ export function ApproveScreen({
   const decideSlotRef = useRef<string | null>(null);
   const PAGE = 40;
   const [billingReadonly, setBillingReadonly] = useState(false);
+
+  const fetchPendingBatch = async (): Promise<PendingBatch> => {
+    const records: MoneyRecord[] = [];
+    let offset = 0;
+    for (;;) {
+      const page = await pendingRecords({
+        purpose: purpose || undefined,
+        kind: kind || undefined,
+        limit: BATCH_PAGE,
+        offset,
+      });
+      const room = BATCH_MAX - records.length;
+      records.push(...page.slice(0, room));
+      if (page.length < BATCH_PAGE) {
+        return { records, hasMoreAvailable: false };
+      }
+      if (records.length >= BATCH_MAX) {
+        return {
+          records,
+          // With 40-item pages, reaching 100 on a full final page means the
+          // server returned records beyond the 100-item mutation cap.
+          hasMoreAvailable: page.length > room,
+        };
+      }
+      offset += page.length;
+    }
+  };
+
+  const preparePendingBatch = async (): Promise<PendingBatch | null> => {
+    if (busy || billingReadonly) return null;
+    setBusy(true);
+    try {
+      const batch = await fetchPendingBatch();
+      if (!batch.records.length) {
+        Alert.alert("Fos", "No pending records remain for these filters.");
+        await reload();
+        return null;
+      }
+      return batch;
+    } catch (e) {
+      alertFosError(e, "Could not load all pending records");
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const batchPrompt = (verb: "Approve" | "Reject", batch: PendingBatch) =>
+    batch.hasMoreAvailable
+      ? `${verb} first ${batch.records.length} pending record(s)`
+      : `${verb} all ${batch.records.length} pending record(s)`;
 
   const reload = async () => {
     const gen = ++reloadGen.current;
@@ -198,7 +257,9 @@ export function ApproveScreen({
 
   const approveAll = async () => {
     if (busy || billingReadonly || !rows.length) return;
-    const closed = rows.filter((r) => r.is_in_closed_cycle);
+    const batch = await preparePendingBatch();
+    if (!batch) return;
+    const closed = batch.records.filter((r) => r.is_in_closed_cycle);
     const go = async () => {
       if (busy || billingReadonly) {
         if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
@@ -215,7 +276,8 @@ export function ApproveScreen({
       } catch { /* API 403 if frozen */ }
       setBusy(true);
       try {
-        const slot = `a:${rows.map((r) => r.id).join(",")}`;
+        const ids = batch.records.map((r) => r.id);
+        const slot = `a:${ids.join(",")}`;
         if (approveBatchSlotRef.current !== slot) {
           approveBatchSlotRef.current = slot;
           approveBatchIdemRef.current = null;
@@ -224,7 +286,7 @@ export function ApproveScreen({
           approveBatchIdemRef.current = makeIdempotencyKey("dbatch-a");
         }
         const res = await decideBatch(
-          rows.map((r) => r.id),
+          ids,
           true,
           "",
           {
@@ -256,22 +318,27 @@ export function ApproveScreen({
     if (closed.length > 0) {
       Alert.alert(
         "Fos",
-        `${closed.length} of ${rows.length} belong to a settled period and will not change current balances. Approve all anyway?`,
+        `${batchPrompt("Approve", batch)}? ${closed.length} belong to a settled period and will not change current balances. Approve anyway?`,
         [
           { text: "Cancel", style: "cancel" },
-          { text: "Approve all", onPress: () => void go() },
+          { text: batch.hasMoreAvailable ? "Approve first 100" : "Approve all", onPress: () => void go() },
         ],
       );
       return;
     }
-    Alert.alert("Fos", `Approve all ${rows.length} pending record(s)?`, [
+    Alert.alert("Fos", `${batchPrompt("Approve", batch)}?`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Approve all", onPress: () => void go() },
+      { text: batch.hasMoreAvailable ? "Approve first 100" : "Approve all", onPress: () => void go() },
     ]);
   };
 
-  const rejectAll = async (note: string) => {
-    if (busy || billingReadonly || !rows.length) {
+  const openRejectAll = async () => {
+    const batch = await preparePendingBatch();
+    if (batch) setRejectBatch(batch);
+  };
+
+  const rejectAll = async (note: string, batch: PendingBatch) => {
+    if (busy || billingReadonly || !batch.records.length) {
       if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
       return false;
     }
@@ -287,14 +354,15 @@ export function ApproveScreen({
     setBusy(true);
     try {
       const noteKey = (note || "batch reject").replace(/\s+/g, " ").trim();
+      const ids = batch.records.map((r) => r.id);
       const key = idemKeyFor(
         rejectBatchIdemRef,
         rejectBatchSlotRef,
         "dbatch-r",
-        `r:${rows.map((r) => r.id).join(",")}:${noteKey}`,
+        `r:${ids.join(",")}:${noteKey}`,
       );
       const res = await decideBatch(
-        rows.map((r) => r.id),
+        ids,
         false,
         note || "batch reject",
         { idempotencyKey: key },
@@ -376,7 +444,7 @@ export function ApproveScreen({
           <Btn
             title="Reject all"
             variant="danger"
-            onPress={() => setRejectAllOpen(true)}
+            onPress={() => void openRejectAll()}
             disabled={busy || billingReadonly}
           />
         </Row>
@@ -469,13 +537,17 @@ export function ApproveScreen({
         }}
       />
       <NoteModal
-        visible={rejectAllOpen}
-        title="Reject all pending"
+        visible={rejectBatch != null}
+        title={rejectBatch ? `${batchPrompt("Reject", rejectBatch)}…` : "Reject pending records"}
         required
         maxLength={2000}
-        onCancel={() => setRejectAllOpen(false)}
+        confirmTitle={rejectBatch?.hasMoreAvailable ? "Reject first 100" : "Reject all"}
+        confirmVariant="danger"
+        onCancel={() => setRejectBatch(null)}
         onSubmit={async (note) => {
-          if (!(await rejectAll(note))) throw new Error("Reject all failed");
+          if (!rejectBatch || !(await rejectAll(note, rejectBatch))) {
+            throw new Error("Reject all failed");
+          }
         }}
       />
     </Screen>

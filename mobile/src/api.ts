@@ -340,12 +340,15 @@ async function request<T>(
     const timeoutMs = opts?.timeoutMs ?? REQUEST_TIMEOUT_MS;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let res: Response | null = null;
+    let text = "";
     try {
       res = await fetch(`${API_URL}${path}`, {
         ...init,
         headers,
         signal: init.signal || controller.signal,
       });
+      // Keep the timeout active while the response body is streaming too.
+      text = await res.text();
     } catch (e) {
       lastError = networkErrorFrom(e);
       if (attempt < maxAttempts && shouldSoftRetry(null, e)) {
@@ -356,7 +359,6 @@ async function request<T>(
     } finally {
       clearTimeout(timer);
     }
-    const text = await res.text();
     let data: unknown = null;
     try {
       data = text ? JSON.parse(text) : null;
@@ -414,12 +416,15 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     let res: Response | null = null;
+    let text = "";
     try {
       res = await fetch(`${API_URL}${path}`, {
         ...init,
         headers,
         signal: init.signal || controller.signal,
       });
+      // Keep the timeout active while the response body is streaming too.
+      text = await res.text();
     } catch (e) {
       lastError = networkErrorFrom(e);
       if (attempt < maxAttempts && shouldSoftRetry(null, e)) {
@@ -430,7 +435,6 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
     } finally {
       clearTimeout(timer);
     }
-    const text = await res.text();
     if (!res.ok) {
       if (res.status === 401) {
         await notifyUnauthorized(requestToken);

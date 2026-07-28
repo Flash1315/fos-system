@@ -54,17 +54,26 @@ export function HomeScreen({
   const [status, setStatus] = useState<"" | "pending" | "approved" | "rejected" | "voided">("");
   const [purpose, setPurpose] = useState("");
   const [search, setSearch] = useState("");
+  const [searchDebounced, setSearchDebounced] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const reload = async () => {
     try {
+      setLoadError("");
       const [b, org, list] = await Promise.all([
         myBalance(),
         myOrg(),
         myRecords({
           status: status && status !== "voided" ? status : undefined,
           purpose: purpose || undefined,
-          q: search.trim() || undefined,
+          q: searchDebounced || undefined,
           voided: status === "voided" ? true : status === "approved" ? false : undefined,
         }),
       ]);
@@ -120,14 +129,17 @@ export function HomeScreen({
       }
       setRows(list);
     } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Load failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Load failed");
+    } finally {
+      setLoading(false);
     }
   };
 
   useFocusEffect(reload);
   useEffect(() => {
     void reload();
-  }, [status, purpose, search]);
+  }, [status, purpose, searchDebounced]);
 
   const isManager = user?.role === "owner" || user?.role === "manager";
 
@@ -280,7 +292,19 @@ export function HomeScreen({
           />
         }
         ListHeaderComponent={<Text style={styles.section}>My records</Text>}
-        ListEmptyComponent={<Sub>No records yet</Sub>}
+        ListEmptyComponent={
+          <Sub>
+            {loading
+              ? "Loading…"
+              : loadError
+                ? `Could not load — ${loadError}`
+                : status === "voided"
+                  ? "No voided records"
+                  : status
+                    ? `No ${status} records`
+                    : "No records yet"}
+          </Sub>
+        }
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => onRecord(item.id)}>
             <Text style={styles.rowTitle}>

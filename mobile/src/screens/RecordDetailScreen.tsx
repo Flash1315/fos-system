@@ -180,6 +180,18 @@ export function RecordDetailScreen({
                 <Text style={styles.line}>{formatWhen(rec.occurred_at)}</Text>
               </>
             )}
+            {!!rec.is_in_closed_cycle && (
+              <>
+                <Label>Settlement cycle</Label>
+                <Text style={styles.line}>
+                  Falls in a settled period
+                  {rec.settlement_cutoff_at
+                    ? ` (cutoff ${formatWhen(rec.settlement_cutoff_at)})`
+                    : ""}
+                  . Does not change the current open balance.
+                </Text>
+              </>
+            )}
             {!!rec.client_name && (
               <>
                 <Label>Client</Label>

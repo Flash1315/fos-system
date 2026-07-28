@@ -20,6 +20,8 @@ export function ApproveScreen({
 }) {
   const [rows, setRows] = useState<MoneyRecord[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectAllOpen, setRejectAllOpen] = useState(false);
   const [purpose, setPurpose] = useState("");
@@ -27,6 +29,7 @@ export function ApproveScreen({
 
   const reload = async () => {
     try {
+      setLoadError("");
       setRows(
         await pendingRecords({
           purpose: purpose || undefined,
@@ -34,7 +37,10 @@ export function ApproveScreen({
         }),
       );
     } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -44,6 +50,29 @@ export function ApproveScreen({
   }, [purpose, kind]);
 
   const runDecide = async (id: number, approve: boolean, note = "") => {
+    if (approve) {
+      const row = rows.find((r) => r.id === id);
+      if (row?.is_in_closed_cycle) {
+        Alert.alert(
+          "Fos",
+          `This belongs to a settled period${
+            row.settlement_cutoff_at ? ` (cutoff ${formatWhen(row.settlement_cutoff_at)})` : ""
+          }. Approving will not change the current balance. Continue?`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Approve anyway",
+              onPress: () => void doDecide(id, true, note),
+            },
+          ],
+        );
+        return;
+      }
+    }
+    await doDecide(id, approve, note);
+  };
+
+  const doDecide = async (id: number, approve: boolean, note = "") => {
     setBusy(true);
     try {
       await decideRecord(id, approve, note);
@@ -136,7 +165,15 @@ export function ApproveScreen({
             }}
           />
         }
-        ListEmptyComponent={<Sub>No pending records</Sub>}
+        ListEmptyComponent={
+          <Sub>
+            {loading
+              ? "Loading…"
+              : loadError
+                ? `Could not load — ${loadError}`
+                : "No pending records"}
+          </Sub>
+        }
         renderItem={({ item }) => (
           <View style={styles.row}>
             <Text style={styles.rowTitle} onPress={() => onRecord(item.id)}>
@@ -152,6 +189,15 @@ export function ApproveScreen({
                   : ""}
             </Text>
             <Text style={styles.rowMeta}>{formatWhen(item.created_at)}</Text>
+            {!!item.is_in_closed_cycle && (
+              <Text style={styles.warn}>
+                Settled period
+                {item.settlement_cutoff_at
+                  ? ` · cutoff ${formatWhen(item.settlement_cutoff_at)}`
+                  : ""}{" "}
+                — will not change current balance
+              </Text>
+            )}
             <Row>
               <Btn title="Approve" disabled={busy} onPress={() => runDecide(item.id, true)} />
               <Btn
@@ -195,4 +241,5 @@ const styles = StyleSheet.create({
   row: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 8 },
   rowTitle: { color: colors.text, fontWeight: "600", textTransform: "capitalize" },
   rowMeta: { color: colors.muted, marginTop: 4 },
+  warn: { color: colors.warning, marginTop: 6, fontSize: 13 },
 });

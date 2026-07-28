@@ -46,7 +46,12 @@ def _normalize_payment_fields(kind: RecordKind, source: str, method: str) -> tup
 
 
 def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
-    from app.services.balances import can_void_record, void_blocked_reason
+    from app.services.balances import (
+        can_void_record,
+        record_in_closed_cycle,
+        record_settlement_cutoff_at,
+        void_blocked_reason,
+    )
 
     creator = db.get(User, rec.created_by)
     decider = db.get(User, rec.decided_by) if rec.decided_by else None
@@ -57,6 +62,8 @@ def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
             "decided_by_name": decider.full_name if decider else "",
             "can_void": can_void_record(db, rec),
             "void_blocked_reason": void_blocked_reason(db, rec),
+            "is_in_closed_cycle": record_in_closed_cycle(db, rec),
+            "settlement_cutoff_at": record_settlement_cutoff_at(db, rec),
         }
     )
 

@@ -43,6 +43,8 @@ export type MoneyRecord = {
   transfer_group_id?: string | null;
   can_void?: boolean;
   void_blocked_reason?: string | null;
+  is_in_closed_cycle?: boolean;
+  settlement_cutoff_at?: string | null;
 };
 
 export type OrgReport = {

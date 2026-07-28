@@ -530,8 +530,15 @@ def test_occurred_at_affects_spendings_cutoff(client):
         },
     )
     assert late.status_code == 200
+    pending_late = late.json()
+    assert pending_late["is_in_closed_cycle"] is True
+    assert pending_late["settlement_cutoff_at"]
     client.post(f"/records/{late.json()['id']}/decide", headers=h, json={"approve": True})
     assert client.get("/records/balance/me", headers=h).json()["spendings"] == 0
+    locked = client.get(f"/records/{late.json()['id']}", headers=h).json()
+    assert locked["is_in_closed_cycle"] is True
+    assert locked["can_void"] is False
+    assert "Cutoff" in (locked["void_blocked_reason"] or "")
     # Fresh expense (no occurred_at) does count
     fresh = client.post(
         "/records",
@@ -546,6 +553,9 @@ def test_occurred_at_affects_spendings_cutoff(client):
     ).json()["id"]
     client.post(f"/records/{fresh}/decide", headers=h, json={"approve": True})
     assert client.get("/records/balance/me", headers=h).json()["spendings"] == 3000
+    fresh_row = client.get(f"/records/{fresh}", headers=h).json()
+    assert fresh_row["is_in_closed_cycle"] is False
+    assert fresh_row["can_void"] is True
 
 
 def test_password_and_settlement_request(client):

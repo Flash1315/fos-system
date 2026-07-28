@@ -11,6 +11,7 @@ import {
   type User,
 } from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
+import { formatWhen } from "../format";
 
 export function CreateScreen({
   busy,
@@ -47,6 +48,7 @@ export function CreateScreen({
   const [occurredDate, setOccurredDate] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [lastOdo, setLastOdo] = useState<number | null>(null);
+  const [closedCycleHint, setClosedCycleHint] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -64,6 +66,48 @@ export function CreateScreen({
       }
     })();
   }, [kind]);
+
+  useEffect(() => {
+    if (!occurredDate.trim()) {
+      setClosedCycleHint("");
+      return;
+    }
+    const day = occurredDate.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      setClosedCycleHint("");
+      return;
+    }
+    (async () => {
+      try {
+        const bal = await myBalance();
+        const cashTrack =
+          kind === "income"
+            ? paymentMethod === "cash"
+            : paymentSource === "cash_on_hand";
+        const spendTrack =
+          kind !== "income" && paymentSource === "my_pocket";
+        const cutoff = cashTrack
+          ? bal.last_income_handover_at
+          : spendTrack
+            ? bal.last_expense_payout_at
+            : null;
+        if (!cutoff) {
+          setClosedCycleHint("");
+          return;
+        }
+        const cutDay = cutoff.slice(0, 10);
+        if (day <= cutDay) {
+          setClosedCycleHint(
+            `This date falls in a settled period (cutoff ${formatWhen(cutoff)}). Approving will not change the current balance — use an adjustment for the open cycle if needed.`,
+          );
+        } else {
+          setClosedCycleHint("");
+        }
+      } catch {
+        setClosedCycleHint("");
+      }
+    })();
+  }, [occurredDate, kind, paymentSource, paymentMethod]);
 
   useEffect(() => {
     if (!isManager) return;
@@ -207,6 +251,7 @@ export function CreateScreen({
         <Field editable={false} value={String(value)} />
         <Label>When</Label>
         <Field editable={false} value={occurredDate || "now"} />
+        {!!closedCycleHint && <Sub>{closedCycleHint}</Sub>}
         <Label>Category</Label>
         <Field editable={false} value={category || "—"} />
         <Label>Place</Label>
@@ -286,6 +331,7 @@ export function CreateScreen({
       <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
       <Label>When (optional YYYY-MM-DD)</Label>
       <Field autoCapitalize="none" value={occurredDate} onChangeText={setOccurredDate} placeholder="leave empty = now" />
+      {!!closedCycleHint && <Sub>{closedCycleHint}</Sub>}
       <Label>Category</Label>
       <View style={styles.kinds}>
         {categories.map((c) => (

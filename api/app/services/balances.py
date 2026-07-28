@@ -60,16 +60,30 @@ def record_locked_by_settlement(db: Session, rec: MoneyRecord) -> bool:
     """True if a non-voided payout cutoff already includes this record."""
     if rec.status != RecordStatus.approved or rec.is_voided:
         return False
+    return record_in_closed_cycle(db, rec)
+
+
+def record_settlement_cutoff_at(db: Session, rec: MoneyRecord):
+    """Latest non-voided payout cutoff that would apply to this record's track."""
     kind = settlement_kind_for_record(rec)
     if kind is None:
-        return False
+        return None
     cut = last_payout(db, rec.organization_id, rec.created_by, kind)
+    return cut.created_at if cut else None
+
+
+def record_in_closed_cycle(db: Session, rec: MoneyRecord) -> bool:
+    """True if the record's effective date falls at/before the track's last payout.
+
+    Applies to pending and approved records so UI can warn before approve.
+    """
+    cut = record_settlement_cutoff_at(db, rec)
     if cut is None:
         return False
     eff = record_effective_at(rec)
     if eff is None:
         return False
-    return eff <= cut.created_at
+    return eff <= cut
 
 
 def can_void_record(db: Session, rec: MoneyRecord) -> bool:
@@ -95,9 +109,15 @@ def void_blocked_reason(db: Session, rec: MoneyRecord) -> str | None:
         return None
     if can_void_record(db, rec):
         return None
+    cut = record_settlement_cutoff_at(db, rec)
+    stamp = cut.isoformat(timespec="seconds") if cut is not None else None
     if rec.transfer_group_id:
-        return "Locked by a settlement on a linked transfer leg. Void the latest payout first."
-    return "Locked by a settlement. Void the latest payout first."
+        base = "Locked by a settlement on a linked transfer leg. Void the latest payout first."
+    else:
+        base = "Locked by a settlement. Void the latest payout first."
+    if stamp:
+        return f"{base} Cutoff {stamp}."
+    return base
 
 
 def settlement_kind_for_adjustment(track: AdjustmentTrack) -> PayoutKind:

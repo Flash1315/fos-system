@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.25"
+    assert health.json()["version"] == "0.7.26"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -5141,3 +5141,50 @@ def test_fuel_caps_date_span_and_export_charset(client):
     team = client.get("/records/balance/team", headers=h)
     assert team.status_code == 200
     assert isinstance(team.json(), list)
+
+
+def test_login_slug_norm_telegram_and_security_headers(client):
+    owner = _register(client, "flow-0726", "v0726-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    # Slug / email case + whitespace still authenticate
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "  V0726-Owner@Example.com ",
+            "password": "secret12",
+            "organization_slug": " Flow-0726 ",
+        },
+    )
+    assert login.status_code == 200, login.text
+
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["version"] == "0.7.26"
+    assert health.headers.get("x-content-type-options") == "nosniff"
+    assert health.headers.get("x-frame-options") == "DENY"
+    assert health.headers.get("referrer-policy") == "no-referrer"
+
+    bad_tg = client.post(
+        "/integrations/telegram/chat",
+        headers=h,
+        json={"telegram_chat_id": "not a chat"},
+    )
+    assert bad_tg.status_code == 422
+
+    ok_tg = client.post(
+        "/integrations/telegram/chat",
+        headers=h,
+        json={"telegram_chat_id": "-100123"},
+    )
+    assert ok_tg.status_code == 200, ok_tg.text
+    assert ok_tg.json()["telegram_chat_id"] == "-100123"
+
+    csv = client.get("/reports/export.csv?days=7", headers=h)
+    assert csv.status_code == 200
+    cd = csv.headers.get("content-disposition") or ""
+    assert 'filename="fos-export-7d.csv"' in cd
+    assert "filename*=UTF-8''" in cd
+
+    huge = client.get("/adjustments?limit=501", headers=h)
+    assert huge.status_code == 422

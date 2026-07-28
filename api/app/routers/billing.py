@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
+import re
 
 from app.auth import get_current_user, require_roles
 from app.config import settings
@@ -28,7 +29,17 @@ class TelegramChatIn(BaseModel):
     @field_validator("telegram_chat_id")
     @classmethod
     def chat_trim(cls, v: str) -> str:
-        return (v or "").strip()
+        raw = (v or "").strip()
+        if not raw:
+            return ""
+        # Numeric chat ids (users / groups / channels) or @username
+        if re.fullmatch(r"-?\d{1,20}", raw):
+            return raw
+        if re.fullmatch(r"@[A-Za-z0-9_]{5,32}", raw):
+            return raw
+        raise ValueError(
+            "telegram_chat_id must be a numeric chat id or @username (5–32 chars)"
+        )
 
 
 class PlanIn(BaseModel):

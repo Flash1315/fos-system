@@ -101,7 +101,7 @@ def list_adjustments(
     voided: bool | None = None,
     user_id: int | None = None,
     track: AdjustmentTrack | None = None,
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0, le=10000),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),

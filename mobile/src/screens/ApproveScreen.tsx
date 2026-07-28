@@ -39,7 +39,9 @@ export function ApproveScreen({
   const [settlementPending, setSettlementPending] = useState(0);
   const reloadGen = useRef(0);
   const approveBatchIdemRef = useRef<string | null>(null);
+  const approveBatchSlotRef = useRef<string | null>(null);
   const rejectBatchIdemRef = useRef<string | null>(null);
+  const rejectBatchSlotRef = useRef<string | null>(null);
   const decideIdemRef = useRef<string | null>(null);
   const decideSlotRef = useRef<string | null>(null);
   const PAGE = 40;
@@ -99,6 +101,10 @@ export function ApproveScreen({
   };
 
   useEffect(() => {
+    approveBatchIdemRef.current = null;
+    approveBatchSlotRef.current = null;
+    rejectBatchIdemRef.current = null;
+    rejectBatchSlotRef.current = null;
     void reload();
   }, [purpose, kind]);
 
@@ -163,6 +169,11 @@ export function ApproveScreen({
       if (busy) return;
       setBusy(true);
       try {
+        const slot = `a:${rows.map((r) => r.id).join(",")}`;
+        if (approveBatchSlotRef.current !== slot) {
+          approveBatchSlotRef.current = slot;
+          approveBatchIdemRef.current = null;
+        }
         if (!approveBatchIdemRef.current) {
           approveBatchIdemRef.current = makeIdempotencyKey("dbatch-a");
         }
@@ -173,6 +184,7 @@ export function ApproveScreen({
           { idempotencyKey: approveBatchIdemRef.current },
         );
         approveBatchIdemRef.current = null;
+        approveBatchSlotRef.current = null;
         if (res.skipped > 0) {
           const cash = res.skipped_insufficient_cash || 0;
           const inactive = res.skipped_inactive || 0;
@@ -211,6 +223,11 @@ export function ApproveScreen({
     if (busy || !rows.length) return;
     setBusy(true);
     try {
+      const slot = `r:${rows.map((r) => r.id).join(",")}`;
+      if (rejectBatchSlotRef.current !== slot) {
+        rejectBatchSlotRef.current = slot;
+        rejectBatchIdemRef.current = null;
+      }
       if (!rejectBatchIdemRef.current) {
         rejectBatchIdemRef.current = makeIdempotencyKey("dbatch-r");
       }
@@ -221,6 +238,7 @@ export function ApproveScreen({
         { idempotencyKey: rejectBatchIdemRef.current },
       );
       rejectBatchIdemRef.current = null;
+      rejectBatchSlotRef.current = null;
       if (res.skipped > 0) {
         const cash = res.skipped_insufficient_cash || 0;
         const inactive = res.skipped_inactive || 0;

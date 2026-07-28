@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 
 from app.alembic_runner import run_alembic_upgrade
@@ -22,7 +23,7 @@ Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.7.25")
+app = FastAPI(title=settings.app_name, version="0.7.26")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 # Bearer-token auth does not use cookies; credentials+wildcard is unnecessary.
@@ -33,6 +34,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "geolocation=(), microphone=(), camera=()",
+        )
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(auth_router.router)
 app.include_router(records_router.router)
@@ -50,7 +67,7 @@ def health():
     return {
         "ok": True,
         "app": settings.app_name,
-        "version": "0.7.25",
+        "version": "0.7.26",
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }
 

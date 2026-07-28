@@ -63,6 +63,7 @@ export function HomeScreen({
   const [loadError, setLoadError] = useState("");
   const reloadGen = useRef(0);
   const requestIdemRef = useRef<string | null>(null);
+  const requestSlotRef = useRef<string | null>(null);
   const PAGE = 40;
 
   useEffect(() => {
@@ -201,6 +202,11 @@ export function HomeScreen({
         text: "Send",
         onPress: async () => {
           if (requestBusy) return;
+          const slot = `${kind}:${amount}`;
+          if (requestSlotRef.current !== slot) {
+            requestSlotRef.current = slot;
+            requestIdemRef.current = null;
+          }
           if (!requestIdemRef.current) requestIdemRef.current = makeIdempotencyKey("sreq");
           setRequestBusy(true);
           try {
@@ -216,6 +222,7 @@ export function HomeScreen({
               { idempotencyKey: requestIdemRef.current },
             );
             requestIdemRef.current = null;
+            requestSlotRef.current = null;
             Alert.alert("Fos", "Settlement request sent");
             await reload();
           } catch (e) {

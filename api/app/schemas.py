@@ -111,6 +111,19 @@ class LoginIn(BaseModel):
     password: str
     organization_slug: str
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def email_norm(cls, v):
+        return str(v or "").strip().lower()
+
+    @field_validator("organization_slug", mode="before")
+    @classmethod
+    def slug_norm(cls, v):
+        slug = str(v or "").strip().lower()
+        if not slug:
+            raise ValueError("organization_slug is required")
+        return slug
+
 
 class InviteIn(BaseModel):
     email: EmailStr

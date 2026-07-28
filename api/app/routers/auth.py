@@ -116,12 +116,14 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
 
 
 def _authenticate_login(body: LoginIn, db: Session) -> TokenOut:
-    org = db.query(Organization).filter(Organization.slug == body.organization_slug).first()
+    slug = (body.organization_slug or "").strip().lower()
+    email = (body.email or "").strip().lower()
+    org = db.query(Organization).filter(Organization.slug == slug).first()
     if not org:
         raise HTTPException(401, "Invalid credentials")
     user = (
         db.query(User)
-        .filter(User.organization_id == org.id, User.email == body.email.lower())
+        .filter(User.organization_id == org.id, User.email == email)
         .first()
     )
     if not user or not user.is_active:

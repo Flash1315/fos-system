@@ -519,8 +519,15 @@ def export_csv(
     stamp = (date_from or date_to or (f"{days}d" if days else "all"))
     safe = "".join(ch if ch.isalnum() or ch in "-_." else "-" for ch in str(stamp))[:48] or "all"
     filename = f"fos-export-{safe}.csv"
+    # ASCII filename + RFC 5987 UTF-8 fallback for clients that support it
+    from urllib.parse import quote
+
+    disposition = (
+        f'attachment; filename="{filename}"; '
+        f"filename*=UTF-8''{quote(filename)}"
+    )
     return PlainTextResponse(
         buf.getvalue(),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": disposition},
     )

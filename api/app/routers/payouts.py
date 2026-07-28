@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -236,6 +236,8 @@ def create_payout(
 def my_payouts(
     voided: bool | None = None,
     kind: PayoutKind | None = None,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -248,7 +250,7 @@ def my_payouts(
         q = q.filter(Payout.is_voided.is_(False))
     if kind is not None:
         q = q.filter(Payout.kind == kind)
-    rows = q.order_by(Payout.created_at.desc()).limit(50).all()
+    rows = q.order_by(Payout.created_at.desc()).offset(offset).limit(limit).all()
     return [_payout_out(db, r, user.full_name) for r in rows]
 
 
@@ -257,6 +259,8 @@ def org_payouts(
     voided: bool | None = None,
     user_id: int | None = None,
     kind: PayoutKind | None = None,
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -269,7 +273,7 @@ def org_payouts(
         q = q.filter(Payout.user_id == user_id)
     if kind is not None:
         q = q.filter(Payout.kind == kind)
-    rows = q.order_by(Payout.created_at.desc()).limit(100).all()
+    rows = q.order_by(Payout.created_at.desc()).offset(offset).limit(limit).all()
     out = []
     for r in rows:
         u = db.get(User, r.user_id)

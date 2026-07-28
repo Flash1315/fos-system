@@ -56,13 +56,24 @@ export function HomeScreen({
   const [searchDebounced, setSearchDebounced] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [loadError, setLoadError] = useState("");
   const reloadGen = useRef(0);
+  const PAGE = 40;
 
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounced(search.trim()), 350);
     return () => clearTimeout(t);
   }, [search]);
+
+  const recordParams = () => ({
+    status: status && status !== "voided" ? status : undefined,
+    purpose: purpose || undefined,
+    q: searchDebounced || undefined,
+    voided: status === "voided" ? true : status === "approved" ? false : undefined,
+    limit: PAGE,
+  });
 
   const reload = async () => {
     const gen = ++reloadGen.current;
@@ -72,12 +83,7 @@ export function HomeScreen({
       const [b, org, list] = await Promise.all([
         myBalance(),
         myOrg(),
-        myRecords({
-          status: status && status !== "voided" ? status : undefined,
-          purpose: purpose || undefined,
-          q: searchDebounced || undefined,
-          voided: status === "voided" ? true : status === "approved" ? false : undefined,
-        }),
+        myRecords({ ...recordParams(), offset: 0 }),
       ]);
       if (gen !== reloadGen.current) return;
       setBalance(formatMoney(b.cash_on_hand, b.currency));
@@ -110,9 +116,9 @@ export function HomeScreen({
       setOrgSlug(org.slug);
       if (user?.role === "owner" || user?.role === "manager") {
         try {
-          const pend = await pendingRecords();
+          const pend = await pendingRecords({ limit: 100 });
           if (gen !== reloadGen.current) return;
-          setPendingCount(pend.length);
+          setPendingCount(pend.length >= 100 ? 100 : pend.length);
         } catch {
           if (gen !== reloadGen.current) return;
           /* keep previous org pending count — do not substitute personal pending */
@@ -137,13 +143,32 @@ export function HomeScreen({
         }
       }
       setRows(list);
+      setHasMore(list.length >= PAGE);
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setRows([]);
+      setHasMore(false);
       setLoadError(e instanceof Error ? e.message : "Load failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Load failed");
     } finally {
       if (gen === reloadGen.current) setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore || loading) return;
+    const gen = reloadGen.current;
+    setLoadingMore(true);
+    try {
+      const more = await myRecords({ ...recordParams(), offset: rows.length });
+      if (gen !== reloadGen.current) return;
+      setRows((prev) => [...prev, ...more]);
+      setHasMore(more.length >= PAGE);
+    } catch (e) {
+      if (gen !== reloadGen.current) return;
+      Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -302,6 +327,16 @@ export function HomeScreen({
           />
         }
         ListHeaderComponent={<Text style={styles.section}>My records</Text>}
+        ListFooterComponent={
+          hasMore ? (
+            <Btn
+              title={loadingMore ? "…" : "Load more"}
+              variant="ghost"
+              disabled={loadingMore}
+              onPress={() => void loadMore()}
+            />
+          ) : null
+        }
         ListEmptyComponent={
           <Sub>
             {loading

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.schemas import MemberOut, MemberActiveIn, MemberRoleIn, MemberPasswordResetIn
-from app.auth import get_current_user, require_roles, hash_password
+from app.auth import bump_token_version, get_current_user, require_roles, hash_password
 from app.db import get_db
 from app.models import User, UserRole
 
@@ -63,6 +63,9 @@ def set_member_active(
         if owners <= 1:
             raise HTTPException(400, "Cannot deactivate the last active owner")
     member.is_active = body.is_active
+    if not body.is_active:
+        bump_token_version(member)
+        member.invite_token = None
     db.commit()
     db.refresh(member)
     return MemberOut.model_validate(member)
@@ -109,6 +112,9 @@ def reset_member_password(
     if not member or member.organization_id != user.organization_id:
         raise HTTPException(404, "User not found")
     member.hashed_password = hash_password(body.new_password)
+    bump_token_version(member)
+    member.must_set_password = False
+    member.invite_token = None
     db.commit()
     db.refresh(member)
     return MemberOut.model_validate(member)

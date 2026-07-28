@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -264,6 +264,8 @@ def my_records(
     purpose: str | None = None,
     q: str | None = None,
     voided: bool | None = None,
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -290,7 +292,12 @@ def my_records(
             | (MoneyRecord.bike.ilike(like))
             | (MoneyRecord.client_name.ilike(like))
         )
-    rows = query.order_by(MoneyRecord.created_at.desc()).limit(100).all()
+    rows = (
+        query.order_by(MoneyRecord.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return [_record_out(db, r) for r in rows]
 
 
@@ -302,6 +309,8 @@ def org_records(
     created_by: int | None = None,
     q: str | None = None,
     voided: bool | None = None,
+    limit: int = Query(200, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -327,7 +336,12 @@ def org_records(
             | (MoneyRecord.bike.ilike(like))
             | (MoneyRecord.client_name.ilike(like))
         )
-    rows = query.order_by(MoneyRecord.created_at.desc()).limit(200).all()
+    rows = (
+        query.order_by(MoneyRecord.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return [_record_out(db, r) for r in rows]
 
 
@@ -335,6 +349,8 @@ def org_records(
 def pending_records(
     purpose: str | None = None,
     kind: RecordKind | None = None,
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -346,7 +362,7 @@ def pending_records(
         q = q.filter(MoneyRecord.purpose == purpose)
     if kind:
         q = q.filter(MoneyRecord.kind == kind)
-    rows = q.order_by(MoneyRecord.created_at.asc()).limit(100).all()
+    rows = q.order_by(MoneyRecord.created_at.asc()).offset(offset).limit(limit).all()
     return [_record_out(db, r) for r in rows]
 
 

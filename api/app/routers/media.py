@@ -4,11 +4,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
-from app.config import settings
+from app.auth import get_current_user, user_from_token
 from app.db import get_db
 from app.models import User
 from app.schemas import PhotoOut
@@ -22,15 +20,7 @@ _optional_bearer = HTTPBearer(auto_error=False)
 
 
 def _user_from_token(token: str, db: Session) -> User:
-    try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        user_id = int(payload.get("sub", 0))
-    except (JWTError, ValueError, TypeError) as exc:
-        raise HTTPException(401, "Could not validate credentials") from exc
-    user = db.get(User, user_id)
-    if not user or not user.is_active:
-        raise HTTPException(401, "Could not validate credentials")
-    return user
+    return user_from_token(token, db)
 
 
 @router.post("/media/photo", response_model=PhotoOut)

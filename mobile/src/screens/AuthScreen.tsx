@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Alert } from "react-native";
-import { login, registerOrg, type User } from "../api";
+import { acceptInvite, login, registerOrg, type User } from "../api";
 import { storageGet, storageSet } from "../storage";
 import { Brand, Btn, Card, Field, Label, LinkText, Screen, Sub } from "../components/ui";
 
@@ -26,13 +26,14 @@ export function AuthScreen({
   setBusy: (v: boolean) => void;
   onDone: (token: string, user: User) => void;
 }) {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "invite">("login");
   const [orgSlug, setOrgSlug] = useState("");
   const [orgName, setOrgName] = useState("");
   const [currency, setCurrency] = useState("IDR");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteToken, setInviteToken] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberedSlug, setRememberedSlug] = useState<string | null>(null);
 
@@ -62,6 +63,29 @@ export function AuthScreen({
   };
 
   const submit = async () => {
+    if (mode === "invite") {
+      if (!inviteToken.trim() || inviteToken.trim().length < 16) {
+        Alert.alert("Fos", "Paste the invite token from your manager");
+        return;
+      }
+      if (password.length < 6) {
+        Alert.alert("Fos", "Password must be at least 6 characters");
+        return;
+      }
+      setBusy(true);
+      try {
+        const res = await acceptInvite(inviteToken.trim(), password);
+        if (res.user?.email) {
+          await storageSet(LAST_EMAIL_KEY, res.user.email);
+        }
+        onDone(res.access_token, res.user);
+      } catch (e) {
+        Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (!orgSlug.trim()) {
       Alert.alert("Fos", "Organization slug is required");
       return;
@@ -119,8 +143,10 @@ export function AuthScreen({
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed";
       const friendly =
-        /invalid|credential|401|unauthorized/i.test(msg)
-          ? "Check company slug, email, and password. Invited teammates use the slug from their manager — not Register."
+        /invalid|credential|401|unauthorized|accept invite/i.test(msg)
+          ? msg.includes("Accept invite")
+            ? msg
+            : "Check company slug, email, and password. Invited teammates use Accept invite or the slug from their manager — not Register."
           : msg;
       Alert.alert("Fos", friendly);
     } finally {
@@ -134,51 +160,86 @@ export function AuthScreen({
       <Sub>Field money. Clear books.</Sub>
       <Sub>
         {mode === "login"
-          ? "Joining a team? Use the company slug and password from your manager. Register only to create a new company."
-          : "Creates your organization and owner account."}
+          ? "Joining a team? Use the company slug and password from your manager — or Accept invite with a token."
+          : mode === "invite"
+            ? "Paste the invite token and choose your password."
+            : "Creates your organization and owner account."}
       </Sub>
       {mode === "login" && !!rememberedSlug && (
         <Sub>Remembered company: /{rememberedSlug}</Sub>
       )}
       <Card>
-        <Label>Organization slug</Label>
-        <Field autoCapitalize="none" value={orgSlug} onChangeText={setOrgSlug} placeholder="my-company" />
-        {mode === "register" && (
+        {mode === "invite" ? (
           <>
-            <Label>Company name</Label>
-            <Field value={orgName} onChangeText={setOrgName} placeholder="Acme Field Ops" />
-            <Label>Currency</Label>
-            <Field autoCapitalize="characters" value={currency} onChangeText={setCurrency} placeholder="IDR" />
-            <Label>Your name</Label>
-            <Field value={name} onChangeText={setName} placeholder="Alex" />
+            <Label>Invite token</Label>
+            <Field
+              autoCapitalize="none"
+              value={inviteToken}
+              onChangeText={setInviteToken}
+              placeholder="paste token from manager"
+            />
+            <Label>New password</Label>
+            <Field
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="min 6 characters"
+            />
+            <LinkText onPress={() => setShowPassword((v) => !v)}>
+              {showPassword ? "Hide password" : "Show password"}
+            </LinkText>
+            <Btn title={busy ? "…" : "Accept invite"} onPress={submit} disabled={busy} />
+          </>
+        ) : (
+          <>
+            <Label>Organization slug</Label>
+            <Field autoCapitalize="none" value={orgSlug} onChangeText={setOrgSlug} placeholder="my-company" />
+            {mode === "register" && (
+              <>
+                <Label>Company name</Label>
+                <Field value={orgName} onChangeText={setOrgName} placeholder="Acme Field Ops" />
+                <Label>Currency</Label>
+                <Field autoCapitalize="characters" value={currency} onChangeText={setCurrency} placeholder="IDR" />
+                <Label>Your name</Label>
+                <Field value={name} onChangeText={setName} placeholder="Alex" />
+              </>
+            )}
+            <Label>Email</Label>
+            <Field
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@example.com"
+            />
+            <Label>Password</Label>
+            <Field
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="min 6 characters"
+            />
+            <LinkText onPress={() => setShowPassword((v) => !v)}>
+              {showPassword ? "Hide password" : "Show password"}
+            </LinkText>
+            <Btn title={busy ? "…" : mode === "login" ? "Log in" : "Create company"} onPress={submit} disabled={busy} />
+            {mode === "login" && DEMO_ENABLED && (
+              <Btn title="Use demo workspace" variant="ghost" onPress={fillDemo} disabled={busy} />
+            )}
           </>
         )}
-        <Label>Email</Label>
-        <Field
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-          placeholder="you@example.com"
-        />
-        <Label>Password</Label>
-        <Field
-          secureTextEntry={!showPassword}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="min 6 characters"
-        />
-        <LinkText onPress={() => setShowPassword((v) => !v)}>
-          {showPassword ? "Hide password" : "Show password"}
-        </LinkText>
-        <Btn title={busy ? "…" : mode === "login" ? "Log in" : "Create company"} onPress={submit} disabled={busy} />
-        {mode === "login" && DEMO_ENABLED && (
-          <Btn title="Use demo workspace" variant="ghost" onPress={fillDemo} disabled={busy} />
-        )}
       </Card>
-      <LinkText onPress={() => setMode(mode === "login" ? "register" : "login")}>
-        {mode === "login" ? "New company? Register" : "Have an account? Log in"}
-      </LinkText>
+      {mode === "login" && (
+        <LinkText onPress={() => setMode("invite")}>Have an invite token? Accept invite</LinkText>
+      )}
+      {mode === "invite" && (
+        <LinkText onPress={() => setMode("login")}>Back to log in</LinkText>
+      )}
+      {mode !== "invite" && (
+        <LinkText onPress={() => setMode(mode === "login" ? "register" : "login")}>
+          {mode === "login" ? "New company? Register" : "Have an account? Log in"}
+        </LinkText>
+      )}
     </Screen>
   );
 }

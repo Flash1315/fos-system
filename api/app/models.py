@@ -55,6 +55,11 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.employee)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Bumped on password change/reset so existing JWTs stop working
+    token_version: Mapped[int] = mapped_column(Integer, default=0)
+    # One-time invite acceptance (optional password invite)
+    invite_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    must_set_password: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     organization: Mapped[Organization] = relationship(back_populates="users")

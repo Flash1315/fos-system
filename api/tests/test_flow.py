@@ -573,6 +573,13 @@ def test_password_and_settlement_request(client):
         json={"current_password": "secret12", "new_password": "newsecret"},
     )
     assert ok.status_code == 200
+    body = ok.json()
+    assert "access_token" in body
+    new_h = {"Authorization": f"Bearer {body['access_token']}"}
+    assert client.get("/auth/me", headers=new_h).status_code == 200
+    # Old JWT revoked after password change
+    assert client.get("/auth/me", headers=h).status_code == 401
+    h = new_h
 
     inv = client.post(
         "/orgs/invite",
@@ -738,12 +745,24 @@ def test_owner_resets_member_password(client):
     )
     assert inv.status_code == 200
     emp_id = inv.json()["id"]
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "reset-emp@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-reset",
+        },
+    )
+    assert login.status_code == 200
+    old_emp_h = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert client.get("/auth/me", headers=old_emp_h).status_code == 200
     reset = client.post(
         f"/orgs/members/{emp_id}/password",
         headers=h,
         json={"new_password": "brandnew1"},
     )
     assert reset.status_code == 200, reset.text
+    assert client.get("/auth/me", headers=old_emp_h).status_code == 401
     bad = client.post(
         "/auth/login",
         json={
@@ -2333,4 +2352,79 @@ def test_fuel_odometer_checked_on_approve(client):
     denied = client.post(f"/records/{low.json()['id']}/decide", headers=h, json={"approve": True})
     assert denied.status_code == 400
     assert "odometer" in denied.json()["detail"].lower()
+
+def test_invite_token_accept_and_pagination(client):
+    owner = _register(client, "flow-invite-tok", "invtok-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "invtok-emp@example.com",
+            "full_name": "Inv Emp",
+            "role": "employee",
+        },
+    )
+    assert inv.status_code == 200, inv.text
+    body = inv.json()
+    assert body["must_set_password"] is True
+    assert body["invite_token"]
+    assert body["organization_slug"] == "flow-invite-tok"
+    blocked = client.post(
+        "/auth/login",
+        json={
+            "email": "invtok-emp@example.com",
+            "password": "whatever1",
+            "organization_slug": "flow-invite-tok",
+        },
+    )
+    assert blocked.status_code == 401
+    accept = client.post(
+        "/auth/accept-invite",
+        json={"token": body["invite_token"], "password": "chosen99"},
+    )
+    assert accept.status_code == 200, accept.text
+    assert "access_token" in accept.json()
+    eh = {"Authorization": f"Bearer {accept.json()['access_token']}"}
+    assert client.get("/auth/me", headers=eh).status_code == 200
+    again = client.post(
+        "/auth/accept-invite",
+        json={"token": body["invite_token"], "password": "chosen99"},
+    )
+    assert again.status_code == 400
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "invtok-emp@example.com",
+            "password": "chosen99",
+            "organization_slug": "flow-invite-tok",
+        },
+    )
+    assert login.status_code == 200
+
+    for i in range(5):
+        r = client.post(
+            "/records",
+            headers=eh,
+            json={
+                "kind": "expense",
+                "amount": 100 + i,
+                "category": "Supplies",
+                "purpose": "Office",
+                "payment_source": "my_pocket",
+            },
+        )
+        assert r.status_code == 200, r.text
+    page1 = client.get("/records/mine?limit=2&offset=0", headers=eh)
+    page2 = client.get("/records/mine?limit=2&offset=2", headers=eh)
+    assert page1.status_code == 200
+    assert page2.status_code == 200
+    assert len(page1.json()) == 2
+    assert len(page2.json()) == 2
+    ids1 = {row["id"] for row in page1.json()}
+    ids2 = {row["id"] for row in page2.json()}
+    assert ids1.isdisjoint(ids2)
+    org_page = client.get("/records/org?limit=2&offset=0", headers=h)
+    assert org_page.status_code == 200
+    assert len(org_page.json()) == 2
 

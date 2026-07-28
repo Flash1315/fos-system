@@ -20,6 +20,7 @@ export function InviteScreen({
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [setTempPassword, setSetTempPassword] = useState(false);
   const [orgSlug, setOrgSlug] = useState("");
   const [slugError, setSlugError] = useState("");
   const [role, setRole] = useState<"employee" | "manager" | "owner">("employee");
@@ -48,22 +49,33 @@ export function InviteScreen({
       Alert.alert("Fos", "Company slug not loaded — tap Retry first");
       return;
     }
-    if (!email.trim() || !fullName.trim() || password.length < 6) {
-      Alert.alert("Fos", "Name, email, and password (6+) required");
+    if (!email.trim() || !fullName.trim()) {
+      Alert.alert("Fos", "Name and email required");
+      return;
+    }
+    if (setTempPassword && password.length < 6) {
+      Alert.alert("Fos", "Temporary password must be at least 6 characters");
       return;
     }
     setBusy(true);
     try {
-      await inviteUser({
+      const res = await inviteUser({
         email: email.trim(),
         full_name: fullName.trim(),
         role,
-        password,
+        ...(setTempPassword ? { password } : {}),
       });
-      Alert.alert(
-        "Fos",
-        `Teammate invited.\n\nShare login:\nSlug: ${orgSlug}\nEmail: ${email.trim()}\nPassword: (the one you set)`,
-      );
+      if (res.invite_token) {
+        Alert.alert(
+          "Fos",
+          `Teammate invited.\n\nShare:\nSlug: ${orgSlug}\nEmail: ${email.trim()}\nInvite token: ${res.invite_token}\n\nThey open Accept invite, paste the token, and set their own password.`,
+        );
+      } else {
+        Alert.alert(
+          "Fos",
+          `Teammate invited.\n\nShare login:\nSlug: ${orgSlug}\nEmail: ${email.trim()}\nPassword: (the one you set)`,
+        );
+      }
       onDone();
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -77,8 +89,8 @@ export function InviteScreen({
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Invite teammate</Label>
       <Sub>
-        They log in with company slug{orgSlug ? ` /${orgSlug}` : ""}, the email below, and the
-        temporary password you set.
+        Default: share an invite token — they set their own password. Optional: set a temporary
+        password yourself.
       </Sub>
       {!!slugError && (
         <>
@@ -90,16 +102,32 @@ export function InviteScreen({
       <Field value={fullName} onChangeText={setFullName} />
       <Label>Email</Label>
       <Field autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
-      <Label>Password</Label>
-      <Field
-        secureTextEntry={!showPassword}
-        value={password}
-        onChangeText={setPassword}
-        placeholder="min 6 characters"
-      />
-      <LinkText onPress={() => setShowPassword((v) => !v)}>
-        {showPassword ? "Hide password" : "Show password"}
-      </LinkText>
+      <View style={styles.kinds}>
+        <Chip
+          label="Invite token (recommended)"
+          on={!setTempPassword}
+          onPress={() => setSetTempPassword(false)}
+        />
+        <Chip
+          label="Temp password"
+          on={setTempPassword}
+          onPress={() => setSetTempPassword(true)}
+        />
+      </View>
+      {setTempPassword && (
+        <>
+          <Label>Temporary password</Label>
+          <Field
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
+            placeholder="min 6 characters"
+          />
+          <LinkText onPress={() => setShowPassword((v) => !v)}>
+            {showPassword ? "Hide password" : "Show password"}
+          </LinkText>
+        </>
+      )}
       <Label>Role</Label>
       <View style={styles.kinds}>
         {roles.map((r) => (

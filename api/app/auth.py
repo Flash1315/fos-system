@@ -26,16 +26,20 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def create_access_token(user_id: int, org_id: int, role: str) -> str:
+def create_access_token(user_id: int, org_id: int, role: str, token_version: int = 0) -> str:
     expire = _utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
-    payload = {"sub": str(user_id), "org": org_id, "role": role, "exp": expire}
+    payload = {
+        "sub": str(user_id),
+        "org": org_id,
+        "role": role,
+        "ver": int(token_version or 0),
+        "exp": expire,
+    }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-) -> User:
+def user_from_token(token: str, db: Session) -> User:
+    """Decode JWT and return active user; rejects revoked token_version."""
     credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -44,12 +48,27 @@ def get_current_user(
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         user_id = int(payload.get("sub", 0))
+        token_ver = int(payload.get("ver", 0) or 0)
     except (JWTError, ValueError, TypeError):
         raise credentials_exc
     user = db.get(User, user_id)
     if not user or not user.is_active:
         raise credentials_exc
+    if int(getattr(user, "token_version", 0) or 0) != token_ver:
+        raise credentials_exc
     return user
+
+
+def bump_token_version(user: User) -> int:
+    user.token_version = int(getattr(user, "token_version", 0) or 0) + 1
+    return user.token_version
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    return user_from_token(token, db)
 
 
 def require_roles(*roles: UserRole):

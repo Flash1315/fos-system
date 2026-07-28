@@ -262,9 +262,16 @@ export function me() {
 }
 
 export function changePassword(current_password: string, new_password: string) {
-  return request<{ ok: boolean }>("/auth/password", {
+  return request<{ access_token: string; user: User }>("/auth/password", {
     method: "POST",
     body: JSON.stringify({ current_password, new_password }),
+  });
+}
+
+export function acceptInvite(token: string, password: string) {
+  return request<{ access_token: string; user: User }>("/auth/accept-invite", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
   });
 }
 
@@ -291,13 +298,19 @@ export function updateOrg(body: { name?: string; currency?: string }) {
   });
 }
 
+export type InviteResult = User & {
+  organization_slug?: string;
+  must_set_password?: boolean;
+  invite_token?: string | null;
+};
+
 export function inviteUser(body: {
   email: string;
   full_name: string;
   role: "owner" | "manager" | "employee";
-  password: string;
+  password?: string;
 }) {
-  return request<User>("/orgs/invite", {
+  return request<InviteResult>("/orgs/invite", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -376,6 +389,8 @@ export function myRecords(params?: {
   purpose?: string;
   q?: string;
   voided?: boolean;
+  limit?: number;
+  offset?: number;
 }) {
   const q = new URLSearchParams();
   if (params?.kind) q.set("kind", params.kind);
@@ -383,6 +398,8 @@ export function myRecords(params?: {
   if (params?.purpose) q.set("purpose", params.purpose);
   if (params?.q) q.set("q", params.q);
   if (params?.voided != null) q.set("voided", String(params.voided));
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
   const suffix = q.toString() ? `?${q}` : "";
   return request<MoneyRecord[]>(`/records/mine${suffix}`);
 }
@@ -394,6 +411,8 @@ export function orgRecords(params?: {
   created_by?: number;
   q?: string;
   voided?: boolean;
+  limit?: number;
+  offset?: number;
 }) {
   const q = new URLSearchParams();
   if (params?.kind) q.set("kind", params.kind);
@@ -402,6 +421,8 @@ export function orgRecords(params?: {
   if (params?.created_by != null) q.set("created_by", String(params.created_by));
   if (params?.q) q.set("q", params.q);
   if (params?.voided != null) q.set("voided", String(params.voided));
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
   const suffix = q.toString() ? `?${q}` : "";
   return request<MoneyRecord[]>(`/records/org${suffix}`);
 }
@@ -480,10 +501,17 @@ export function lastFuelOdometer(params?: { bike?: string; user_id?: number }) {
   }>(`/records/fuel/last-odometer${suffix}`);
 }
 
-export function pendingRecords(params?: { purpose?: string; kind?: string }) {
+export function pendingRecords(params?: {
+  purpose?: string;
+  kind?: string;
+  limit?: number;
+  offset?: number;
+}) {
   const q = new URLSearchParams();
   if (params?.purpose) q.set("purpose", params.purpose);
   if (params?.kind) q.set("kind", params.kind);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
   const suffix = q.toString() ? `?${q}` : "";
   return request<MoneyRecord[]>(`/records/pending${suffix}`);
 }
@@ -562,10 +590,14 @@ export function voidRecord(id: number, note: string) {
 export function listMyPayouts(params?: {
   voided?: boolean;
   kind?: "expense_payout" | "income_handover";
+  limit?: number;
+  offset?: number;
 }) {
   const q = new URLSearchParams();
   if (params?.voided != null) q.set("voided", String(params.voided));
   if (params?.kind) q.set("kind", params.kind);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
   const suffix = q.toString() ? `?${q}` : "";
   return request<
     {
@@ -592,11 +624,15 @@ export function listOrgPayouts(params?: {
   voided?: boolean;
   user_id?: number;
   kind?: "expense_payout" | "income_handover";
+  limit?: number;
+  offset?: number;
 }) {
   const q = new URLSearchParams();
   if (params?.voided != null) q.set("voided", String(params.voided));
   if (params?.user_id != null) q.set("user_id", String(params.user_id));
   if (params?.kind) q.set("kind", params.kind);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
   const suffix = q.toString() ? `?${q}` : "";
   return request<
     {

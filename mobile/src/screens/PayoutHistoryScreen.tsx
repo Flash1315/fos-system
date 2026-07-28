@@ -42,9 +42,12 @@ export function PayoutHistoryScreen({
   const [voidId, setVoidId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [membersError, setMembersError] = useState("");
   const reloadGen = useRef(0);
+  const PAGE = 40;
 
   const loadMembers = async () => {
     if (!isManager) return;
@@ -74,20 +77,59 @@ export function PayoutHistoryScreen({
               voided,
               kind: kindFilter || undefined,
               user_id: userFilter ?? undefined,
+              limit: PAGE,
+              offset: 0,
             })
           : await listMyPayouts({
               voided,
               kind: kindFilter || undefined,
+              limit: PAGE,
+              offset: 0,
             });
       if (gen !== reloadGen.current) return;
       setRows(data);
+      setHasMore(data.length >= PAGE);
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setRows([]);
+      setHasMore(false);
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
       if (gen === reloadGen.current) setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore || loading) return;
+    const gen = reloadGen.current;
+    setLoadingMore(true);
+    try {
+      const voided =
+        voidFilter === "voided" ? true : voidFilter === "active" ? false : undefined;
+      const more =
+        scope === "org" && isManager
+          ? await listOrgPayouts({
+              voided,
+              kind: kindFilter || undefined,
+              user_id: userFilter ?? undefined,
+              limit: PAGE,
+              offset: rows.length,
+            })
+          : await listMyPayouts({
+              voided,
+              kind: kindFilter || undefined,
+              limit: PAGE,
+              offset: rows.length,
+            });
+      if (gen !== reloadGen.current) return;
+      setRows((prev) => [...prev, ...more]);
+      setHasMore(more.length >= PAGE);
+    } catch (e) {
+      if (gen !== reloadGen.current) return;
+      Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -169,6 +211,16 @@ export function PayoutHistoryScreen({
                     ? "No active settlements"
                     : "No settlements yet"}
           </Sub>
+        }
+        ListFooterComponent={
+          hasMore ? (
+            <Btn
+              title={loadingMore ? "…" : "Load more"}
+              variant="ghost"
+              disabled={loadingMore}
+              onPress={() => void loadMore()}
+            />
+          ) : null
         }
         renderItem={({ item }) => (
           <View style={styles.row}>

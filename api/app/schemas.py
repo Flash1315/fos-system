@@ -56,6 +56,25 @@ class InviteIn(BaseModel):
     email: EmailStr
     full_name: str
     role: UserRole = UserRole.employee
+    # Optional: omit to generate a one-time invite token (preferred)
+    password: Optional[str] = Field(default=None, min_length=6, max_length=128)
+
+
+class InviteOut(BaseModel):
+    id: int
+    email: EmailStr
+    full_name: str
+    role: UserRole
+    organization_id: int
+    organization_slug: str = ""
+    must_set_password: bool = False
+    invite_token: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class AcceptInviteIn(BaseModel):
+    token: str = Field(min_length=16, max_length=128)
     password: str = Field(min_length=6, max_length=128)
 
 

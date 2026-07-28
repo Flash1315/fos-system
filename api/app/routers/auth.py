@@ -1,13 +1,31 @@
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.auth import (
-    create_access_token, get_current_user, hash_password, require_roles, verify_password,
+    bump_token_version,
+    create_access_token,
+    get_current_user,
+    hash_password,
+    require_roles,
+    verify_password,
 )
 from app.db import get_db
 from app.models import BalanceAdjustment, MoneyRecord, Organization, Payout, User, UserRole
-from app.schemas import InviteIn, LoginIn, OrgCreate, OrgOut, OrgUpdate, PasswordChangeIn, TokenOut, UserOut
+from app.schemas import (
+    AcceptInviteIn,
+    InviteIn,
+    InviteOut,
+    LoginIn,
+    OrgCreate,
+    OrgOut,
+    OrgUpdate,
+    PasswordChangeIn,
+    TokenOut,
+    UserOut,
+)
 
 router = APIRouter(tags=["auth"])
 
@@ -32,6 +50,12 @@ def _org_out(db: Session, org: Organization) -> OrgOut:
     )
 
 
+def _token_for(user: User) -> str:
+    return create_access_token(
+        user.id, user.organization_id, user.role.value, user.token_version or 0
+    )
+
+
 @router.post("/orgs/register", response_model=TokenOut)
 def register_organization(body: OrgCreate, db: Session = Depends(get_db)):
     if db.query(Organization).filter(Organization.slug == body.slug).first():
@@ -50,8 +74,7 @@ def register_organization(body: OrgCreate, db: Session = Depends(get_db)):
     db.add(owner)
     db.commit()
     db.refresh(owner)
-    token = create_access_token(owner.id, org.id, owner.role.value)
-    return TokenOut(access_token=token, user=UserOut.model_validate(owner))
+    return TokenOut(access_token=_token_for(owner), user=UserOut.model_validate(owner))
 
 
 @router.post("/auth/login", response_model=TokenOut)
@@ -64,10 +87,13 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
         .filter(User.organization_id == org.id, User.email == body.email.lower())
         .first()
     )
-    if not user or not user.is_active or not verify_password(body.password, user.hashed_password):
+    if not user or not user.is_active:
         raise HTTPException(401, "Invalid credentials")
-    token = create_access_token(user.id, org.id, user.role.value)
-    return TokenOut(access_token=token, user=UserOut.model_validate(user))
+    if getattr(user, "must_set_password", False):
+        raise HTTPException(401, "Accept invite first — set your password with the invite token")
+    if not verify_password(body.password, user.hashed_password):
+        raise HTTPException(401, "Invalid credentials")
+    return TokenOut(access_token=_token_for(user), user=UserOut.model_validate(user))
 
 
 @router.post("/auth/login-form", response_model=TokenOut)
@@ -88,7 +114,7 @@ def me(user: User = Depends(get_current_user)):
     return UserOut.model_validate(user)
 
 
-@router.post("/auth/password")
+@router.post("/auth/password", response_model=TokenOut)
 def change_password(
     body: PasswordChangeIn,
     db: Session = Depends(get_db),
@@ -97,8 +123,27 @@ def change_password(
     if not verify_password(body.current_password, user.hashed_password):
         raise HTTPException(400, "Current password is wrong")
     user.hashed_password = hash_password(body.new_password)
+    bump_token_version(user)
+    user.must_set_password = False
+    user.invite_token = None
     db.commit()
-    return {"ok": True}
+    db.refresh(user)
+    return TokenOut(access_token=_token_for(user), user=UserOut.model_validate(user))
+
+
+@router.post("/auth/accept-invite", response_model=TokenOut)
+def accept_invite(body: AcceptInviteIn, db: Session = Depends(get_db)):
+    token = body.token.strip()
+    user = db.query(User).filter(User.invite_token == token).first()
+    if not user or not user.is_active:
+        raise HTTPException(400, "Invalid or expired invite token")
+    user.hashed_password = hash_password(body.password)
+    user.must_set_password = False
+    user.invite_token = None
+    bump_token_version(user)
+    db.commit()
+    db.refresh(user)
+    return TokenOut(access_token=_token_for(user), user=UserOut.model_validate(user))
 
 
 @router.get("/orgs/me", response_model=OrgOut)
@@ -137,7 +182,7 @@ def update_org(
     return _org_out(db, org)
 
 
-@router.post("/orgs/invite", response_model=UserOut)
+@router.post("/orgs/invite", response_model=InviteOut)
 def invite_user(
     body: InviteIn,
     db: Session = Depends(get_db),
@@ -152,14 +197,35 @@ def invite_user(
         raise HTTPException(400, "User already in organization")
     if body.role == UserRole.owner and user.role != UserRole.owner:
         raise HTTPException(403, "Only owner can invite owner")
+    org = db.get(Organization, user.organization_id)
+    invite_token: str | None = None
+    must_set = False
+    if body.password:
+        hashed = hash_password(body.password)
+    else:
+        # Unusable random hash; teammate sets password via accept-invite
+        hashed = hash_password(secrets.token_urlsafe(24))
+        invite_token = secrets.token_urlsafe(24)
+        must_set = True
     invited = User(
         organization_id=user.organization_id,
         email=body.email.lower(),
         full_name=body.full_name,
-        hashed_password=hash_password(body.password),
+        hashed_password=hashed,
         role=body.role,
+        invite_token=invite_token,
+        must_set_password=must_set,
     )
     db.add(invited)
     db.commit()
     db.refresh(invited)
-    return UserOut.model_validate(invited)
+    return InviteOut(
+        id=invited.id,
+        email=invited.email,
+        full_name=invited.full_name,
+        role=invited.role,
+        organization_id=invited.organization_id,
+        organization_slug=org.slug if org else "",
+        must_set_password=must_set,
+        invite_token=invite_token,
+    )

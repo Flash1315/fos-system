@@ -22,9 +22,12 @@ export function LedgerScreen({
   const [searchDebounced, setSearchDebounced] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [membersError, setMembersError] = useState("");
   const reloadGen = useRef(0);
+  const PAGE = 40;
 
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounced(search.trim()), 350);
@@ -45,28 +48,50 @@ export function LedgerScreen({
     void loadMembers();
   }, []);
 
+  const listParams = () => ({
+    status: status && status !== "voided" ? status : undefined,
+    kind: kind || undefined,
+    purpose: purpose || undefined,
+    created_by: memberId ?? undefined,
+    q: searchDebounced || undefined,
+    voided: status === "voided" ? true : status === "approved" ? false : undefined,
+    limit: PAGE,
+  });
+
   const reload = async () => {
     const gen = ++reloadGen.current;
     setLoading(true);
     try {
       setLoadError("");
-      const list = await orgRecords({
-        status: status && status !== "voided" ? status : undefined,
-        kind: kind || undefined,
-        purpose: purpose || undefined,
-        created_by: memberId ?? undefined,
-        q: searchDebounced || undefined,
-        voided: status === "voided" ? true : status === "approved" ? false : undefined,
-      });
+      const list = await orgRecords({ ...listParams(), offset: 0 });
       if (gen !== reloadGen.current) return;
       setRows(list);
+      setHasMore(list.length >= PAGE);
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setRows([]);
+      setHasMore(false);
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
       if (gen === reloadGen.current) setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore || loading) return;
+    const gen = reloadGen.current;
+    setLoadingMore(true);
+    try {
+      const more = await orgRecords({ ...listParams(), offset: rows.length });
+      if (gen !== reloadGen.current) return;
+      setRows((prev) => [...prev, ...more]);
+      setHasMore(more.length >= PAGE);
+    } catch (e) {
+      if (gen !== reloadGen.current) return;
+      Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -149,6 +174,16 @@ export function LedgerScreen({
                     ? `No ${status} records`
                     : "No records"}
           </Sub>
+        }
+        ListFooterComponent={
+          hasMore ? (
+            <Btn
+              title={loadingMore ? "…" : "Load more"}
+              variant="ghost"
+              disabled={loadingMore}
+              onPress={() => void loadMore()}
+            />
+          ) : null
         }
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => onRecord(item.id)}>

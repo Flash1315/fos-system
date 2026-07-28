@@ -20,12 +20,15 @@ export function ApproveScreen({
   const [rows, setRows] = useState<MoneyRecord[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectAllOpen, setRejectAllOpen] = useState(false);
   const [purpose, setPurpose] = useState("");
   const [kind, setKind] = useState<"" | "expense" | "fuel" | "income">("");
   const reloadGen = useRef(0);
+  const PAGE = 40;
 
   const reload = async () => {
     const gen = ++reloadGen.current;
@@ -35,16 +38,42 @@ export function ApproveScreen({
       const list = await pendingRecords({
         purpose: purpose || undefined,
         kind: kind || undefined,
+        limit: PAGE,
+        offset: 0,
       });
       if (gen !== reloadGen.current) return;
       setRows(list);
+      setHasMore(list.length >= PAGE);
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setRows([]);
+      setHasMore(false);
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
       if (gen === reloadGen.current) setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore || loading) return;
+    const gen = reloadGen.current;
+    setLoadingMore(true);
+    try {
+      const more = await pendingRecords({
+        purpose: purpose || undefined,
+        kind: kind || undefined,
+        limit: PAGE,
+        offset: rows.length,
+      });
+      if (gen !== reloadGen.current) return;
+      setRows((prev) => [...prev, ...more]);
+      setHasMore(more.length >= PAGE);
+    } catch (e) {
+      if (gen !== reloadGen.current) return;
+      Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -215,6 +244,16 @@ export function ApproveScreen({
                 ? `Could not load — ${loadError}`
                 : "No pending records"}
           </Sub>
+        }
+        ListFooterComponent={
+          hasMore ? (
+            <Btn
+              title={loadingMore ? "…" : "Load more"}
+              variant="ghost"
+              disabled={loadingMore}
+              onPress={() => void loadMore()}
+            />
+          ) : null
         }
         renderItem={({ item }) => (
           <View style={styles.row}>

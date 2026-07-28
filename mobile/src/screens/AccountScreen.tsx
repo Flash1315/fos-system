@@ -9,6 +9,7 @@ import {
   requestSettlement,
   approveSettlementRequest,
   cancelSettlementRequest,
+  saveToken,
   updateOrg,
   type User,
 } from "../api";
@@ -125,10 +126,11 @@ export function AccountScreen({
     }
     setBusy(true);
     try {
-      await changePassword(current, next);
+      const res = await changePassword(current, next);
+      await saveToken(res.access_token);
       setCurrent("");
       setNext("");
-      Alert.alert("Fos", "Password updated");
+      Alert.alert("Fos", "Password updated — other sessions signed out");
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {

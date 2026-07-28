@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { listSettlementRequests, myBalance, myOrg, myRecords, pendingRecords, type MoneyRecord, type User } from "../api";
+import { listSettlementRequests, myBalance, myOrg, myRecords, pendingRecords, requestSettlement, type MoneyRecord, type User } from "../api";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
@@ -42,6 +42,10 @@ export function HomeScreen({
   const [balance, setBalance] = useState("—");
   const [spendings, setSpendings] = useState("—");
   const [cycleHint, setCycleHint] = useState("");
+  const [availableSpend, setAvailableSpend] = useState(0);
+  const [availableCash, setAvailableCash] = useState(0);
+  const [currencyCode, setCurrencyCode] = useState("IDR");
+  const [requestBusy, setRequestBusy] = useState(false);
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
@@ -66,6 +70,9 @@ export function HomeScreen({
       ]);
       setBalance(formatMoney(b.cash_on_hand, b.currency));
       setSpendings(formatMoney(b.spendings ?? 0, b.currency));
+      setAvailableSpend(b.available_spendings ?? b.spendings ?? 0);
+      setAvailableCash(b.available_cash ?? b.cash_on_hand ?? 0);
+      setCurrencyCode(b.currency);
       const hints: string[] = [];
       if ((b.reserved_spendings || 0) > 0 || (b.reserved_cash || 0) > 0) {
         hints.push(
@@ -115,6 +122,28 @@ export function HomeScreen({
 
   const isManager = user?.role === "owner" || user?.role === "manager";
 
+  const quickRequest = async (kind: "expense_payout" | "income_handover") => {
+    const amount = kind === "expense_payout" ? availableSpend : availableCash;
+    if (amount <= 0) {
+      Alert.alert("Fos", "Nothing available to request");
+      return;
+    }
+    setRequestBusy(true);
+    try {
+      await requestSettlement({
+        kind,
+        amount,
+        note: kind === "expense_payout" ? "quick request from home" : "quick cash handover request",
+      });
+      Alert.alert("Fos", "Settlement request sent");
+      await reload();
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setRequestBusy(false);
+    }
+  };
+
   return (
     <Screen>
       <View style={styles.topRow}>
@@ -135,6 +164,26 @@ export function HomeScreen({
         <Label>Spendings (my pocket)</Label>
         <Text style={styles.spend}>{spendings}</Text>
         {!!cycleHint && <Sub>{cycleHint}</Sub>}
+        {(availableSpend > 0 || availableCash > 0) && (
+          <Row>
+            {availableSpend > 0 && (
+              <Btn
+                title={requestBusy ? "…" : `Request pay ${formatMoney(availableSpend, currencyCode)}`}
+                variant="ghost"
+                disabled={requestBusy}
+                onPress={() => quickRequest("expense_payout")}
+              />
+            )}
+            {availableCash > 0 && (
+              <Btn
+                title={requestBusy ? "…" : `Request take ${formatMoney(availableCash, currencyCode)}`}
+                variant="ghost"
+                disabled={requestBusy}
+                onPress={() => quickRequest("income_handover")}
+              />
+            )}
+          </Row>
+        )}
       </Card>
       <Row>
         <Btn title="New record" onPress={onCreate} />

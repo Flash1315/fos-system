@@ -2,6 +2,8 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
+import re
+import uuid
 
 from app.alembic_runner import run_alembic_upgrade
 from app.config import settings
@@ -23,7 +25,7 @@ Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.7.31")
+app = FastAPI(title=settings.app_name, version="0.7.32")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 # Bearer-token auth does not use cookies; credentials+wildcard is unnecessary.
@@ -33,8 +35,20 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Disposition"],
+    expose_headers=["Content-Disposition", "X-Request-Id"],
 )
+
+_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{8,128}$")
+
+
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next) -> Response:
+        incoming = (request.headers.get("x-request-id") or "").strip()
+        request_id = incoming if _REQUEST_ID_RE.fullmatch(incoming) else uuid.uuid4().hex
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-Id"] = request_id
+        return response
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -54,6 +68,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 app.include_router(auth_router.router)
 app.include_router(records_router.router)
@@ -82,7 +97,7 @@ def health():
     return {
         "ok": db_status == "ok",
         "app": settings.app_name,
-        "version": "0.7.31",
+        "version": "0.7.32",
         "db": db_status,
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }

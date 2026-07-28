@@ -43,7 +43,9 @@ class TransferIn(BaseModel):
     @field_validator("comment")
     @classmethod
     def strip_comment(cls, v: str) -> str:
-        return (v or "").strip()
+        import re
+
+        return re.sub(r"\s+", " ", (v or "").strip())[:2000]
 
     @field_validator("amount")
     @classmethod

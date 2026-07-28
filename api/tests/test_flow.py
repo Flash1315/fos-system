@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.31"
+    assert health.json()["version"] == "0.7.32"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -5160,7 +5160,7 @@ def test_login_slug_norm_telegram_and_security_headers(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.31"
+    assert health.json()["version"] == "0.7.32"
     assert health.headers.get("x-content-type-options") == "nosniff"
     assert health.headers.get("x-frame-options") == "DENY"
     assert health.headers.get("referrer-policy") == "no-referrer"
@@ -5227,7 +5227,7 @@ def test_login_bounds_password_same_and_transfer_email(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.31"
+    assert health.json()["version"] == "0.7.32"
     assert health.headers.get("cache-control") == "no-store"
 
     # Seed cash via income then transfer with mixed-case email
@@ -5330,7 +5330,7 @@ def test_idem_charset_invite_email_and_org_patch(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.31"
+    assert health.json()["version"] == "0.7.32"
 
 
 def test_logout_bike_normalize_and_register_slug(client):
@@ -5340,7 +5340,7 @@ def test_logout_bike_normalize_and_register_slug(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.31"
+    assert health.json()["version"] == "0.7.32"
     assert health.json()["db"] == "ok"
     assert health.json()["ok"] is True
 
@@ -5407,7 +5407,7 @@ def test_place_client_normalize_and_coop_header(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.31"
+    assert health.json()["version"] == "0.7.32"
     assert health.headers.get("cross-origin-opener-policy") == "same-origin"
 
     rec = client.post(
@@ -5462,7 +5462,7 @@ def test_slug_shape_category_collapse(client):
     owner = _register(client, "flow-0731", "v0731-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.31"
+    assert health.json()["version"] == "0.7.32"
 
     rec = client.post(
         "/records",
@@ -5487,3 +5487,128 @@ def test_slug_shape_category_collapse(client):
         },
     )
     assert login_bad.status_code == 422
+
+
+def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
+    """v0.7.32: X-Request-Id, note whitespace collapse, team mutation rate limit."""
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["version"] == "0.7.32"
+    assert "X-Request-Id" in health.headers
+    rid = health.headers["X-Request-Id"]
+    assert len(rid) >= 8
+
+    custom = client.get("/health", headers={"X-Request-Id": "client-req-abc123"})
+    assert custom.headers["X-Request-Id"] == "client-req-abc123"
+
+    junk = client.get("/health", headers={"X-Request-Id": "bad id with spaces!!"})
+    assert junk.headers["X-Request-Id"] != "bad id with spaces!!"
+    assert len(junk.headers["X-Request-Id"]) >= 8
+
+    owner = _register(client, "flow-0732", "v0732-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    # Seed spendings (expense payout) and cash (transfer)
+    expense = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 50,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert expense.status_code == 200, expense.text
+
+    income = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 500,
+            "category": "Sales",
+            "purpose": "Rental",
+            "payment_method": "cash",
+            "client_name": "  Client   Name  ",
+            "approve_now": True,
+        },
+    )
+    assert income.status_code == 200, income.text
+    assert income.json()["client_name"] == "Client Name"
+
+    pay = client.post(
+        "/payouts",
+        headers=h,
+        json={
+            "user_id": owner["user"]["id"],
+            "kind": "expense_payout",
+            "amount": 10,
+            "payment_method": "cash",
+            "note": "  paid   for   fuel  ",
+        },
+    )
+    assert pay.status_code == 200, pay.text
+    assert pay.json()["note"] == "paid for fuel"
+
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0732-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+            "password_confirm": "secret12",
+        },
+    )
+    assert inv.status_code == 200, inv.text
+    emp_id = inv.json()["id"]
+
+    xfer = client.post(
+        "/transfers",
+        headers=h,
+        json={
+            "to_email": "v0732-emp@example.com",
+            "amount": 20,
+            "comment": "  please   hold   cash  ",
+        },
+    )
+    assert xfer.status_code == 200, xfer.text
+    assert xfer.json()["sender_record"]["comment"] == "please hold cash"
+
+    adj = client.post(
+        "/adjustments",
+        headers=h,
+        json={
+            "user_id": emp_id,
+            "track": "cash_on_hand",
+            "amount": 1,
+            "note": "  tiny   fix  ",
+        },
+    )
+    assert adj.status_code == 200, adj.text
+    assert adj.json()["note"] == "tiny fix"
+
+    from app.config import settings
+    from app.services.rate_limit import reset_limiter_for_tests
+
+    reset_limiter_for_tests()
+    monkeypatch.setattr(settings, "rate_limit_enabled", True)
+    try:
+        limited = None
+        for _ in range(35):
+            limited = client.post(
+                f"/orgs/members/{emp_id}/active",
+                headers=h,
+                json={"is_active": True},
+            )
+            if limited.status_code == 429:
+                break
+        assert limited is not None and limited.status_code == 429
+        assert "Too many" in limited.json()["detail"]
+    finally:
+        monkeypatch.setattr(settings, "rate_limit_enabled", False)
+        reset_limiter_for_tests()

@@ -89,7 +89,13 @@ def set_plan(
             "Paid plans require billing integration — only free/trial available in stub mode",
         )
     from app.services.locks import lock_organization
+    from app.services.rate_limit import enforce_rate_limit
 
+    enforce_rate_limit(
+        f"billing-plan:{user.organization_id}:{user.id}",
+        limit=10,
+        window_sec=60,
+    )
     org = lock_organization(db, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")
@@ -106,7 +112,13 @@ def set_telegram_chat(
     user: User = Depends(require_roles(UserRole.owner)),
 ):
     from app.services.locks import lock_organization
+    from app.services.rate_limit import enforce_rate_limit
 
+    enforce_rate_limit(
+        f"telegram-chat:{user.organization_id}:{user.id}",
+        limit=20,
+        window_sec=60,
+    )
     org = lock_organization(db, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")

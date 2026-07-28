@@ -69,7 +69,13 @@ def set_member_active(
     user: User = Depends(require_roles(UserRole.owner)),
 ):
     from app.services.locks import lock_organization, lock_users
+    from app.services.rate_limit import enforce_rate_limit
 
+    enforce_rate_limit(
+        f"member-active:{user.organization_id}:{user.id}",
+        limit=30,
+        window_sec=60,
+    )
     lock_organization(db, user.organization_id)
     member = (
         db.query(User)
@@ -177,7 +183,13 @@ def set_member_role(
     user: User = Depends(require_roles(UserRole.owner)),
 ):
     from app.services.locks import lock_organization
+    from app.services.rate_limit import enforce_rate_limit
 
+    enforce_rate_limit(
+        f"member-role:{user.organization_id}:{user.id}",
+        limit=30,
+        window_sec=60,
+    )
     lock_organization(db, user.organization_id)
     member = (
         db.query(User)

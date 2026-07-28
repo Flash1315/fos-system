@@ -21,10 +21,12 @@ router = APIRouter(prefix="/adjustments", tags=["adjustments"])
 
 
 def _require_note(value: str) -> str:
-    note = (value or "").strip()
+    import re
+
+    note = re.sub(r"\s+", " ", (value or "").strip())
     if len(note) < 2:
         raise ValueError("Note is required (min 2 characters)")
-    return note
+    return note[:2000]
 
 
 class AdjustmentIn(BaseModel):

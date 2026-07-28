@@ -38,7 +38,9 @@ class PayoutCreate(BaseModel):
     @field_validator("note")
     @classmethod
     def note_trim(cls, v: str) -> str:
-        return (v or "").strip()[:2000]
+        import re
+
+        return re.sub(r"\s+", " ", (v or "").strip())[:2000]
 
     @field_validator("amount")
     @classmethod
@@ -92,10 +94,12 @@ class VoidIn(BaseModel):
     @field_validator("note")
     @classmethod
     def note_trimmed(cls, v: str) -> str:
-        note = (v or "").strip()
+        import re
+
+        note = re.sub(r"\s+", " ", (v or "").strip())
         if len(note) < 2:
             raise ValueError("Note is required (min 2 characters)")
-        return note
+        return note[:2000]
 
 
 class CancelRequestIn(BaseModel):
@@ -104,7 +108,9 @@ class CancelRequestIn(BaseModel):
     @field_validator("note")
     @classmethod
     def note_trim(cls, v: str) -> str:
-        return (v or "").strip()[:2000]
+        import re
+
+        return re.sub(r"\s+", " ", (v or "").strip())[:2000]
 
 
 class SettlementRequestIn(BaseModel):
@@ -115,7 +121,9 @@ class SettlementRequestIn(BaseModel):
     @field_validator("note")
     @classmethod
     def note_trim(cls, v: str) -> str:
-        return (v or "").strip()[:2000]
+        import re
+
+        return re.sub(r"\s+", " ", (v or "").strip())[:2000]
 
     @field_validator("amount")
     @classmethod

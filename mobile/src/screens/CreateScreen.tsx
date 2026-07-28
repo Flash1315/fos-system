@@ -475,19 +475,20 @@ export function CreateScreen({
     if (!idemKeyRef.current) idemKeyRef.current = makeIdempotencyKey("rec");
     setBusy(true);
     try {
+      const collapse = (s: string) => s.replace(/\s+/g, " ").trim();
       await createRecord(
         {
           kind,
           amount: value,
-          category: category.trim(),
+          category: collapse(category),
           purpose,
-          place: place.trim(),
-          bike: bike.trim(),
-          comment: comment.trim(),
+          place: collapse(place),
+          bike: collapse(bike),
+          comment: collapse(comment),
           photo_url: photoUrl,
           payment_method: kind === "income" ? paymentMethod : "",
           payment_source: kind === "income" ? "" : paymentSource,
-          client_name: kind === "income" ? clientName.trim() : "",
+          client_name: kind === "income" ? collapse(clientName) : "",
           liters: kind === "fuel" ? parseFiniteLiters(liters) ?? undefined : undefined,
           odometer:
             kind === "fuel" && odometer.trim()

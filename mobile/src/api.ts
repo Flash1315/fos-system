@@ -200,7 +200,7 @@ async function request<T>(
     if (res.status === 401) {
       await notifyUnauthorized(requestToken);
     }
-    throw new Error(formatApiError(data, res.statusText || `HTTP ${res.status}`));
+    throw new Error(formatApiError(data, res.statusText || `HTTP ${res.status}`, res.status));
   }
   return data as T;
 }
@@ -239,16 +239,26 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
     let detail = text;
     try {
       const data = JSON.parse(text);
-      detail = formatApiError(data, res.statusText || `HTTP ${res.status}`);
+      detail = formatApiError(data, res.statusText || `HTTP ${res.status}`, res.status);
     } catch {
-      detail = res.statusText || `HTTP ${res.status}`;
+      detail =
+        res.status === 429
+          ? "Too many requests — wait a moment and try again"
+          : res.statusText || `HTTP ${res.status}`;
     }
     throw new Error(detail);
   }
   return text;
 }
 
-function formatApiError(data: unknown, fallback: string): string {
+function formatApiError(data: unknown, fallback: string, status?: number): string {
+  if (status === 429) {
+    if (typeof data === "object" && data && "detail" in data) {
+      const d = (data as { detail: unknown }).detail;
+      if (typeof d === "string" && d.trim()) return d;
+    }
+    return "Too many requests — wait a moment and try again";
+  }
   if (typeof data !== "object" || !data || !("detail" in data)) return fallback;
   const detail = (data as { detail: unknown }).detail;
   if (typeof detail === "string") return detail;

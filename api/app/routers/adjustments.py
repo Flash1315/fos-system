@@ -10,7 +10,7 @@ from app.auth import require_roles
 from app.db import get_db
 from app.models import AdjustmentTrack, BalanceAdjustment, User, UserRole
 from app.routers.records import _utcnow
-from app.services.balances import adjustment_void_blocked_reason, can_void_adjustment
+from app.services.balances import adjustment_void_blocked_reason, can_void_adjustment, user_balance
 
 router = APIRouter(prefix="/adjustments", tags=["adjustments"])
 
@@ -117,6 +117,18 @@ def create_adjustment(
     target = db.get(User, body.user_id)
     if not target or target.organization_id != manager.organization_id or not target.is_active:
         raise HTTPException(404, "User not found")
+    bal = user_balance(db, target)
+    current = (
+        float(bal.get("cash_on_hand") or 0)
+        if body.track == AdjustmentTrack.cash_on_hand
+        else float(bal.get("spendings") or 0)
+    )
+    if current + float(body.amount) < -1e-6:
+        raise HTTPException(
+            400,
+            f"Adjustment would make {body.track.value} negative "
+            f"(current {current}, delta {body.amount})",
+        )
     row = BalanceAdjustment(
         organization_id=manager.organization_id,
         user_id=target.id,

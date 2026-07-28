@@ -115,25 +115,25 @@ export function HomeScreen({
           setPendingCount(pend.length);
         } catch {
           if (gen !== reloadGen.current) return;
-          setPendingCount(b.pending_count);
+          /* keep previous org pending count — do not substitute personal pending */
         }
         try {
-          const reqs = await listSettlementRequests();
+          const reqs = await listSettlementRequests({ status: "pending" });
           if (gen !== reloadGen.current) return;
           setSettlementCount(reqs.length);
         } catch {
           if (gen !== reloadGen.current) return;
-          setSettlementCount(0);
+          /* keep previous settlement count */
         }
       } else {
         setPendingCount(b.pending_count);
         try {
-          const mine = await listMySettlementRequests();
+          const mine = await listMySettlementRequests({ status: "pending" });
           if (gen !== reloadGen.current) return;
-          setSettlementCount(mine.filter((r) => r.status === "pending").length);
+          setSettlementCount(mine.length);
         } catch {
           if (gen !== reloadGen.current) return;
-          setSettlementCount(0);
+          /* keep previous */
         }
       }
       setRows(list);

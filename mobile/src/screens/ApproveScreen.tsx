@@ -103,10 +103,12 @@ export function ApproveScreen({
           true,
         );
         if (res.skipped > 0) {
-          Alert.alert(
-            "Fos",
-            `Approved ${res.decided.length}; skipped ${res.skipped} (already decided or missing)`,
-          );
+          const cash = res.skipped_insufficient_cash || 0;
+          const other = res.skipped - cash;
+          const parts = [`Approved ${res.decided.length}`];
+          if (cash > 0) parts.push(`skipped ${cash} (insufficient cash)`);
+          if (other > 0) parts.push(`skipped ${other} (already decided or missing)`);
+          Alert.alert("Fos", parts.join("; "));
         }
         await reload();
       } catch (e) {
@@ -142,10 +144,12 @@ export function ApproveScreen({
         note || "batch reject",
       );
       if (res.skipped > 0) {
-        Alert.alert(
-          "Fos",
-          `Rejected ${res.decided.length}; skipped ${res.skipped} (already decided or missing)`,
-        );
+        const cash = res.skipped_insufficient_cash || 0;
+        const other = res.skipped - cash;
+        const parts = [`Rejected ${res.decided.length}`];
+        if (cash > 0) parts.push(`skipped ${cash} (insufficient cash)`);
+        if (other > 0) parts.push(`skipped ${other} (already decided or missing)`);
+        Alert.alert("Fos", parts.join("; "));
       }
       await reload();
     } catch (e) {

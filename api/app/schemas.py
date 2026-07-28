@@ -168,6 +168,7 @@ class DecideBatchIn(BaseModel):
 class DecideBatchOut(BaseModel):
     decided: list[RecordOut]
     skipped: int = 0
+    skipped_insufficient_cash: int = 0
 
 
 class CommentIn(BaseModel):

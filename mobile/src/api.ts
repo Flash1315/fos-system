@@ -496,7 +496,11 @@ export function decideRecord(id: number, approve: boolean, note = "") {
 }
 
 export function decideBatch(ids: number[], approve: boolean, note = "") {
-  return request<{ decided: MoneyRecord[]; skipped: number }>("/records/decide-batch", {
+  return request<{
+    decided: MoneyRecord[];
+    skipped: number;
+    skipped_insufficient_cash?: number;
+  }>("/records/decide-batch", {
     method: "POST",
     body: JSON.stringify({ ids, approve, note }),
   });

@@ -81,6 +81,30 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   }, [days, custom, dateFromDebounced, dateToDebounced]);
 
   const onExport = async () => {
+    if (custom) {
+      const from = dateFromDebounced;
+      const to = dateToDebounced;
+      if (!from && !to) {
+        Alert.alert("Fos", "Enter from and/or to date before export");
+        return;
+      }
+      if (from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+        Alert.alert("Fos", "From date must be YYYY-MM-DD");
+        return;
+      }
+      if (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+        Alert.alert("Fos", "To date must be YYYY-MM-DD");
+        return;
+      }
+      if (from && to && from > to) {
+        Alert.alert("Fos", "From date must be on or before to date");
+        return;
+      }
+    }
+    if (loadError && !report) {
+      Alert.alert("Fos", "Fix the period error before export");
+      return;
+    }
     setExporting(true);
     try {
       const text = await downloadReportCsv(period());

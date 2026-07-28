@@ -126,6 +126,37 @@ export function PayoutScreen({
   const doSubmit = async (value: number) => {
     setBusy(true);
     try {
+      const bals = await teamBalances();
+      setBalances(bals);
+      const fresh = bals.find((b) => b.user_id === userId);
+      const freshSuggested =
+        kind === "expense_payout"
+          ? fresh?.available_spendings ?? fresh?.spendings ?? 0
+          : fresh?.available_cash ?? fresh?.cash_on_hand ?? 0;
+      const freshReserved =
+        kind === "expense_payout"
+          ? fresh?.reserved_spendings ?? 0
+          : fresh?.reserved_cash ?? 0;
+      if (kind === "income_handover" && value > freshSuggested + 1e-6) {
+        Alert.alert(
+          "Fos",
+          `Only ${freshSuggested.toLocaleString()} available now` +
+            `${freshReserved > 0 ? ` (${freshReserved.toLocaleString()} reserved)` : ""}.`,
+        );
+        return;
+      }
+      if (
+        kind === "expense_payout" &&
+        value > freshSuggested + 1e-6 &&
+        freshReserved > 1e-9
+      ) {
+        Alert.alert(
+          "Fos",
+          `Only ${freshSuggested.toLocaleString()} available now ` +
+            `(${freshReserved.toLocaleString()} reserved by pending requests).`,
+        );
+        return;
+      }
       await createPayout({
         user_id: userId!,
         kind,

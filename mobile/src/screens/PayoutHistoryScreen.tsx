@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
 import { listMembers, listMyPayouts, listOrgPayouts, voidPayout, type User } from "../api";
 import { NoteModal } from "../components/NoteModal";
@@ -44,21 +44,26 @@ export function PayoutHistoryScreen({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [membersError, setMembersError] = useState("");
+  const reloadGen = useRef(0);
+
+  const loadMembers = async () => {
+    if (!isManager) return;
+    try {
+      setMembersError("");
+      setMembers(await listMembers());
+    } catch (e) {
+      setMembers([]);
+      setMembersError(e instanceof Error ? e.message : "Failed to load teammates");
+    }
+  };
 
   useEffect(() => {
-    if (!isManager) return;
-    (async () => {
-      try {
-        setMembersError("");
-        setMembers(await listMembers());
-      } catch (e) {
-        setMembers([]);
-        setMembersError(e instanceof Error ? e.message : "Failed to load teammates");
-      }
-    })();
+    void loadMembers();
   }, [isManager]);
 
   const reload = async () => {
+    const gen = ++reloadGen.current;
+    setLoading(true);
     try {
       setLoadError("");
       const voided =
@@ -74,12 +79,15 @@ export function PayoutHistoryScreen({
               voided,
               kind: kindFilter || undefined,
             });
+      if (gen !== reloadGen.current) return;
       setRows(data);
     } catch (e) {
+      if (gen !== reloadGen.current) return;
+      setRows([]);
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
-      setLoading(false);
+      if (gen === reloadGen.current) setLoading(false);
     }
   };
 
@@ -116,7 +124,10 @@ export function PayoutHistoryScreen({
         />
       </View>
       {isManager && scope === "org" && membersError ? (
-        <Sub>Teammate filter unavailable — {membersError}</Sub>
+        <>
+          <Sub>Teammate filter unavailable — {membersError}</Sub>
+          <Btn title="Retry teammates" variant="ghost" onPress={loadMembers} />
+        </>
       ) : null}
       {isManager && scope === "org" && members.length > 0 && (
         <View style={styles.kinds}>

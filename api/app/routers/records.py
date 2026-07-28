@@ -418,6 +418,7 @@ def decide_batch(
         raise HTTPException(400, "Reject requires a note")
     out = []
     skipped = 0
+    skipped_cash = 0
     # Track cash_on_hand spend approved in this batch (session autoflush is off).
     extra_cash_spent: dict[int, float] = {}
     for rid in body.ids:
@@ -434,6 +435,7 @@ def decide_batch(
                 _assert_cash_for_approve(db, rec, extra_spent=spent)
             except HTTPException:
                 skipped += 1
+                skipped_cash += 1
                 continue
             if _is_cash_on_hand_spend(rec):
                 extra_cash_spent[rec.created_by] = spent + float(rec.amount)
@@ -444,11 +446,20 @@ def decide_batch(
             rec.comment = (rec.comment + f"\n[review] {body.note}").strip()
         out.append(rec)
     if not out:
+        if skipped_cash > 0:
+            raise HTTPException(
+                400,
+                "No records approved — insufficient cash on hand for the selected spend",
+            )
         raise HTTPException(400, "No pending records matched the given ids")
     db.commit()
     for rec in out:
         db.refresh(rec)
-    return DecideBatchOut(decided=[_record_out(db, r) for r in out], skipped=skipped)
+    return DecideBatchOut(
+        decided=[_record_out(db, r) for r in out],
+        skipped=skipped,
+        skipped_insufficient_cash=skipped_cash,
+    )
 
 
 @router.get("/{record_id}", response_model=RecordOut)

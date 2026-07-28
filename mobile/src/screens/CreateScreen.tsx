@@ -55,6 +55,7 @@ export function CreateScreen({
   const [teamBals, setTeamBals] = useState<TeamBalance[]>([]);
   const [myCurrency, setMyCurrency] = useState("IDR");
   const [categoriesError, setCategoriesError] = useState("");
+  const [teamLoadError, setTeamLoadError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -82,15 +83,12 @@ export function CreateScreen({
     };
   }, [kind]);
 
-  useEffect(() => {
+  const loadTeamContext = async () => {
     if (!isManager) return;
-    (async () => {
-      try {
-        const rows = await listMembers();
-        setMembers(rows.filter((m) => m.is_active !== false));
-      } catch {
-        /* optional */
-      }
+    try {
+      setTeamLoadError("");
+      const rows = await listMembers();
+      setMembers(rows.filter((m) => m.is_active !== false));
       try {
         setTeamBals(await teamBalances());
       } catch {
@@ -100,9 +98,17 @@ export function CreateScreen({
         const org = await myOrg();
         setMyCurrency(org.currency || "IDR");
       } catch {
-        /* ignore */
+        /* ignore currency */
       }
-    })();
+    } catch (e) {
+      setMembers([]);
+      setTeamBals([]);
+      setTeamLoadError(e instanceof Error ? e.message : "Failed to load teammates");
+    }
+  };
+
+  useEffect(() => {
+    void loadTeamContext();
   }, [isManager]);
 
   useEffect(() => {
@@ -275,17 +281,36 @@ export function CreateScreen({
           }
           if (value > available) {
             const who = forUserId != null ? "Teammate available cash" : "Available cash";
+            const msg =
+              `${who} is ${available.toLocaleString()} ${currency}` +
+              ` (${held.toLocaleString()} held` +
+              `${reserved > 0 ? `, ${reserved.toLocaleString()} reserved` : ""}).`;
+            if (isManager && approveNow) {
+              Alert.alert(
+                "Fos",
+                `${msg} Cannot approve from cash on hand for more than available.`,
+              );
+              return;
+            }
             Alert.alert(
               "Fos",
-              `${who} is ${available.toLocaleString()} ${currency}` +
-                ` (${held.toLocaleString()} held` +
-                `${reserved > 0 ? `, ${reserved.toLocaleString()} reserved` : ""}). ` +
-                `Amount exceeds available — continue anyway on confirm if intentional.`,
+              `${msg} Amount exceeds available — continue anyway on confirm if intentional.`,
             );
           }
         } catch {
           /* ignore balance check */
         }
+      }
+      if (isManager && approveNow && closedCycleHint) {
+        Alert.alert(
+          "Fos",
+          `${closedCycleHint}\n\nApprove immediately anyway? Approving will not change the current open balance.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Continue", onPress: () => setConfirming(true) },
+          ],
+        );
+        return;
       }
       setConfirming(true);
       return;
@@ -389,6 +414,12 @@ export function CreateScreen({
         <>
           <Label>File for</Label>
           <Sub>Balances attribute to the selected teammate.</Sub>
+          {!!teamLoadError && (
+            <>
+              <Sub>Could not load teammates — {teamLoadError}</Sub>
+              <Btn title="Retry teammates" variant="ghost" onPress={loadTeamContext} />
+            </>
+          )}
           <View style={styles.kinds}>
             <Chip label="Myself" on={forUserId == null} onPress={() => setForUserId(null)} />
             {members

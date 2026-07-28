@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
 import {
   createAdjustment,
@@ -37,6 +37,7 @@ export function BalancesScreen({
   const [adjTrackFilter, setAdjTrackFilter] = useState<"" | "cash_on_hand" | "spendings">("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const reloadGen = useRef(0);
 
   const [userId, setUserId] = useState<number | null>(null);
   const [track, setTrack] = useState<"cash_on_hand" | "spendings">("spendings");
@@ -44,6 +45,8 @@ export function BalancesScreen({
   const [note, setNote] = useState("");
 
   const reload = async () => {
+    const gen = ++reloadGen.current;
+    setLoading(true);
     try {
       setLoadError("");
       const voided =
@@ -57,15 +60,19 @@ export function BalancesScreen({
           track: adjTrackFilter || undefined,
         }),
       ]);
+      if (gen !== reloadGen.current) return;
       setRows(list);
       setCurrency(org.currency);
       setAdjustments(adj);
       if (userId == null && list[0]) setUserId(list[0].user_id);
     } catch (e) {
+      if (gen !== reloadGen.current) return;
+      setRows([]);
+      setAdjustments([]);
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
-      setLoading(false);
+      if (gen === reloadGen.current) setLoading(false);
     }
   };
 
@@ -101,10 +108,24 @@ export function BalancesScreen({
         onPress: async () => {
           markBusy(true);
           try {
+            const list = await teamBalances();
+            const fresh = list.find((b) => b.user_id === item.user_id);
+            const available =
+              kind === "expense_payout"
+                ? fresh?.available_spendings ?? fresh?.spendings ?? 0
+                : fresh?.available_cash ?? fresh?.cash_on_hand ?? 0;
+            if (available + 1e-6 < value) {
+              setRows(list);
+              Alert.alert(
+                "Fos",
+                `Only ${formatMoney(available, currency)} available now — refresh and retry`,
+              );
+              return;
+            }
             await createPayout({
               user_id: item.user_id,
               kind,
-              amount: value,
+              amount: Math.min(value, available),
               payment_method: "cash",
               note:
                 kind === "expense_payout"
@@ -337,13 +358,13 @@ export function BalancesScreen({
               <Btn
                 title="Pay spendings"
                 variant="ghost"
-                disabled={isBusy || (item.available_spendings ?? item.spendings) <= 0}
+                disabled={isBusy || !!loadError || (item.available_spendings ?? item.spendings) <= 0}
                 onPress={() => settle(item, "expense_payout")}
               />
               <Btn
                 title="Take cash"
                 variant="ghost"
-                disabled={isBusy || (item.available_cash ?? item.cash_on_hand) <= 0}
+                disabled={isBusy || !!loadError || (item.available_cash ?? item.cash_on_hand) <= 0}
                 onPress={() => settle(item, "income_handover")}
               />
             </View>

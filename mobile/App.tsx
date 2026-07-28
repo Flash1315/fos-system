@@ -57,6 +57,7 @@ export default function App() {
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
+      setBusy(false);
       setUser(null);
       setRecordId(null);
       setScreen("auth");

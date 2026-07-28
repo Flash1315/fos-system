@@ -76,6 +76,20 @@ export function TransferScreen({
           onPress: async () => {
             setBusy(true);
             try {
+              const bal = await myBalance();
+              const freshAvailable = bal.available_cash ?? bal.cash_on_hand;
+              if (value > freshAvailable + 1e-6) {
+                setHeld(bal.cash_on_hand);
+                setReserved(bal.reserved_cash ?? 0);
+                setAvailable(freshAvailable);
+                setCurrency(bal.currency);
+                Alert.alert(
+                  "Fos",
+                  `Only ${freshAvailable.toLocaleString()} ${bal.currency} available now ` +
+                    `(${bal.cash_on_hand.toLocaleString()} held, ${(bal.reserved_cash ?? 0).toLocaleString()} reserved).`,
+                );
+                return;
+              }
               await transferCash({
                 to_email: email.trim(),
                 amount: value,

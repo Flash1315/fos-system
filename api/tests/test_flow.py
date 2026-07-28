@@ -2428,3 +2428,57 @@ def test_invite_token_accept_and_pagination(client):
     assert org_page.status_code == 200
     assert len(org_page.json()) == 2
 
+def test_owner_issues_password_reset_token(client):
+    owner = _register(client, "flow-reset-tok", "resettok-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "resettok-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    assert inv.status_code == 200
+    emp_id = inv.json()["id"]
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "resettok-emp@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-reset-tok",
+        },
+    )
+    assert login.status_code == 200
+    old_h = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    issued = client.post(f"/orgs/members/{emp_id}/reset-token", headers=h)
+    assert issued.status_code == 200, issued.text
+    token = issued.json()["invite_token"]
+    assert token
+    assert client.get("/auth/me", headers=old_h).status_code == 401
+    blocked = client.post(
+        "/auth/login",
+        json={
+            "email": "resettok-emp@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-reset-tok",
+        },
+    )
+    assert blocked.status_code == 401
+    accept = client.post(
+        "/auth/accept-invite",
+        json={"token": token, "password": "freshpass1"},
+    )
+    assert accept.status_code == 200, accept.text
+    ok = client.post(
+        "/auth/login",
+        json={
+            "email": "resettok-emp@example.com",
+            "password": "freshpass1",
+            "organization_slug": "flow-reset-tok",
+        },
+    )
+    assert ok.status_code == 200
+

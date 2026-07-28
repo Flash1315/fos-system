@@ -87,6 +87,15 @@ class MemberPasswordResetIn(BaseModel):
     new_password: str = Field(min_length=6, max_length=128)
 
 
+class MemberResetTokenOut(BaseModel):
+    id: int
+    email: EmailStr
+    full_name: str
+    organization_slug: str
+    invite_token: str
+    must_set_password: bool = True
+
+
 class RecordCreate(BaseModel):
     kind: RecordKind
     amount: float = Field(gt=0)

@@ -1,10 +1,18 @@
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.schemas import MemberOut, MemberActiveIn, MemberRoleIn, MemberPasswordResetIn
+from app.schemas import (
+    MemberOut,
+    MemberActiveIn,
+    MemberRoleIn,
+    MemberPasswordResetIn,
+    MemberResetTokenOut,
+)
 from app.auth import bump_token_version, get_current_user, require_roles, hash_password
 from app.db import get_db
-from app.models import User, UserRole
+from app.models import Organization, User, UserRole
 
 router = APIRouter(prefix="/orgs", tags=["team"])
 
@@ -118,3 +126,33 @@ def reset_member_password(
     db.commit()
     db.refresh(member)
     return MemberOut.model_validate(member)
+
+
+@router.post("/members/{member_id}/reset-token", response_model=MemberResetTokenOut)
+def issue_member_reset_token(
+    member_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner)),
+):
+    """Issue a one-time token; teammate sets a new password via /auth/accept-invite."""
+    member = db.get(User, member_id)
+    if not member or member.organization_id != user.organization_id:
+        raise HTTPException(404, "User not found")
+    if not member.is_active:
+        raise HTTPException(400, "Member is inactive")
+    org = db.get(Organization, user.organization_id)
+    token = secrets.token_urlsafe(24)
+    member.hashed_password = hash_password(secrets.token_urlsafe(24))
+    member.invite_token = token
+    member.must_set_password = True
+    bump_token_version(member)
+    db.commit()
+    db.refresh(member)
+    return MemberResetTokenOut(
+        id=member.id,
+        email=member.email,
+        full_name=member.full_name,
+        organization_slug=org.slug if org else "",
+        invite_token=token,
+        must_set_password=True,
+    )

@@ -440,6 +440,8 @@ def batch_take_all_cash(
 @router.get("/requests/mine", response_model=list[SettlementRequestOut])
 def my_settlement_requests(
     status: str | None = None,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -453,7 +455,9 @@ def my_settlement_requests(
         except ValueError as exc:
             raise HTTPException(400, "Invalid status") from exc
         q = q.filter(SettlementRequest.status == st)
-    rows = q.order_by(SettlementRequest.created_at.desc()).limit(50).all()
+    rows = (
+        q.order_by(SettlementRequest.created_at.desc()).offset(offset).limit(limit).all()
+    )
     return [_request_out(r, user.full_name) for r in rows]
 
 
@@ -496,6 +500,8 @@ def request_settlement(
 @router.get("/requests", response_model=list[SettlementRequestOut])
 def list_settlement_requests(
     status: str | None = "pending",
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -514,7 +520,7 @@ def list_settlement_requests(
             q = q.order_by(SettlementRequest.created_at.desc())
     else:
         q = q.order_by(SettlementRequest.created_at.desc())
-    rows = q.limit(100).all()
+    rows = q.offset(offset).limit(limit).all()
     out = []
     for r in rows:
         u = db.get(User, r.user_id)

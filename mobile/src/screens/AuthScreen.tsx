@@ -162,7 +162,7 @@ export function AuthScreen({
         {mode === "login"
           ? "Joining a team? Use the company slug and password from your manager — or Accept invite with a token."
           : mode === "invite"
-            ? "Paste the invite token and choose your password."
+            ? "Paste the invite or password-reset token and choose your password."
             : "Creates your organization and owner account."}
       </Sub>
       {mode === "login" && !!rememberedSlug && (
@@ -230,7 +230,7 @@ export function AuthScreen({
         )}
       </Card>
       {mode === "login" && (
-        <LinkText onPress={() => setMode("invite")}>Have an invite token? Accept invite</LinkText>
+        <LinkText onPress={() => setMode("invite")}>Have an invite or reset token?</LinkText>
       )}
       {mode === "invite" && (
         <LinkText onPress={() => setMode("login")}>Back to log in</LinkText>

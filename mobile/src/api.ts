@@ -345,6 +345,17 @@ export function resetMemberPassword(id: number, new_password: string) {
   });
 }
 
+export function issueMemberResetToken(id: number) {
+  return request<{
+    id: number;
+    email: string;
+    full_name: string;
+    organization_slug: string;
+    invite_token: string;
+    must_set_password: boolean;
+  }>(`/orgs/members/${id}/reset-token`, { method: "POST" });
+}
+
 export type BalanceInfo = {
   cash_on_hand: number;
   spendings: number;
@@ -695,9 +706,15 @@ export function batchTakeCash(payment_method = "cash") {
   });
 }
 
-export function listMySettlementRequests(params?: { status?: string }) {
+export function listMySettlementRequests(params?: {
+  status?: string;
+  limit?: number;
+  offset?: number;
+}) {
   const q = new URLSearchParams();
   if (params?.status) q.set("status", params.status);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
   const qs = q.toString();
   return request<
     {

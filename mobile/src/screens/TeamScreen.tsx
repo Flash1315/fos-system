@@ -4,6 +4,7 @@ import { useFocusEffect } from "../useFocus";
 import {
   listMembers,
   resetMemberPassword,
+  issueMemberResetToken,
   setMemberActive,
   setMemberRole,
   type User,
@@ -150,6 +151,38 @@ export function TeamScreen({
                   disabled={busy}
                   onPress={() => setResetId(item.id)}
                 />
+                <Btn
+                  title="Issue reset token"
+                  variant="ghost"
+                  disabled={busy}
+                  onPress={() => {
+                    Alert.alert(
+                      "Fos",
+                      `Issue a one-time reset token for ${item.full_name}? Their current sessions will be signed out.`,
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Issue",
+                          onPress: async () => {
+                            setBusy(true);
+                            try {
+                              const res = await issueMemberResetToken(item.id);
+                              Alert.alert(
+                                "Fos",
+                                `Share with ${item.full_name}:\n\nSlug: ${res.organization_slug}\nEmail: ${res.email}\nReset token: ${res.invite_token}\n\nThey open Accept invite and set a new password.`,
+                              );
+                              await reload();
+                            } catch (e) {
+                              Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+                            } finally {
+                              setBusy(false);
+                            }
+                          },
+                        },
+                      ],
+                    );
+                  }}
+                />
               </>
             )}
           </View>
@@ -174,7 +207,8 @@ export function TeamScreen({
           setBusy(true);
           try {
             await resetMemberPassword(id, pwd);
-            Alert.alert("Fos", "Password reset");
+            Alert.alert("Fos", "Password reset — their other sessions signed out");
+            await reload();
           } catch (e) {
             Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
           } finally {

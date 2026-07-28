@@ -41,6 +41,13 @@ def _normalize_bike(bike: str | None) -> str:
     return cleaned
 
 
+def _normalize_spaced(value: str | None, *, field: str, max_len: int) -> str:
+    cleaned = re.sub(r"\s+", " ", (value or "").strip())
+    if len(cleaned) > max_len:
+        raise HTTPException(400, f"{field} too long (max {max_len})")
+    return cleaned
+
+
 def _append_text(existing: str | None, addition: str, *, label: str = "Comment") -> str:
     base = (existing or "").rstrip()
     add = (addition or "").strip()
@@ -339,6 +346,13 @@ def create_record(
         commit_or_replay,
     )
     from app.services.money import require_positive_money
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"record-create:{user.organization_id}:{user.id}",
+        limit=60,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None
@@ -369,6 +383,8 @@ def create_record(
     photo_url = _validate_photo_url(body.photo_url, user.organization_id)
     occurred_at = _validate_occurred_at(body.occurred_at)
     bike = _normalize_bike(body.bike)
+    place = _normalize_spaced(body.place, field="place", max_len=200)
+    client_name = _normalize_spaced(body.client_name, field="client_name", max_len=200)
     if body.created_for_user_id is not None:
         if user.role not in (UserRole.owner, UserRole.manager):
             raise HTTPException(403, "Only managers can create on behalf")
@@ -397,13 +413,13 @@ def create_record(
         currency=org.currency if org else "IDR",
         category=category,
         purpose=purpose,
-        place=body.place,
+        place=place,
         bike=bike,
         comment=body_comment,
         photo_url=photo_url,
         liters=body.liters,
         odometer=body.odometer,
-        client_name=body.client_name,
+        client_name=client_name,
         payment_method=method,
         payment_source=source,
         occurred_at=occurred_at,
@@ -975,6 +991,12 @@ def update_pending_record(
         data["occurred_at"] = _validate_occurred_at(data["occurred_at"])
     if "bike" in data:
         data["bike"] = _normalize_bike(data["bike"])
+    if "place" in data:
+        data["place"] = _normalize_spaced(data["place"], field="place", max_len=200)
+    if "client_name" in data:
+        data["client_name"] = _normalize_spaced(
+            data["client_name"], field="client_name", max_len=200
+        )
     if rec.kind == RecordKind.fuel:
         from app.services.locks import lock_users
 

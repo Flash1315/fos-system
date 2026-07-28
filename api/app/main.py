@@ -23,7 +23,7 @@ Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.7.29")
+app = FastAPI(title=settings.app_name, version="0.7.30")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 # Bearer-token auth does not use cookies; credentials+wildcard is unnecessary.
@@ -47,6 +47,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "Permissions-Policy",
             "geolocation=(), microphone=(), camera=()",
         )
+        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
         # Authenticated API / media — avoid shared caches storing bearer-scoped bodies
         response.headers.setdefault("Cache-Control", "no-store")
         return response
@@ -81,7 +82,7 @@ def health():
     return {
         "ok": db_status == "ok",
         "app": settings.app_name,
-        "version": "0.7.29",
+        "version": "0.7.30",
         "db": db_status,
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }

@@ -392,6 +392,7 @@ export function ApproveScreen({
         visible={rejectId != null}
         title="Reject record"
         required
+        maxLength={2000}
         onCancel={() => setRejectId(null)}
         onSubmit={async (note) => {
           const id = rejectId;
@@ -403,6 +404,7 @@ export function ApproveScreen({
         visible={rejectAllOpen}
         title="Reject all pending"
         required
+        maxLength={2000}
         onCancel={() => setRejectAllOpen(false)}
         onSubmit={async (note) => {
           setRejectAllOpen(false);

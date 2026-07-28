@@ -270,6 +270,10 @@ export function RecordDetailScreen({
       Alert.alert("Fos", "Category is required");
       return;
     }
+    if (editComment.trim().length > 4000) {
+      Alert.alert("Fos", "Comment is too long (max 4000 characters)");
+      return;
+    }
     const body: Parameters<typeof updateRecord>[1] = {
       amount: value,
       place: editPlace,
@@ -668,6 +672,7 @@ export function RecordDetailScreen({
         visible={rejectOpen}
         title="Reject record"
         required
+        maxLength={2000}
         onCancel={() => setRejectOpen(false)}
         onSubmit={async (note) => {
           setRejectOpen(false);
@@ -683,6 +688,7 @@ export function RecordDetailScreen({
         }
         label="Reason (required). Void removes this from balances."
         required
+        maxLength={2000}
         confirmTitle="Void"
         confirmVariant="danger"
         onCancel={() => setVoidOpen(false)}
@@ -695,6 +701,7 @@ export function RecordDetailScreen({
         visible={commentOpen}
         title="Manager note"
         required
+        maxLength={2000}
         onCancel={() => setCommentOpen(false)}
         onSubmit={async (note) => {
           setCommentOpen(false);

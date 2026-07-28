@@ -588,6 +588,13 @@ def batch_pay_all_spendings(
         require_idem_match,
         store_idem,
     )
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"payout-batch:{manager.organization_id}:{manager.id}",
+        limit=10,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint({"payment_method": payment_method}) if key else None
@@ -685,6 +692,13 @@ def batch_take_all_cash(
         normalize_idem_key,
         require_idem_match,
         store_idem,
+    )
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"payout-batch:{manager.organization_id}:{manager.id}",
+        limit=10,
+        window_sec=60,
     )
 
     key = normalize_idem_key(idempotency_key)
@@ -828,6 +842,13 @@ def request_settlement(
         store_idem,
     )
     from app.services.money import require_positive_money
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"settle-request:{user.organization_id}:{user.id}",
+        limit=30,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None

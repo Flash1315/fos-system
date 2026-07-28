@@ -166,10 +166,16 @@ def me(user: User = Depends(get_current_user)):
 
 @router.post("/auth/logout")
 def logout(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Revoke this account's access tokens on this device family (bumps token_version)."""
+    enforce_rate_limit(
+        f"logout:{user.id}:{client_ip(request)}",
+        limit=30,
+        window_sec=60,
+    )
     locked = db.query(User).filter(User.id == user.id).with_for_update().first()
     if not locked:
         raise HTTPException(404, "User not found")

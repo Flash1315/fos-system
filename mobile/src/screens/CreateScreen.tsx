@@ -289,6 +289,10 @@ export function CreateScreen({
       Alert.alert("Fos", "When must be a real calendar day (YYYY-MM-DD) or empty");
       return;
     }
+    if (comment.trim().length > 4000) {
+      Alert.alert("Fos", "Comment is too long (max 4000 characters)");
+      return;
+    }
     if (kind === "fuel") {
       const litersVal = parseFiniteLiters(liters);
       const odoVal = odometer.trim() ? parseFiniteOdometer(odometer) : null;

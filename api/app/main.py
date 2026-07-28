@@ -1,11 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.alembic_runner import run_alembic_upgrade
 from app.config import settings
 from app.db import Base, engine
 from app.migrate import ensure_money_record_columns
 from app.routers import auth as auth_router
 from app.routers import adjustments as adjustments_router
+from app.routers import billing as billing_router
 from app.routers import media as media_router
 from app.routers import payouts as payouts_router
 from app.routers import records as records_router
@@ -15,8 +17,9 @@ from app.routers import transfers as transfers_router
 
 Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
+run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.6.46")
+app = FastAPI(title=settings.app_name, version="0.7.0")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
@@ -35,8 +38,14 @@ app.include_router(media_router.router)
 app.include_router(transfers_router.router)
 app.include_router(payouts_router.router)
 app.include_router(adjustments_router.router)
+app.include_router(billing_router.router)
 
 
 @app.get("/health")
 def health():
-    return {"ok": True, "app": settings.app_name, "version": "0.6.46"}
+    return {
+        "ok": True,
+        "app": settings.app_name,
+        "version": "0.7.0",
+        "media_backend": (settings.media_backend or "local").strip().lower(),
+    }

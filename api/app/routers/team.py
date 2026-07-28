@@ -148,6 +148,19 @@ def issue_member_reset_token(
     bump_token_version(member)
     db.commit()
     db.refresh(member)
+    emailed = False
+    if org:
+        from app.services.email import send_reset_email
+        from app.services.notify import notify_org
+
+        emailed = send_reset_email(
+            to=member.email,
+            full_name=member.full_name,
+            org_name=org.name,
+            org_slug=org.slug,
+            reset_token=token,
+        )
+        notify_org(org, f"Fos: password reset token issued for {member.full_name}")
     return MemberResetTokenOut(
         id=member.id,
         email=member.email,
@@ -155,4 +168,5 @@ def issue_member_reset_token(
         organization_slug=org.slug if org else "",
         invite_token=token,
         must_set_password=True,
+        email_sent=emailed,
     )

@@ -2528,3 +2528,42 @@ def test_idempotency_key_and_money_round(client):
     assert third.status_code == 200
     assert third.json()["id"] != first.json()["id"]
 
+def test_billing_and_money_numeric(client):
+    owner = _register(client, "flow-bill", "bill-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    me = client.get("/billing/me", headers=h)
+    assert me.status_code == 200, me.text
+    body = me.json()
+    assert body["plan"] == "free"
+    assert body["billing_status"] == "ok"
+    assert body["media_backend"] in ("local", "s3")
+    plan = client.post("/billing/plan", headers=h, json={"plan": "pro"})
+    assert plan.status_code == 200
+    assert plan.json()["plan"] == "pro"
+    tg = client.post(
+        "/integrations/telegram/chat",
+        headers=h,
+        json={"telegram_chat_id": "-100123"},
+    )
+    assert tg.status_code == 200
+    assert tg.json()["telegram_chat_id"] == "-100123"
+    # Without bot token, test endpoint fails clearly
+    bad = client.post("/integrations/telegram/test", headers=h)
+    assert bad.status_code == 400
+    # Money still rounds through Numeric column
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 1.005,
+            "category": "Supplies",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert rec.status_code == 200
+    assert rec.json()["amount"] == 1.01
+    health = client.get("/health")
+    assert health.json()["version"] == "0.7.0"
+

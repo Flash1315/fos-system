@@ -219,6 +219,23 @@ def invite_user(
     db.add(invited)
     db.commit()
     db.refresh(invited)
+    emailed = False
+    if org:
+        from app.services.email import send_invite_email
+        from app.services.notify import notify_org
+
+        emailed = send_invite_email(
+            to=invited.email,
+            full_name=invited.full_name,
+            org_name=org.name,
+            org_slug=org.slug,
+            invite_token=invite_token,
+            temp_password=bool(body.password),
+        )
+        notify_org(
+            org,
+            f"Fos: invited {invited.full_name} ({invited.email}) as {invited.role.value}",
+        )
     return InviteOut(
         id=invited.id,
         email=invited.email,
@@ -228,4 +245,5 @@ def invite_user(
         organization_slug=org.slug if org else "",
         must_set_password=must_set,
         invite_token=invite_token,
+        email_sent=emailed,
     )

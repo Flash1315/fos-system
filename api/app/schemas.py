@@ -69,6 +69,7 @@ class InviteOut(BaseModel):
     organization_slug: str = ""
     must_set_password: bool = False
     invite_token: Optional[str] = None
+    email_sent: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -94,6 +95,7 @@ class MemberResetTokenOut(BaseModel):
     organization_slug: str
     invite_token: str
     must_set_password: bool = True
+    email_sent: bool = False
 
 
 class RecordCreate(BaseModel):

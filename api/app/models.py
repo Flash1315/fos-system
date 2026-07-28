@@ -7,6 +7,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+from app.db_types import MoneyAmount
 
 
 def _utcnow() -> datetime:
@@ -38,6 +39,11 @@ class Organization(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="IDR")
+    # Billing stub (no payment processor yet)
+    plan: Mapped[str] = mapped_column(String(40), default="free")  # free / trial / pro
+    billing_status: Mapped[str] = mapped_column(String(40), default="ok")  # ok / past_due / canceled
+    # Optional Telegram notify chat for org events
+    telegram_chat_id: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     users: Mapped[list["User"]] = relationship(back_populates="organization")
@@ -78,7 +84,7 @@ class MoneyRecord(Base):
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     kind: Mapped[RecordKind] = mapped_column(Enum(RecordKind), nullable=False)
     status: Mapped[RecordStatus] = mapped_column(Enum(RecordStatus), default=RecordStatus.pending)
-    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    amount: Mapped[float] = mapped_column(MoneyAmount, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="IDR")
     category: Mapped[str] = mapped_column(String(120), default="")
     purpose: Mapped[str] = mapped_column(String(80), default="")  # Rental / Lesson / Office / Other
@@ -125,14 +131,14 @@ class Payout(Base):
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     kind: Mapped[PayoutKind] = mapped_column(Enum(PayoutKind), nullable=False)
-    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    amount: Mapped[float] = mapped_column(MoneyAmount, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="IDR")
     payment_method: Mapped[str] = mapped_column(String(40), default="cash")  # cash / transfer
     note: Mapped[str] = mapped_column(Text, default="")
     # RJ-style: amount paid above current spendings reduces next-cycle owed
-    overpayment: Mapped[float] = mapped_column(Float, default=0.0)
+    overpayment: Mapped[float] = mapped_column(MoneyAmount, default=0.0)
     # Unpaid remainder after a partial settlement (carry into next cycle)
-    balance_after: Mapped[float] = mapped_column(Float, default=0.0)
+    balance_after: Mapped[float] = mapped_column(MoneyAmount, default=0.0)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     is_voided: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -155,7 +161,7 @@ class SettlementRequest(Base):
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     kind: Mapped[PayoutKind] = mapped_column(Enum(PayoutKind), nullable=False)
-    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    amount: Mapped[float] = mapped_column(MoneyAmount, nullable=False)
     note: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[SettlementRequestStatus] = mapped_column(
         Enum(SettlementRequestStatus), default=SettlementRequestStatus.pending
@@ -164,7 +170,7 @@ class SettlementRequest(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     # Filled when approved — actual payout amount may be clamped
-    settled_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    settled_amount: Mapped[float | None] = mapped_column(MoneyAmount, nullable=True)
     payout_id: Mapped[int | None] = mapped_column(ForeignKey("payouts.id"), nullable=True)
 
 
@@ -181,7 +187,7 @@ class BalanceAdjustment(Base):
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     track: Mapped[AdjustmentTrack] = mapped_column(Enum(AdjustmentTrack), nullable=False)
-    amount: Mapped[float] = mapped_column(Float, nullable=False)  # signed
+    amount: Mapped[float] = mapped_column(MoneyAmount, nullable=False)  # signed
     note: Mapped[str] = mapped_column(Text, default="")
     occurred_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)

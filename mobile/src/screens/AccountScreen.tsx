@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import {
+  billingMe,
   changePassword,
   listSettlementRequests,
   listMySettlementRequests,
@@ -10,7 +11,11 @@ import {
   approveSettlementRequest,
   cancelSettlementRequest,
   saveToken,
+  setBillingPlan,
+  setTelegramChat,
+  testTelegram,
   updateOrg,
+  type BillingInfo,
   type User,
 } from "../api";
 import { NoteModal } from "../components/NoteModal";
@@ -61,6 +66,8 @@ export function AccountScreen({
     "all",
   );
   const [reqLoadError, setReqLoadError] = useState("");
+  const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [tgChat, setTgChat] = useState("");
 
   const reloadOrg = async () => {
     try {
@@ -71,6 +78,15 @@ export function AccountScreen({
       setCurrency(org.currency || "IDR");
       setCurrencyLocked(!!org.currency_locked);
       setOrgLoaded(true);
+      if (isOwner) {
+        try {
+          const b = await billingMe();
+          setBilling(b);
+          setTgChat(b.telegram_chat_id || "");
+        } catch {
+          setBilling(null);
+        }
+      }
     } catch (e) {
       setOrgLoaded(false);
       setOrgLoadError(e instanceof Error ? e.message : "Failed to load company");
@@ -257,6 +273,73 @@ export function AccountScreen({
             <Sub>Currency locked after money activity — rename only.</Sub>
           ) : null}
           <Btn title={busy ? "…" : "Save company"} onPress={onSaveOrg} disabled={busy} />
+
+          <Label>Plan & integrations</Label>
+          <Sub>
+            Plan is a stub (no payments yet). Optional Telegram chat for org alerts when the server
+            has TELEGRAM_BOT_TOKEN. SMTP invites when SMTP_HOST is set.
+          </Sub>
+          {billing && (
+            <Sub>
+              Plan {billing.plan} · {billing.billing_status} · media {billing.media_backend}
+              {billing.email_configured ? " · email on" : " · email off"}
+              {billing.telegram_configured ? " · telegram bot on" : " · telegram bot off"}
+            </Sub>
+          )}
+          <View style={styles.kinds}>
+            {(["free", "trial", "pro"] as const).map((p) => (
+              <Chip
+                key={p}
+                label={p}
+                on={billing?.plan === p}
+                onPress={async () => {
+                  setBusy(true);
+                  try {
+                    setBilling(await setBillingPlan(p));
+                  } catch (e) {
+                    Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              />
+            ))}
+          </View>
+          <Label>Telegram chat id</Label>
+          <Field value={tgChat} onChangeText={setTgChat} placeholder="-100…" autoCapitalize="none" />
+          <Btn
+            title={busy ? "…" : "Save Telegram chat"}
+            variant="ghost"
+            disabled={busy}
+            onPress={async () => {
+              setBusy(true);
+              try {
+                const b = await setTelegramChat(tgChat.trim());
+                setBilling(b);
+                Alert.alert("Fos", "Telegram chat saved");
+              } catch (e) {
+                Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+          <Btn
+            title="Send Telegram test"
+            variant="ghost"
+            disabled={busy}
+            onPress={async () => {
+              setBusy(true);
+              try {
+                await testTelegram();
+                Alert.alert("Fos", "Test message sent");
+              } catch (e) {
+                Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
         </>
       )}
 

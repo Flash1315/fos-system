@@ -353,7 +353,41 @@ export function issueMemberResetToken(id: number) {
     organization_slug: string;
     invite_token: string;
     must_set_password: boolean;
+    email_sent?: boolean;
   }>(`/orgs/members/${id}/reset-token`, { method: "POST" });
+}
+
+export type BillingInfo = {
+  plan: string;
+  billing_status: string;
+  currency: string;
+  organization_slug: string;
+  telegram_configured: boolean;
+  telegram_chat_id: string;
+  email_configured: boolean;
+  media_backend: string;
+};
+
+export function billingMe() {
+  return request<BillingInfo>("/billing/me");
+}
+
+export function setBillingPlan(plan: "free" | "trial" | "pro") {
+  return request<BillingInfo>("/billing/plan", {
+    method: "POST",
+    body: JSON.stringify({ plan }),
+  });
+}
+
+export function setTelegramChat(telegram_chat_id: string) {
+  return request<BillingInfo>("/integrations/telegram/chat", {
+    method: "POST",
+    body: JSON.stringify({ telegram_chat_id }),
+  });
+}
+
+export function testTelegram() {
+  return request<{ ok: boolean }>("/integrations/telegram/test", { method: "POST" });
 }
 
 export type BalanceInfo = {

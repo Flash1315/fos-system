@@ -1,4 +1,4 @@
-"""Lightweight additive schema upgrades for SQLite/Postgres."""
+"""Lightweight additive schema upgrades for SQLite/Postgres (pre-Alembic safety net)."""
 
 from sqlalchemy import text
 
@@ -30,7 +30,7 @@ def _ensure_columns(table: str, ddl: list[tuple[str, str]]) -> None:
 
 
 def ensure_money_record_columns() -> None:
-    """Add new MoneyRecord / Payout columns if missing (no Alembic in v1)."""
+    """Add new columns if missing (no full Alembic dependency on boot)."""
     _ensure_columns(
         "money_records",
         [
@@ -69,5 +69,13 @@ def ensure_money_record_columns() -> None:
             ("token_version", "INTEGER DEFAULT 0"),
             ("invite_token", "VARCHAR(64)"),
             ("must_set_password", "BOOLEAN DEFAULT 0"),
+        ],
+    )
+    _ensure_columns(
+        "organizations",
+        [
+            ("plan", "VARCHAR(40) DEFAULT 'free'"),
+            ("billing_status", "VARCHAR(40) DEFAULT 'ok'"),
+            ("telegram_chat_id", "VARCHAR(64) DEFAULT ''"),
         ],
     )

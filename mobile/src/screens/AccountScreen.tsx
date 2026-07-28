@@ -231,8 +231,8 @@ export function AccountScreen({
 
   const onSaveOrg = async () => {
     if (busy) return;
-    if (!orgName.trim()) {
-      Alert.alert("Fos", "Company name required");
+    if (!orgName.trim() || orgName.trim().length < 2) {
+      Alert.alert("Fos", "Company name must be at least 2 characters");
       return;
     }
     setBusy(true);

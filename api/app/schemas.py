@@ -14,6 +14,7 @@ class OrgCreate(BaseModel):
     owner_email: EmailStr
     owner_name: str = Field(min_length=1, max_length=200)
     owner_password: str = Field(min_length=6, max_length=128)
+    owner_password_confirm: str = Field(min_length=6, max_length=128)
 
     @field_validator("name", "owner_name")
     @classmethod
@@ -30,6 +31,12 @@ class OrgCreate(BaseModel):
         if not re.fullmatch(r"[A-Z]{3}", code):
             raise ValueError("currency must be a 3-letter code (e.g. IDR)")
         return code
+
+    @model_validator(mode="after")
+    def confirm_password(self):
+        if self.owner_password_confirm != self.owner_password:
+            raise ValueError("Passwords do not match")
+        return self
 
 
 class OrgOut(BaseModel):

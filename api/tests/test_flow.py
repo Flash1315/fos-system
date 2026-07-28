@@ -40,6 +40,7 @@ def _register(client, slug: str, email: str = "owner@example.com"):
             "owner_email": email,
             "owner_name": "Owner",
             "owner_password": "secret12",
+            "owner_password_confirm": "secret12",
         },
     )
     assert res.status_code == 200, res.text
@@ -2620,7 +2621,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.13"
+    assert health.json()["version"] == "0.7.14"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -3011,6 +3012,7 @@ def test_cannot_deactivate_with_pending_and_org_name_trim(client):
             "owner_email": "blank@example.com",
             "owner_name": "Owner",
             "owner_password": "secret12",
+            "owner_password_confirm": "secret12",
         },
     )
     assert bad.status_code == 422
@@ -3695,4 +3697,214 @@ def test_round_to_zero_rejected_and_csv_settlement_export(client):
     assert "liters" in csv.text.splitlines()[0]
     assert "transfer_group_id" in csv.text.splitlines()[0]
     assert "settlement_request" in csv.text
+
+
+def test_fuel_liters_required_and_accept_requires_must_set(client):
+    owner = _register(client, "flow-0713", "v0713-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    no_liters = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 100,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "X1",
+            "odometer": 100,
+            "payment_source": "my_pocket",
+        },
+    )
+    assert no_liters.status_code == 422
+
+    first = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 100,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "X1",
+            "odometer": 100,
+            "liters": 4,
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert first.status_code == 200, first.text
+    missing_odo = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 80,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "X1",
+            "liters": 3,
+            "payment_source": "my_pocket",
+        },
+    )
+    assert missing_odo.status_code == 400
+    assert "odometer" in missing_odo.json()["detail"].lower()
+
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0713-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    assert inv.status_code == 200
+    emp_id = inv.json()["id"]
+    # Force leftover invite token without must_set_password
+    from app.db import SessionLocal
+    from app.models import User
+    from app.services.invite_tokens import store_invite_token
+    import secrets
+
+    raw = secrets.token_urlsafe(24)
+    db = SessionLocal()
+    try:
+        u = db.get(User, emp_id)
+        u.must_set_password = False
+        u.invite_token = store_invite_token(raw)
+        db.commit()
+    finally:
+        db.close()
+    blocked = client.post(
+        "/auth/accept-invite",
+        json={"token": raw, "password": "freshpass1", "password_confirm": "freshpass1"},
+    )
+    assert blocked.status_code == 400
+    assert "invalid" in blocked.json()["detail"].lower()
+
+
+def test_register_confirm_nonfinite_billing_stub_and_void_reapprove(client, monkeypatch):
+    # Register requires password confirm
+    mismatch = client.post(
+        "/orgs/register",
+        json={
+            "name": "Acme",
+            "slug": "flow-0714-bad",
+            "currency": "IDR",
+            "owner_email": "v0714-bad@example.com",
+            "owner_name": "Owner",
+            "owner_password": "secret12",
+            "owner_password_confirm": "other12",
+        },
+    )
+    assert mismatch.status_code == 422
+
+    owner = _register(client, "flow-0714", "v0714-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    # Non-finite / overflow amounts rejected by money helpers (JSON cannot carry Inf)
+    from app.services.money import require_positive_money, round_money
+
+    for amount in (float("inf"), float("-inf"), float("nan"), "Infinity", "NaN", "1e309"):
+        try:
+            require_positive_money(amount)
+            raise AssertionError(f"expected reject for {amount!r}")
+        except ValueError as exc:
+            assert "finite" in str(exc).lower() or "0.01" in str(exc)
+    try:
+        round_money("NaN")
+        raise AssertionError("expected reject for NaN")
+    except ValueError:
+        pass
+
+    # Transfer comment max length
+    long_comment = client.post(
+        "/transfers",
+        headers=h,
+        json={
+            "to_email": "nobody@example.com",
+            "amount": 1,
+            "comment": "x" * 2001,
+        },
+    )
+    assert long_comment.status_code == 422
+
+    # Billing stub: even with switch on, pro is refused
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "billing_plan_switch", True)
+    refuse_pro = client.post("/billing/plan", headers=h, json={"plan": "pro"})
+    assert refuse_pro.status_code == 400
+    assert "billing" in refuse_pro.json()["detail"].lower()
+    trial_ok = client.post("/billing/plan", headers=h, json={"plan": "trial"})
+    assert trial_ok.status_code == 200, trial_ok.text
+    assert trial_ok.json()["plan"] == "trial"
+
+    # Void payout → reopen → soft re-approve (with and without idem key)
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 4000,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    req = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 4000, "note": "reimburse"},
+    )
+    assert req.status_code == 200, req.text
+    rid = req.json()["id"]
+    key = "approve-reopen-0714"
+    first = client.post(
+        f"/payouts/requests/{rid}/approve",
+        headers={**h, "Idempotency-Key": key},
+        json={"payment_method": "cash"},
+    )
+    assert first.status_code == 200, first.text
+    payout_id = first.json()["id"]
+    voided = client.post(
+        f"/payouts/{payout_id}/void",
+        headers=h,
+        json={"note": "oops"},
+    )
+    assert voided.status_code == 200, voided.text
+    assert voided.json()["is_voided"] is True
+    pending = client.get("/payouts/requests?status=pending", headers=h).json()
+    assert any(x["id"] == rid and x["status"] == "pending" for x in pending)
+
+    # Same idem key after void must create a fresh payout (not return voided)
+    again = client.post(
+        f"/payouts/requests/{rid}/approve",
+        headers={**h, "Idempotency-Key": key},
+        json={"payment_method": "cash"},
+    )
+    assert again.status_code == 200, again.text
+    new_id = again.json()["id"]
+    assert new_id != payout_id
+    assert again.json()["is_voided"] is False
+
+    # Soft retry without key returns the new payout
+    soft = client.post(
+        f"/payouts/requests/{rid}/approve",
+        headers=h,
+        json={"payment_method": "cash"},
+    )
+    assert soft.status_code == 200
+    assert soft.json()["id"] == new_id
+
+    replay = client.post(
+        f"/payouts/requests/{rid}/approve",
+        headers={**h, "Idempotency-Key": key},
+        json={"payment_method": "cash"},
+    )
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["id"] == new_id
+    assert replay.json()["is_voided"] is False
 

@@ -134,7 +134,10 @@ def create_adjustment(
                 u = db.get(User, existing.user_id)
                 return _out(existing, u.full_name if u else "", db)
 
-    amount = round_money(body.amount)
+    try:
+        amount = round_money(body.amount)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     if abs(amount) < 1e-9:
         raise HTTPException(400, "Amount cannot be zero")
     target = db.get(User, body.user_id)

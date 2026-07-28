@@ -8,7 +8,7 @@ remain visible in the org ledger and share transfer_group_id for atomic void.
 import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -26,7 +26,12 @@ router = APIRouter(prefix="/transfers", tags=["transfers"])
 class TransferIn(BaseModel):
     to_email: EmailStr
     amount: float = Field(gt=0)
-    comment: str = ""
+    comment: str = Field(default="", max_length=2000)
+
+    @field_validator("comment")
+    @classmethod
+    def strip_comment(cls, v: str) -> str:
+        return (v or "").strip()
 
 
 class TransferOut(BaseModel):

@@ -56,18 +56,24 @@ def set_plan(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
-    """Stub plan switch — disabled unless BILLING_PLAN_SWITCH=1."""
+    """Stub plan switch — disabled unless BILLING_PLAN_SWITCH=1.
+
+    Even with the flag on, paid `pro` is refused until real billing exists.
+    """
     if not settings.billing_plan_switch:
         raise HTTPException(
             400,
             "Plan changes are disabled until billing is enabled (set BILLING_PLAN_SWITCH=1)",
         )
+    if body.plan == "pro":
+        raise HTTPException(
+            400,
+            "Paid plans require billing integration — only free/trial available in stub mode",
+        )
     org = db.get(Organization, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")
     org.plan = body.plan
-    if body.plan == "pro":
-        org.billing_status = "ok"
     db.commit()
     db.refresh(org)
     return billing_me(user, db)

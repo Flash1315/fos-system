@@ -40,6 +40,7 @@ def main() -> None:
             "owner_email": f"owner+{SLUG}@example.com",
             "owner_name": "Owner",
             "owner_password": "secret12",
+            "owner_password_confirm": "secret12",
         },
     )
     token = reg["access_token"]

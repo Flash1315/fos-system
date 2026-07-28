@@ -121,6 +121,10 @@ export function AuthScreen({
         Alert.alert("Fos", "Slug: lowercase letters, numbers, hyphens only");
         return;
       }
+      if (password !== passwordConfirm) {
+        Alert.alert("Fos", "Passwords do not match");
+        return;
+      }
     }
     const slug = orgSlug.toLowerCase().trim();
     const mail = email.trim();
@@ -134,6 +138,7 @@ export function AuthScreen({
           owner_email: mail,
           owner_name: name.trim(),
           owner_password: password,
+          owner_password_confirm: passwordConfirm,
         });
         await storageSet(LAST_SLUG_KEY, slug);
         await storageSet(LAST_EMAIL_KEY, mail);
@@ -236,6 +241,17 @@ export function AuthScreen({
               onChangeText={setPassword}
               placeholder="min 6 characters"
             />
+            {mode === "register" && (
+              <>
+                <Label>Confirm password</Label>
+                <Field
+                  secureTextEntry={!showPassword}
+                  value={passwordConfirm}
+                  onChangeText={setPasswordConfirm}
+                  placeholder="repeat password"
+                />
+              </>
+            )}
             <LinkText onPress={() => setShowPassword((v) => !v)}>
               {showPassword ? "Hide password" : "Show password"}
             </LinkText>

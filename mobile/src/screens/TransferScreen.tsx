@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import { makeIdempotencyKey, me, myBalance, orgDirectory, transferCash, type User } from "../api";
+import { formatMoney } from "../format";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
 export function TransferScreen({
@@ -56,15 +57,19 @@ export function TransferScreen({
       return;
     }
     const value = Number(amount.replace(",", "."));
-    if (!email.trim() || !value || value <= 0) {
-      Alert.alert("Fos", "Recipient and amount required");
+    if (!email.trim() || !Number.isFinite(value) || value < 0.01) {
+      Alert.alert("Fos", "Recipient and amount (at least 0.01) required");
+      return;
+    }
+    if (comment.trim().length > 2000) {
+      Alert.alert("Fos", "Comment is too long (max 2000 characters)");
       return;
     }
     if (value > available) {
       Alert.alert(
         "Fos",
-        `Only ${available.toLocaleString()} ${currency} available ` +
-          `(${held.toLocaleString()} held, ${reserved.toLocaleString()} reserved).`,
+        `Only ${formatMoney(available, currency)} available ` +
+          `(${formatMoney(held, currency)} held, ${formatMoney(reserved, currency)} reserved).`,
       );
       return;
     }
@@ -73,7 +78,7 @@ export function TransferScreen({
     setBusy(true);
     Alert.alert(
       "Fos",
-      `Transfer ${value.toLocaleString()} ${currency} to ${email.trim()}?`,
+      `Transfer ${formatMoney(value, currency)} to ${email.trim()}?`,
       [
         {
           text: "Cancel",
@@ -96,8 +101,8 @@ export function TransferScreen({
                 setCurrency(bal.currency);
                 Alert.alert(
                   "Fos",
-                  `Only ${freshAvailable.toLocaleString()} ${bal.currency} available now ` +
-                    `(${bal.cash_on_hand.toLocaleString()} held, ${(bal.reserved_cash ?? 0).toLocaleString()} reserved).`,
+                  `Only ${formatMoney(freshAvailable, bal.currency)} available now ` +
+                    `(${formatMoney(bal.cash_on_hand, bal.currency)} held, ${formatMoney(bal.reserved_cash ?? 0, bal.currency)} reserved).`,
                 );
                 return;
               }
@@ -105,7 +110,7 @@ export function TransferScreen({
                 {
                   to_email: email.trim(),
                   amount: value,
-                  comment,
+                  comment: comment.trim(),
                 },
                 { idempotencyKey: idemKeyRef.current || undefined },
               );

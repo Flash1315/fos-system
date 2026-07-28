@@ -762,10 +762,18 @@ def approve_settlement_request(
         )
         if hit:
             existing = db.get(Payout, hit.resource_id)
-            if existing and existing.organization_id == manager.organization_id:
+            # Voided payouts must not short-circuit — request may have reopened.
+            if (
+                existing
+                and existing.organization_id == manager.organization_id
+                and not existing.is_voided
+            ):
                 u = db.get(User, existing.user_id)
                 return _payout_out(db, existing, u.full_name if u else "")
+            db.delete(hit)
+            db.flush()
     req = db.get(SettlementRequest, request_id)
+
     if not req or req.organization_id != manager.organization_id:
         raise HTTPException(404, "Request not found")
     if req.status != SettlementRequestStatus.pending:

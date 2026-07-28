@@ -1,18 +1,31 @@
 """Money helpers — Decimal-safe 2dp rounding with float API surface."""
 
-from decimal import Decimal, ROUND_HALF_UP
+import math
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Union
 
 MoneyLike = Union[float, int, str, Decimal]
 
 
 def as_decimal(value: MoneyLike) -> Decimal:
-    return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    try:
+        raw = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        raise ValueError("Amount must be a finite number") from exc
+    if not raw.is_finite():
+        raise ValueError("Amount must be a finite number")
+    try:
+        return raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except InvalidOperation as exc:
+        raise ValueError("Amount must be a finite number") from exc
 
 
 def round_money(value: MoneyLike) -> float:
     """Round to 2 decimal places (half up) to limit float drift on writes."""
-    return float(as_decimal(value))
+    amount = float(as_decimal(value))
+    if not math.isfinite(amount):
+        raise ValueError("Amount must be a finite number")
+    return amount
 
 
 def require_positive_money(value: MoneyLike) -> float:

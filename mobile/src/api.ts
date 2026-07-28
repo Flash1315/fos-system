@@ -274,6 +274,7 @@ export function registerOrg(body: {
   owner_email: string;
   owner_name: string;
   owner_password: string;
+  owner_password_confirm: string;
 }) {
   return request<AuthToken>("/orgs/register", {
     method: "POST",
@@ -419,7 +420,8 @@ export function billingMe() {
   return request<BillingInfo>("/billing/me");
 }
 
-export function setBillingPlan(plan: "free" | "trial" | "pro") {
+/** Stub only — paid plans are refused server-side until billing ships. Prefer free/trial. */
+export function setBillingPlan(plan: "free" | "trial") {
   return request<BillingInfo>("/billing/plan", {
     method: "POST",
     body: JSON.stringify({ plan }),

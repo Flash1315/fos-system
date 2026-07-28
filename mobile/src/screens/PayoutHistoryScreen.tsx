@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
 import { BILLING_READONLY_MSG, billingMe, isBillingReadOnly, listMembers, listMyPayouts, listOrgPayouts, idemKeyFor, makeIdempotencyKey, onResumeRefresh, voidPayout, type User } from "../api";
+import { alertFosError } from "../alertError";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
@@ -296,11 +297,10 @@ export function PayoutHistoryScreen({
         onCancel={() => setVoidId(null)}
         onSubmit={async (note) => {
           const id = voidId;
-          setVoidId(null);
-          if (id == null) return;
+          if (id == null) throw new Error("Settlement is no longer selected");
           if (billingReadonly) {
             Alert.alert("Fos", BILLING_READONLY_MSG);
-            return;
+            throw new Error(BILLING_READONLY_MSG);
           }
           try {
             const b = await billingMe();
@@ -308,7 +308,7 @@ export function PayoutHistoryScreen({
             setBillingReadonly(frozen);
             if (frozen) {
               Alert.alert("Fos", BILLING_READONLY_MSG);
-              return;
+              return Promise.reject(new Error(BILLING_READONLY_MSG));
             }
           } catch { /* API 403 if frozen */ }
           const noteKey = note.replace(/\s+/g, " ").trim();
@@ -320,7 +320,8 @@ export function PayoutHistoryScreen({
             voidSlotRef.current = null;
             await reload();
           } catch (e) {
-            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            alertFosError(e);
+            throw e;
           } finally {
             setBusy(false);
           }

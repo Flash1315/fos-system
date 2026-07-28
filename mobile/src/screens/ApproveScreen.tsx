@@ -13,6 +13,7 @@ import {
   pendingSettlementCount,
   type MoneyRecord,
 } from "../api";
+import { alertFosError } from "../alertError";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Row, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
@@ -126,7 +127,7 @@ export function ApproveScreen({
   }), []);
 
   const runDecide = async (id: number, approve: boolean, note = "") => {
-    if (busy || billingReadonly) return;
+    if (busy || billingReadonly) return false;
     if (approve) {
       const row = rows.find((r) => r.id === id);
       if (row?.created_by_active === false) {
@@ -155,13 +156,13 @@ export function ApproveScreen({
       ]);
       return;
     }
-    await doDecide(id, approve, note);
+    return doDecide(id, approve, note);
   };
 
   const doDecide = async (id: number, approve: boolean, note = "", allowClosedCycle = false) => {
     if (busy || billingReadonly) {
       if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
-      return;
+      return false;
     }
     try {
       const b = await billingMe();
@@ -169,7 +170,7 @@ export function ApproveScreen({
       setBillingReadonly(frozen);
       if (frozen) {
         Alert.alert("Fos", BILLING_READONLY_MSG);
-        return;
+        return false;
       }
     } catch { /* API 403 if frozen */ }
     const noteKey = note.replace(/\s+/g, " ").trim();
@@ -185,8 +186,10 @@ export function ApproveScreen({
       decideIdemRef.current = null;
       decideSlotRef.current = null;
       await reload();
+      return true;
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -244,7 +247,7 @@ export function ApproveScreen({
         }
         await reload();
       } catch (e) {
-        Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+        alertFosError(e);
       } finally {
         setBusy(false);
       }
@@ -269,7 +272,7 @@ export function ApproveScreen({
   const rejectAll = async (note: string) => {
     if (busy || billingReadonly || !rows.length) {
       if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
-      return;
+      return false;
     }
     try {
       const b = await billingMe();
@@ -277,7 +280,7 @@ export function ApproveScreen({
       setBillingReadonly(frozen);
       if (frozen) {
         Alert.alert("Fos", BILLING_READONLY_MSG);
-        return;
+        return false;
       }
     } catch { /* API 403 if frozen */ }
     setBusy(true);
@@ -310,8 +313,10 @@ export function ApproveScreen({
         Alert.alert("Fos", parts.join("; "));
       }
       await reload();
+      return true;
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -457,8 +462,9 @@ export function ApproveScreen({
         onCancel={() => setRejectId(null)}
         onSubmit={async (note) => {
           const id = rejectId;
-          setRejectId(null);
-          if (id != null) await runDecide(id, false, note);
+          if (id == null || !(await runDecide(id, false, note))) {
+            throw new Error("Reject failed");
+          }
         }}
       />
       <NoteModal
@@ -468,8 +474,7 @@ export function ApproveScreen({
         maxLength={2000}
         onCancel={() => setRejectAllOpen(false)}
         onSubmit={async (note) => {
-          setRejectAllOpen(false);
-          await rejectAll(note);
+          if (!(await rejectAll(note))) throw new Error("Reject all failed");
         }}
       />
     </Screen>

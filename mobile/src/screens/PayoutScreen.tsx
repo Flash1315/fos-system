@@ -14,6 +14,7 @@ import {
   type TeamBalance,
   type User,
 } from "../api";
+import { alertFosError } from "../alertError";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { parseFiniteMoney } from "../format";
 
@@ -41,6 +42,7 @@ export function PayoutScreen({
   const payoutIdemRef = useRef<string | null>(null);
   const batchSpendIdemRef = useRef<string | null>(null);
   const batchCashIdemRef = useRef<string | null>(null);
+  const amountDirty = useRef(false);
 
   const reloadBalances = async () => {
     setBalances(await teamBalances());
@@ -101,8 +103,14 @@ export function PayoutScreen({
       : selectedBal?.reserved_cash ?? 0;
 
   useEffect(() => {
-    if (suggested > 0) setAmount(String(suggested));
-    else setAmount("");
+    amountDirty.current = false;
+  }, [userId, kind]);
+
+  useEffect(() => {
+    if (!amountDirty.current) {
+      if (suggested > 0) setAmount(String(suggested));
+      else setAmount("");
+    }
   }, [userId, kind, suggested]);
 
   useEffect(() => {
@@ -233,7 +241,7 @@ export function PayoutScreen({
       );
       onDone();
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
     } finally {
       setBusy(false);
     }
@@ -290,7 +298,7 @@ export function PayoutScreen({
                 await reloadBalances();
                 onDone();
               } catch (e) {
-                Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+                alertFosError(e);
               } finally {
                 setBusy(false);
               }
@@ -299,7 +307,7 @@ export function PayoutScreen({
         ],
       );
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
       setBusy(false);
     }
   };
@@ -355,7 +363,7 @@ export function PayoutScreen({
                 await reloadBalances();
                 onDone();
               } catch (e) {
-                Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+                alertFosError(e);
               } finally {
                 setBusy(false);
               }
@@ -364,7 +372,7 @@ export function PayoutScreen({
         ],
       );
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
       setBusy(false);
     }
   };
@@ -438,12 +446,25 @@ export function PayoutScreen({
         </Sub>
       )}
       <Label>Amount</Label>
-      <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} maxLength={24} />
+      <Field
+        keyboardType="decimal-pad"
+        value={amount}
+        onChangeText={(text) => {
+          amountDirty.current = true;
+          setAmount(text);
+        }}
+        maxLength={24}
+      />
       <View style={styles.kinds}>
         <Chip
           label={kind === "expense_payout" ? "Pay available" : "Take available"}
           on={Number(amount) === suggested && suggested > 0}
-          onPress={() => suggested > 0 && setAmount(String(suggested))}
+          onPress={() => {
+            if (suggested > 0) {
+              amountDirty.current = false;
+              setAmount(String(suggested));
+            }
+          }}
         />
       </View>
       <Sub>

@@ -52,7 +52,6 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
         if (!from && !to) {
           if (gen !== reloadGen.current) return;
           setLoadError("Enter from and/or to date (YYYY-MM-DD)");
-          setReport(null);
           return;
         }
         if (from && !isValidYmd(from)) {

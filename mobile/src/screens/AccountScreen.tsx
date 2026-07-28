@@ -22,6 +22,7 @@ import {
   type BillingInfo,
   type User,
 } from "../api";
+import { alertFosError } from "../alertError";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { parseFiniteMoney, passwordStrengthError } from "../format";
@@ -110,7 +111,6 @@ export function AccountScreen({
         /* keep previous billingReadonly */
       }
     } catch (e) {
-      setOrgLoaded(false);
       setOrgLoadError(e instanceof Error ? e.message : "Failed to load company");
     }
   };
@@ -200,7 +200,7 @@ export function AccountScreen({
         kind === "expense_payout"
           ? (b.available_spendings ?? b.spendings)
           : (b.available_cash ?? b.cash_on_hand);
-      setAmount(available > 0 ? String(available) : "");
+      if (!amount.trim()) setAmount(available > 0 ? String(available) : "");
     } catch {
       // Keep previous suggested amount on a transient balance blip.
     }
@@ -265,7 +265,7 @@ export function AccountScreen({
       setNextConfirm("");
       Alert.alert("Fos", "Password updated — other sessions signed out");
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
     } finally {
       setBusy(false);
     }
@@ -307,7 +307,7 @@ export function AccountScreen({
       } catch {
         /* ignore */
       }
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
     } finally {
       setBusy(false);
     }
@@ -369,7 +369,7 @@ export function AccountScreen({
             await refreshSuggestedAmount();
             await reloadRequests();
           } catch (e) {
-            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            alertFosError(e);
           } finally {
             setBusy(false);
           }
@@ -410,7 +410,7 @@ export function AccountScreen({
       await reloadRequests();
       await refreshSuggestedAmount();
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
     } finally {
       setBusy(false);
     }
@@ -499,7 +499,7 @@ export function AccountScreen({
                 setBilling(b);
                 Alert.alert("Fos", "Telegram chat saved");
               } catch (e) {
-                Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+                alertFosError(e);
               } finally {
                 setBusy(false);
               }
@@ -528,7 +528,7 @@ export function AccountScreen({
                 await testTelegram();
                 Alert.alert("Fos", "Test message sent");
               } catch (e) {
-                Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+                alertFosError(e);
               } finally {
                 setBusy(false);
               }
@@ -638,7 +638,7 @@ export function AccountScreen({
                           await refreshSuggestedAmount();
                           await reloadRequests();
                         } catch (e) {
-                          Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+                          alertFosError(e);
                         } finally {
                           setBusy(false);
                         }
@@ -739,8 +739,7 @@ export function AccountScreen({
         onCancel={() => setCancelId(null)}
         onSubmit={async (cancelNote) => {
           const id = cancelId;
-          setCancelId(null);
-          if (id == null) return;
+          if (id == null) throw new Error("Request is no longer selected");
           const noteKey = cancelNote.replace(/\s+/g, " ").trim();
           const key = idemKeyFor(cancelIdemRef, cancelSlotRef, "scancel", `${id}:${noteKey}`);
           setBusy(true);
@@ -752,7 +751,8 @@ export function AccountScreen({
             cancelSlotRef.current = null;
             await reloadRequests();
           } catch (e) {
-            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            alertFosError(e);
+            throw e;
           } finally {
             setBusy(false);
           }

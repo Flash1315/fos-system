@@ -99,7 +99,7 @@ export function NoteModal({
               title={submitting ? "…" : confirmTitle}
               variant={confirmVariant}
               disabled={submitting}
-              onPress={() => {
+              onPress={async () => {
                 if (submitLock.current) return;
                 const trimmed = secureTextEntry ? note : note.trim();
                 const confirmTrimmed = secureTextEntry ? confirm : confirm.trim();
@@ -121,17 +121,18 @@ export function NoteModal({
                 }
                 submitLock.current = true;
                 setSubmitting(true);
-                Promise.resolve(onSubmit(trimmed))
-                  .catch(() => {
-                    /* caller shows errors */
-                  })
-                  .finally(() => {
-                    submitLock.current = false;
-                    setSubmitting(false);
-                    setNote("");
-                    setConfirm("");
-                    setError("");
-                  });
+                try {
+                  await onSubmit(trimmed);
+                  setNote("");
+                  setConfirm("");
+                  setError("");
+                  onCancel();
+                } catch {
+                  /* caller shows errors; preserve the draft for retry */
+                } finally {
+                  submitLock.current = false;
+                  setSubmitting(false);
+                }
               }}
             />
           </View>

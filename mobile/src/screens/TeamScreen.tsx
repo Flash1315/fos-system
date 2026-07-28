@@ -13,6 +13,7 @@ import {
   setMemberRole,
   type User,
 } from "../api";
+import { alertFosError } from "../alertError";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Label, Screen, Sub, TopBar } from "../components/ui";
 import { passwordStrengthError } from "../format";
@@ -108,7 +109,7 @@ export function TeamScreen({
             await setMemberActive(member.id, nextActive);
             await reload();
           } catch (e) {
-            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            alertFosError(e);
           } finally {
             setBusy(false);
           }
@@ -144,7 +145,7 @@ export function TeamScreen({
             await setMemberRole(member.id, role);
             await reload();
           } catch (e) {
-            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            alertFosError(e);
           } finally {
             setBusy(false);
           }
@@ -306,10 +307,7 @@ export function TeamScreen({
                                         try {
                                           await Share.share({ message: shareMsg });
                                         } catch (e) {
-                                          Alert.alert(
-                                            "Fos",
-                                            e instanceof Error ? e.message : "Share failed",
-                                          );
+                                          alertFosError(e, "Share failed");
                                         }
                                       })();
                                     },
@@ -318,7 +316,7 @@ export function TeamScreen({
                               );
                               await reload();
                             } catch (e) {
-                              Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+                              alertFosError(e);
                             } finally {
                               setBusy(false);
                             }
@@ -359,7 +357,7 @@ export function TeamScreen({
                     `Reset token: ${lastReset.token}\n\nOpen Accept invite and set a new password.`,
                 });
               } catch (e) {
-                Alert.alert("Fos", e instanceof Error ? e.message : "Share failed");
+                alertFosError(e, "Share failed");
               }
             }}
           />
@@ -381,16 +379,15 @@ export function TeamScreen({
         onCancel={() => setResetId(null)}
         onSubmit={async (pwd) => {
           const id = resetId;
-          setResetId(null);
-          if (id == null) return;
+          if (id == null) throw new Error("Teammate is no longer selected");
           if (billingReadonly) {
             Alert.alert("Fos", BILLING_READONLY_MSG);
-            return;
+            throw new Error(BILLING_READONLY_MSG);
           }
           const pwErr = passwordStrengthError(pwd);
           if (pwErr) {
             Alert.alert("Fos", pwErr);
-            return;
+            throw new Error(pwErr);
           }
           setBusy(true);
           try {
@@ -400,14 +397,15 @@ export function TeamScreen({
               setBillingReadonly(frozen);
               if (frozen) {
                 Alert.alert("Fos", BILLING_READONLY_MSG);
-                return;
+                return Promise.reject(new Error(BILLING_READONLY_MSG));
               }
             } catch { /* API 403 if frozen */ }
             await resetMemberPassword(id, pwd, pwd);
             Alert.alert("Fos", "Password reset — their other sessions signed out");
             await reload();
           } catch (e) {
-            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            alertFosError(e);
+            throw e;
           } finally {
             setBusy(false);
           }

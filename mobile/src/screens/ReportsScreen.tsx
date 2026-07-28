@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Share, Text, StyleSheet, View } from "react-native";
 import { downloadReportCsv, onResumeRefresh, orgReport, type OrgReport, type ReportPeriod } from "../api";
+import { alertFosError } from "../alertError";
 import { Btn, Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { isValidYmd } from "../dates";
 import { colors } from "../theme";
@@ -53,7 +54,6 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
         if (!from && !to) {
           if (gen !== reloadGen.current) return;
           setLoadError("Enter from and/or to date (YYYY-MM-DD)");
-          setReport(null);
           return;
         }
         if (from && !isValidYmd(from)) {
@@ -147,7 +147,7 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
         });
       }
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Export failed");
+      alertFosError(e, "Export failed");
     } finally {
       setExporting(false);
     }

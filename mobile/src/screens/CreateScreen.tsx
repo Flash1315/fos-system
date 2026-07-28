@@ -18,6 +18,7 @@ import {
   type TeamBalance,
   type User,
 } from "../api";
+import { alertFosError } from "../alertError";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { isValidYmd } from "../dates";
 import { formatWhen, parseFiniteLiters, parseFiniteMoney, parseFiniteOdometer } from "../format";
@@ -117,8 +118,6 @@ export function CreateScreen({
         );
       }
     } catch (e) {
-      setCategories([]);
-      setCategory("");
       setCategoriesError(e instanceof Error ? e.message : "Categories failed to load");
     }
   };
@@ -214,7 +213,6 @@ export function CreateScreen({
         }
       } catch {
         if (gen !== closedCycleGen.current) return;
-        setClosedCycleHint("");
       }
     })();
   }, [occurredDate, kind, paymentSource, paymentMethod, forUserId, teamBals]);
@@ -244,10 +242,6 @@ export function CreateScreen({
           setHasFuelHistory(Boolean(res.has_history));
         } catch {
           if (gen !== odoGen.current) return;
-          setLastOdo(null);
-          setMinOdo(null);
-          setMaxOdo(null);
-          setHasFuelHistory(false);
         }
       })();
     }, 300);
@@ -308,7 +302,7 @@ export function CreateScreen({
       photoIdemRef.current = null;
       setPhotoUrl(up.photo_url);
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Upload failed");
+      alertFosError(e, "Upload failed");
     } finally {
       setBusy(false);
     }
@@ -418,10 +412,7 @@ export function CreateScreen({
           }
         } catch (e) {
           if (isManager && approveNow) {
-            Alert.alert(
-              "Fos",
-              e instanceof Error ? e.message : "Could not verify cash balance",
-            );
+            alertFosError(e, "Could not verify cash balance");
             return;
           }
         }
@@ -477,7 +468,7 @@ export function CreateScreen({
           return;
         }
       } catch (e) {
-        Alert.alert("Fos", e instanceof Error ? e.message : "Could not verify cash balance");
+        alertFosError(e, "Could not verify cash balance");
         return;
       }
     }
@@ -524,7 +515,7 @@ export function CreateScreen({
           }
         }
       } catch (e) {
-        Alert.alert("Fos", e instanceof Error ? e.message : "Could not verify odometer");
+        alertFosError(e, "Could not verify odometer");
         return;
       }
     }
@@ -563,7 +554,7 @@ export function CreateScreen({
       idemKeyRef.current = null;
       onCreated();
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
     } finally {
       submitLock.current = false;
       setBusy(false);

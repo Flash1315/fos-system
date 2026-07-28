@@ -21,6 +21,7 @@ import {
   type MoneyRecord,
   type User,
 } from "../api";
+import { alertFosError } from "../alertError";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Card, Chip, Field, Label, Row, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, parseFiniteLiters, parseFiniteMoney, parseFiniteOdometer, statusColor } from "../format";
@@ -178,7 +179,7 @@ export function RecordDetailScreen({
   const decide = async (approve: boolean, note = "") => {
     if (billingReadonly) {
       Alert.alert("Fos", BILLING_READONLY_MSG);
-      return;
+      return false;
     }
     if (approve && rec?.created_by_active === false) {
       Alert.alert("Fos", "Cannot approve — teammate is inactive. Reject instead.");
@@ -207,13 +208,13 @@ export function RecordDetailScreen({
       ]);
       return;
     }
-    await doDecide(approve, note);
+    return doDecide(approve, note);
   };
 
   const doDecide = async (approve: boolean, note = "", allowClosedCycle = false) => {
     if (busy || billingReadonly) {
       if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
-      return;
+      return false;
     }
     const noteKey = note.replace(/\s+/g, " ").trim();
     const key = idemKeyFor(
@@ -230,7 +231,7 @@ export function RecordDetailScreen({
         setBillingReadonly(frozen);
         if (frozen) {
           Alert.alert("Fos", BILLING_READONLY_MSG);
-          return;
+          return false;
         }
       } catch {
         /* API will 403 if frozen */
@@ -244,8 +245,10 @@ export function RecordDetailScreen({
       );
       decideIdemRef.current = null;
       decideSlotRef.current = null;
+      return true;
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -274,7 +277,7 @@ export function RecordDetailScreen({
             cancelIdemRef.current = null;
             Alert.alert("Fos", "Record canceled");
           } catch (e) {
-            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            alertFosError(e);
           } finally {
             setBusy(false);
           }
@@ -286,7 +289,7 @@ export function RecordDetailScreen({
   const onVoid = async (note: string) => {
     if (busy || billingReadonly) {
       if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
-      return;
+      return false;
     }
     setBusy(true);
     try {
@@ -296,7 +299,7 @@ export function RecordDetailScreen({
         setBillingReadonly(frozen);
         if (frozen) {
           Alert.alert("Fos", BILLING_READONLY_MSG);
-          return;
+          return false;
         }
       } catch {
         /* API will 403 if frozen */
@@ -306,11 +309,11 @@ export function RecordDetailScreen({
       applyEditFields(fresh);
       if (fresh.is_voided) {
         Alert.alert("Fos", "Record is already voided");
-        return;
+        return true;
       }
       if (!fresh.can_void) {
         Alert.alert("Fos", fresh.void_blocked_reason || "This record cannot be voided now");
-        return;
+        return false;
       }
       const noteKey = note.replace(/\s+/g, " ").trim();
       const key = idemKeyFor(voidIdemRef, voidSlotRef, "void", `${id}:${noteKey}`);
@@ -319,8 +322,10 @@ export function RecordDetailScreen({
       voidIdemRef.current = null;
       voidSlotRef.current = null;
       Alert.alert("Fos", "Record voided");
+      return true;
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -329,7 +334,7 @@ export function RecordDetailScreen({
   const onComment = async (note: string) => {
     if (busy || billingReadonly) {
       if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
-      return;
+      return false;
     }
     setBusy(true);
     try {
@@ -339,7 +344,7 @@ export function RecordDetailScreen({
         setBillingReadonly(frozen);
         if (frozen) {
           Alert.alert("Fos", BILLING_READONLY_MSG);
-          return;
+          return false;
         }
       } catch {
         /* API will 403 if frozen */
@@ -350,8 +355,10 @@ export function RecordDetailScreen({
       setRec(await commentRecord(id, note, { idempotencyKey: key }));
       commentIdemRef.current = null;
       commentSlotRef.current = null;
+      return true;
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -451,7 +458,7 @@ export function RecordDetailScreen({
           body.odometer = odo;
         }
       } catch (e) {
-        Alert.alert("Fos", e instanceof Error ? e.message : "Could not verify odometer");
+        alertFosError(e, "Could not verify odometer");
         return;
       }
     }
@@ -479,7 +486,7 @@ export function RecordDetailScreen({
       applyEditFields(updated);
       setEditing(false);
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      alertFosError(e);
     } finally {
       setBusy(false);
     }
@@ -531,7 +538,7 @@ export function RecordDetailScreen({
       setPhotoUri(await mediaUrlWithMediaToken(up.photo_url));
       Alert.alert("Fos", "Receipt photo ready — tap Save to apply");
     } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Upload failed");
+      alertFosError(e, "Upload failed");
     } finally {
       setBusy(false);
     }
@@ -807,8 +814,7 @@ export function RecordDetailScreen({
         maxLength={2000}
         onCancel={() => setRejectOpen(false)}
         onSubmit={async (note) => {
-          setRejectOpen(false);
-          await decide(false, note);
+          if (!(await decide(false, note))) throw new Error("Reject failed");
         }}
       />
       <NoteModal
@@ -825,8 +831,7 @@ export function RecordDetailScreen({
         confirmVariant="danger"
         onCancel={() => setVoidOpen(false)}
         onSubmit={async (note) => {
-          setVoidOpen(false);
-          await onVoid(note);
+          if (!(await onVoid(note))) throw new Error("Void failed");
         }}
       />
       <NoteModal
@@ -836,8 +841,7 @@ export function RecordDetailScreen({
         maxLength={2000}
         onCancel={() => setCommentOpen(false)}
         onSubmit={async (note) => {
-          setCommentOpen(false);
-          await onComment(note);
+          if (!(await onComment(note))) throw new Error("Comment failed");
         }}
       />
     </Screen>

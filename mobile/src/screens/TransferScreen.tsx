@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import { BILLING_READONLY_MSG, billingMe, isBillingReadOnly, makeIdempotencyKey, me, myBalance, onResumeRefresh, orgDirectory, transferCash, type User } from "../api";
+import { alertFosError } from "../alertError";
 import { formatMoney, parseFiniteMoney } from "../format";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
@@ -151,7 +152,7 @@ export function TransferScreen({
               Alert.alert("Fos", "Transfer recorded — cash balances updated");
               onDone();
             } catch (e) {
-              Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+              alertFosError(e);
             } finally {
               submitLock.current = false;
               setBusy(false);

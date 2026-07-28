@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { BILLING_READONLY_MSG, makeIdempotencyKey, billingMe, isBillingReadOnly, me, myBalance, myOrg, myPendingSettlementCount, myRecords, onResumeRefresh, pendingCount as fetchPendingCount, pendingSettlementCount, requestSettlement, type MoneyRecord, type User } from "../api";
+import { alertFosError } from "../alertError";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
@@ -94,9 +95,11 @@ export function HomeScreen({
       ]);
       if (gen !== reloadGen.current) return;
       if (freshUser && onUser) onUser(freshUser);
-      setBillingCanceled(
-        ["canceled", "past_due"].includes((billing?.billing_status || "").toLowerCase()),
-      );
+      if (billing) {
+        setBillingCanceled(
+          ["canceled", "past_due"].includes((billing.billing_status || "").toLowerCase()),
+        );
+      }
       setBalance(formatMoney(b.cash_on_hand, b.currency));
       setSpendings(formatMoney(b.spendings ?? 0, b.currency));
       setAvailableSpend(b.available_spendings ?? b.spendings ?? 0);
@@ -256,7 +259,7 @@ export function HomeScreen({
             Alert.alert("Fos", "Settlement request sent to managers");
             await reload();
           } catch (e) {
-            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            alertFosError(e);
           } finally {
             setRequestBusy(false);
           }

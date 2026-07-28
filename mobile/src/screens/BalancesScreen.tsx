@@ -16,6 +16,7 @@ import {
   type BalanceAdjustment,
   type TeamBalance,
 } from "../api";
+import { alertFosError } from "../alertError";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, parseFiniteSignedMoney } from "../format";
@@ -245,7 +246,7 @@ export function BalancesScreen({
             payoutSlotRef.current = null;
             await reload();
           } catch (e) {
-            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            alertFosError(e);
           } finally {
             markBusy(false);
           }
@@ -300,7 +301,7 @@ export function BalancesScreen({
               setNote("");
               await reload();
             } catch (e) {
-              Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+              alertFosError(e);
             } finally {
               markBusy(false);
             }
@@ -534,11 +535,10 @@ export function BalancesScreen({
         onCancel={() => setVoidId(null)}
         onSubmit={async (voidNote) => {
           const id = voidId;
-          setVoidId(null);
-          if (id == null) return;
+          if (id == null) throw new Error("Adjustment is no longer selected");
           if (billingReadonly) {
             Alert.alert("Fos", BILLING_READONLY_MSG);
-            return;
+            throw new Error(BILLING_READONLY_MSG);
           }
           try {
             const b = await billingMe();
@@ -546,7 +546,7 @@ export function BalancesScreen({
             setBillingReadonly(frozen);
             if (frozen) {
               Alert.alert("Fos", BILLING_READONLY_MSG);
-              return;
+              return Promise.reject(new Error(BILLING_READONLY_MSG));
             }
           } catch { /* API 403 if frozen */ }
           const noteKey = voidNote.replace(/\s+/g, " ").trim();
@@ -558,7 +558,8 @@ export function BalancesScreen({
             voidAdjSlotRef.current = null;
             await reload();
           } catch (e) {
-            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            alertFosError(e);
+            throw e;
           } finally {
             markBusy(false);
           }

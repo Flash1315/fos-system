@@ -319,3 +319,4 @@ Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`
 - [ ] Production Postgres deploy (compose file ready — verify in target env)
 - [ ] Store builds (EAS config stub in `mobile/eas.json`)
 - Soft-fail report reloads; Create teammate/categories retry; Transfer/RecordDetail resume freeze; `transfer-org:` rate limit; CSV export `Cache-Control: no-store`
+- Soft-fail load-more/Team; Invite/Account settle freeze re-check; `adjustment-org`/`payout-org`/`decide-batch-org` limits; demo login requires full env; prod `/docs` 404 CI

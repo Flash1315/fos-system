@@ -40,6 +40,9 @@ DB_POOL_RECYCLE=1800
 - Authenticated media file responses send `Cache-Control: no-store`
 - Invite endpoints enforce per-org `invite-org:` rate limits
 - Transfer endpoints enforce per-org `transfer-org:` rate limits
+- Adjustment create/void enforce per-org `adjustment-org:` rate limits
+- Payout create/batch/settle-approve enforce per-org `payout-org:` rate limits
+- Record decide-batch enforces per-org `decide-batch-org:` rate limits
 - CSV export responses send `Cache-Control: no-store`
 - Persist `/app/uploads` or S3; content-addressed keys; cancels may remove unused receipt objects
 - Idempotency rows are pruned on API startup (and on store)

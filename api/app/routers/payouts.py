@@ -293,6 +293,11 @@ def create_payout(
         limit=60,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"payout-org:{manager.organization_id}",
+        limit=120,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None
@@ -611,6 +616,11 @@ def batch_pay_all_spendings(
         limit=10,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"payout-org:{manager.organization_id}",
+        limit=120,
+        window_sec=60,
+    )
     from app.services.org_gates import require_org_writable
 
     method = (payment_method or "cash").strip().lower() or "cash"
@@ -728,6 +738,11 @@ def batch_take_all_cash(
     enforce_rate_limit(
         f"payout-batch:{manager.organization_id}:{manager.id}",
         limit=10,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"payout-org:{manager.organization_id}",
+        limit=120,
         window_sec=60,
     )
     from app.services.org_gates import require_org_writable
@@ -1083,6 +1098,11 @@ def approve_settlement_request(
     enforce_rate_limit(
         f"settle-approve:{manager.organization_id}:{manager.id}",
         limit=60,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"payout-org:{manager.organization_id}",
+        limit=120,
         window_sec=60,
     )
     from app.services.org_gates import require_org_writable

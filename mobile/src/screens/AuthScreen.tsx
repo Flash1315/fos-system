@@ -9,14 +9,16 @@ const LAST_SLUG_KEY = "fos_last_org_slug";
 const LAST_EMAIL_KEY = "fos_last_email";
 
 const DEMO_SLUG =
-  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_SLUG) || "demo2092";
+  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_SLUG) || "";
 const DEMO_EMAIL =
-  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_EMAIL) ||
-  "owner@demo2092.example.com";
+  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_EMAIL) || "";
 const DEMO_PASSWORD =
-  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_PASSWORD) || "secret12";
+  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_PASSWORD) || "";
 const DEMO_ENABLED =
-  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_LOGIN) === "1";
+  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_DEMO_LOGIN) === "1" &&
+  !!DEMO_SLUG &&
+  !!DEMO_EMAIL &&
+  !!DEMO_PASSWORD;
 
 export function AuthScreen({
   busy,

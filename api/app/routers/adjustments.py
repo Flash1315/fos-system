@@ -160,6 +160,11 @@ def create_adjustment(
         limit=60,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"adjustment-org:{manager.organization_id}",
+        limit=120,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None
@@ -283,6 +288,11 @@ def void_adjustment(
     enforce_rate_limit(
         f"adjustment-void:{manager.organization_id}:{manager.id}",
         limit=30,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"adjustment-org:{manager.organization_id}",
+        limit=120,
         window_sec=60,
     )
     from app.services.org_gates import require_org_writable

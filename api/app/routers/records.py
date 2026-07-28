@@ -878,6 +878,11 @@ def decide_batch(
         limit=20,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"decide-batch-org:{user.organization_id}",
+        limit=40,
+        window_sec=60,
+    )
     from app.services.org_gates import require_org_writable
 
     if not body.approve and len(body.note or "") < 2:

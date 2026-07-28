@@ -50,7 +50,6 @@ export function TeamScreen({
       setRows(await listMembers());
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed");
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
       setLoading(false);
     }

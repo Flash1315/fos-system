@@ -177,7 +177,7 @@ export function HomeScreen({
       setHasMore(more.length >= PAGE);
     } catch (e) {
       if (gen !== reloadGen.current) return;
-      Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
+      setLoadError(e instanceof Error ? e.message : "Load more failed");
     } finally {
       setLoadingMore(false);
     }

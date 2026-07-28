@@ -34,6 +34,17 @@ eas build --profile production --platform all
 # eas submit --profile production --platform ios
 ```
 
+## Demo login (optional)
+
+For internal preview builds only, set all of:
+
+- `EXPO_PUBLIC_DEMO_LOGIN=1`
+- `EXPO_PUBLIC_DEMO_SLUG`
+- `EXPO_PUBLIC_DEMO_EMAIL`
+- `EXPO_PUBLIC_DEMO_PASSWORD`
+
+The “Use demo workspace” button appears only when the flag is on **and** slug/email/password are all set. There are no hardcoded demo credentials in the app bundle.
+
 ## Versioning
 
 - Keep `mobile/app.json` / `package.json` version in sync with API `APP_VERSION`

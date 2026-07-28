@@ -60,6 +60,7 @@ export function InviteScreen({
   }, []);
 
   useEffect(() => onResumeRefresh(() => {
+    void loadSlug();
     void billingMe()
       .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
       .catch(() => {});
@@ -134,9 +135,23 @@ export function InviteScreen({
   };
 
   const doInvite = async () => {
-    if (busy) return;
+    if (busy || billingReadonly) {
+      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     setBusy(true);
     try {
+      try {
+        const b = await billingMe();
+        const frozen = isBillingReadOnly(b.billing_status);
+        setBillingReadonly(frozen);
+        if (frozen) {
+          Alert.alert("Fos", BILLING_READONLY_MSG);
+          return;
+        }
+      } catch {
+        /* API will 403 if frozen */
+      }
       const invitedEmail = email.trim().toLowerCase();
       const res = await inviteUser({
         email: invitedEmail,

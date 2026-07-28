@@ -167,7 +167,7 @@ export function AccountScreen({
       setMineHasMore(more.length >= PAGE);
     } catch (e) {
       if (gen !== reqReloadGen.current) return;
-      Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
+      setReqLoadError(e instanceof Error ? e.message : "Load more failed");
     } finally {
       if (gen === reqReloadGen.current) setLoadingMoreMine(false);
     }
@@ -189,7 +189,7 @@ export function AccountScreen({
       setTeamHasMore(more.length >= PAGE);
     } catch (e) {
       if (gen !== reqReloadGen.current) return;
-      Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
+      setReqLoadError(e instanceof Error ? e.message : "Load more failed");
     } finally {
       if (gen === reqReloadGen.current) setLoadingMoreTeam(false);
     }
@@ -362,7 +362,10 @@ export function AccountScreen({
   };
 
   const doApproveRequest = async (id: number, paymentMethod: "cash" | "transfer") => {
-    if (busy || billingReadonly) return;
+    if (busy || billingReadonly) {
+      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     if (approveSlotRef.current !== id) {
       approveSlotRef.current = id;
       approveIdemRef.current = null;
@@ -370,6 +373,17 @@ export function AccountScreen({
     if (!approveIdemRef.current) approveIdemRef.current = makeIdempotencyKey("appr");
     setBusy(true);
     try {
+      try {
+        const b = await billingMe();
+        const frozen = isBillingReadOnly(b.billing_status);
+        setBillingReadonly(frozen);
+        if (frozen) {
+          Alert.alert("Fos", BILLING_READONLY_MSG);
+          return;
+        }
+      } catch {
+        /* API will 403 if frozen */
+      }
       await reloadRequests();
       await approveSettlementRequest(id, paymentMethod, {
         idempotencyKey: approveIdemRef.current,

@@ -110,6 +110,34 @@ jobs:
             exit 1
           fi
           docker stop fos-api
+          # Prod image hides OpenAPI; assert /docs is 404 when ENVIRONMENT=production.
+          docker run -d --name fos-api-prod \
+            -e SECRET_KEY=ci-docker-secret-key-32chars-minxx \
+            -e DATABASE_URL=sqlite:////tmp/fos.db \
+            -e ENVIRONMENT=production \
+            -e CORS_ORIGINS=https://app.example.com \
+            -p 8001:8000 \
+            fos-api
+          prod_ok=0
+          for _ in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8001/health/live | grep -q '"ok"'; then
+              code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8001/docs)
+              test "$code" = "404"
+              # Deploy docs list org-scoped money limits
+              grep -q 'adjustment-org:' docs/DEPLOY.md
+              grep -q 'payout-org:' docs/DEPLOY.md
+              grep -q 'decide-batch-org:' docs/DEPLOY.md
+              prod_ok=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$prod_ok" != "1" ]; then
+            docker logs fos-api-prod || true
+            docker stop fos-api-prod || true
+            exit 1
+          fi
+          docker stop fos-api-prod
 
   pytest-postgres:
     runs-on: ubuntu-latest

@@ -21,6 +21,7 @@ from app.schemas import (
     RecordUpdate,
 )
 from app.services.balances import user_balance
+from app.services.org_limits import require_org_member_capacity
 
 router = APIRouter(prefix="/records", tags=["records"])
 
@@ -29,6 +30,7 @@ _SEARCH_MAX = 80
 _COMMENT_MAX = 4000
 _BIKE_MAX = 120
 _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_PURPOSE_MAX = 80
 
 
 def _utcnow() -> datetime:
@@ -66,13 +68,26 @@ def _append_text(existing: str | None, addition: str, *, label: str = "Comment")
     return combined
 
 
+def _bound_purpose(purpose: str | None) -> str | None:
+    raw = purpose or ""
+    if _CTRL_RE.search(raw):
+        raise HTTPException(400, "purpose contains invalid characters")
+    value = re.sub(r"\s+", " ", raw.strip())
+    if len(value) > _PURPOSE_MAX:
+        raise HTTPException(400, f"purpose too long (max {_PURPOSE_MAX})")
+    return value or None
+
+
 def _search_like(q: str | None) -> str | None:
-    raw = (q or "").strip()
-    if not raw:
+    raw = q or ""
+    if _CTRL_RE.search(raw):
+        raise HTTPException(400, "Search query contains invalid characters")
+    cleaned = re.sub(r"\s+", " ", raw.strip())
+    if not cleaned:
         return None
-    if len(raw) > _SEARCH_MAX:
+    if len(cleaned) > _SEARCH_MAX:
         raise HTTPException(400, f"Search query too long (max {_SEARCH_MAX} characters)")
-    escaped = raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    escaped = cleaned.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{escaped}%"
 
 
@@ -495,11 +510,6 @@ def create_record(
     return _record_out(db, rec)
 
 
-def _bound_purpose(purpose: str | None) -> str | None:
-    value = (purpose or "").strip()[:80]
-    return value or None
-
-
 @router.get("/mine", response_model=list[RecordOut])
 def my_records(
     kind: RecordKind | None = None,
@@ -714,6 +724,7 @@ def team_balances(
         limit=60,
         window_sec=60,
     )
+    require_org_member_capacity(db, user.organization_id, active_only=True)
     members = (
         db.query(User)
         .filter(User.organization_id == user.organization_id, User.is_active.is_(True))

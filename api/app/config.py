@@ -39,8 +39,12 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     # Only honor X-Forwarded-For when the app sits behind a trusted reverse proxy
     trust_x_forwarded_for: bool = False
+    # Comma-separated CIDRs/IPs that may set X-Forwarded-For (empty = legacy trust-any when enabled)
+    trusted_proxy_cidrs: str = ""
     # development | production — production refuses insecure defaults
     environment: str = "development"
+    # Soft ceiling for org-wide member loops (balances / directory / reports)
+    max_org_members: int = 300
 
 
 settings = Settings()

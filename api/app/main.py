@@ -1,12 +1,46 @@
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 import re
 import uuid
 
-from app.alembic_runner import run_alembic_upgrade
 from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+_INSECURE_SECRETS = ("dev-secret-change-me", "change-me-in-production", "")
+_ALLOWED_ENVS = {"development", "dev", "test", "production", "prod"}
+
+
+def _validate_runtime_settings() -> str:
+    env = (settings.environment or "development").strip().lower()
+    if env not in _ALLOWED_ENVS:
+        raise RuntimeError(
+            f"ENVIRONMENT must be one of {sorted(_ALLOWED_ENVS)} (got {settings.environment!r})"
+        )
+    secret = settings.secret_key or ""
+    if env in ("prod", "production"):
+        if secret in _INSECURE_SECRETS or len(secret) < 32:
+            raise RuntimeError(
+                "SECRET_KEY is insecure — set a strong SECRET_KEY (min 32 chars) in production"
+            )
+        if (settings.cors_origins or "").strip() == "*":
+            logger.warning("CORS_ORIGINS=* in production — set explicit origins")
+        if settings.trust_x_forwarded_for and not (settings.trusted_proxy_cidrs or "").strip():
+            logger.warning(
+                "TRUST_X_FORWARDED_FOR=true without TRUSTED_PROXY_CIDRS — "
+                "spoofable client IPs; set proxy CIDRs"
+            )
+    elif secret in _INSECURE_SECRETS:
+        logger.warning("SECRET_KEY is insecure — set a strong SECRET_KEY in production")
+    return env
+
+
+_validate_runtime_settings()
+
+from app.alembic_runner import run_alembic_upgrade
 from app.db import Base, engine
 from app.migrate import ensure_money_record_columns
 from app.routers import auth as auth_router
@@ -19,13 +53,11 @@ from app.routers import reports as reports_router
 from app.routers import team as team_router
 from app.routers import transfers as transfers_router
 
-logger = logging.getLogger(__name__)
-
 Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.7.36")
+app = FastAPI(title=settings.app_name, version="0.7.37")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 # Bearer-token auth does not use cookies; credentials+wildcard is unnecessary.
@@ -45,13 +77,42 @@ app.add_middleware(
 )
 
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{8,128}$")
+_MAX_JSON_BODY = 256 * 1024
+_MAX_UPLOAD_BODY = 9 * 1024 * 1024
+
+
+def _ensure_request_id(request: Request) -> str:
+    existing = getattr(request.state, "request_id", None)
+    if existing:
+        return str(existing)
+    incoming = (request.headers.get("x-request-id") or "").strip()
+    request_id = incoming if _REQUEST_ID_RE.fullmatch(incoming) else uuid.uuid4().hex
+    request.state.request_id = request_id
+    return request_id
+
+
+def _json_error(
+    status_code: int,
+    detail: str,
+    *,
+    request: Request,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    out = {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "no-referrer",
+        "Cache-Control": "no-store",
+        "X-Request-Id": _ensure_request_id(request),
+    }
+    if headers:
+        out.update(headers)
+    return JSONResponse(status_code=status_code, content={"detail": detail}, headers=out)
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
-        incoming = (request.headers.get("x-request-id") or "").strip()
-        request_id = incoming if _REQUEST_ID_RE.fullmatch(incoming) else uuid.uuid4().hex
-        request.state.request_id = request_id
+        request_id = _ensure_request_id(request)
         response = await call_next(request)
         response.headers["X-Request-Id"] = request_id
         return response
@@ -73,10 +134,25 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
-class PublicAuthRateLimitMiddleware(BaseHTTPMiddleware):
-    """Cheap IP limit before body parsing on public auth endpoints."""
+class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    """Reject oversized Content-Length before reading the body."""
 
-    _PATHS = {
+    async def dispatch(self, request: Request, call_next) -> Response:
+        if request.method in ("POST", "PUT", "PATCH"):
+            raw = request.headers.get("content-length")
+            if raw and raw.isdigit():
+                size = int(raw)
+                path = request.url.path.rstrip("/")
+                limit = _MAX_UPLOAD_BODY if path.endswith("/media/photo") else _MAX_JSON_BODY
+                if size > limit:
+                    return _json_error(413, "Request body too large", request=request)
+        return await call_next(request)
+
+
+class PublicAuthRateLimitMiddleware(BaseHTTPMiddleware):
+    """Cheap IP limit before body parsing on public auth / upload endpoints."""
+
+    _AUTH_PATHS = {
         "/auth/login",
         "/auth/login-form",
         "/auth/accept-invite",
@@ -84,23 +160,37 @@ class PublicAuthRateLimitMiddleware(BaseHTTPMiddleware):
     }
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        path = request.url.path.rstrip("/") or "/"
-        # login-form keeps trailing path as registered
-        check = path if path in self._PATHS else request.url.path
-        if check in self._PATHS or request.url.path in self._PATHS:
-            from app.services.rate_limit import client_ip, enforce_rate_limit
+        from fastapi import HTTPException
 
-            enforce_rate_limit(
-                f"preauth:{request.url.path}:{client_ip(request)}",
-                limit=60,
-                window_sec=60,
-            )
+        from app.services.rate_limit import client_ip, enforce_rate_limit
+
+        path = request.url.path.rstrip("/") or "/"
+        try:
+            if path in self._AUTH_PATHS or request.url.path in self._AUTH_PATHS:
+                enforce_rate_limit(
+                    f"preauth:{request.url.path}:{client_ip(request)}",
+                    limit=60,
+                    window_sec=60,
+                )
+            if request.method == "POST" and path.endswith("/media/photo"):
+                enforce_rate_limit(
+                    f"upload-ip:{client_ip(request)}",
+                    limit=40,
+                    window_sec=60,
+                )
+        except HTTPException as exc:
+            headers = {k: str(v) for k, v in (exc.headers or {}).items()}
+            detail = exc.detail if isinstance(exc.detail, str) else "Too many attempts"
+            return _json_error(exc.status_code, detail, request=request, headers=headers)
         return await call_next(request)
 
 
+# Innermost → outermost via reverse add order: RequestId outermost so early
+# middleware responses can still set/reuse request ids when helpers run first.
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RequestIdMiddleware)
+app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(PublicAuthRateLimitMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 app.include_router(auth_router.router)
 app.include_router(records_router.router)
@@ -115,9 +205,7 @@ app.include_router(billing_router.router)
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    from fastapi.responses import JSONResponse
-
-    request_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex
+    request_id = _ensure_request_id(request)
     logger.exception("unhandled error request_id=%s", request_id)
     return JSONResponse(
         status_code=500,
@@ -128,7 +216,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 @app.get("/health")
 def health(request: Request):
-    from fastapi.responses import JSONResponse
     from sqlalchemy import text
 
     from app.db import SessionLocal
@@ -146,20 +233,10 @@ def health(request: Request):
     body = {
         "ok": db_status == "ok",
         "app": settings.app_name,
-        "version": "0.7.36",
+        "version": "0.7.37",
         "db": db_status,
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }
     if db_status != "ok":
         return JSONResponse(status_code=503, content=body)
     return body
-
-
-_INSECURE_SECRETS = ("dev-secret-change-me", "change-me-in-production", "")
-_env = (settings.environment or "development").strip().lower()
-if settings.secret_key in _INSECURE_SECRETS:
-    if _env in ("prod", "production"):
-        raise RuntimeError("SECRET_KEY is insecure — set a strong SECRET_KEY in production")
-    logger.warning("SECRET_KEY is insecure — set a strong SECRET_KEY in production")
-if _env in ("prod", "production") and (settings.cors_origins or "").strip() == "*":
-    logger.warning("CORS_ORIGINS=* in production — set explicit origins")

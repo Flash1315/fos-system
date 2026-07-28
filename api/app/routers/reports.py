@@ -21,6 +21,7 @@ from app.models import (
 )
 from app.schemas import OrgReportOut, CategoryTotal, PurposeTotal, MyReportOut
 from app.services.balances import user_balance
+from app.services.org_limits import require_org_member_capacity
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -176,12 +177,13 @@ def org_report(
 
     enforce_rate_limit(
         f"report-org:{user.organization_id}:{user.id}",
-        limit=60,
+        limit=30,
         window_sec=60,
     )
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
     oid = user.organization_id
+    require_org_member_capacity(db, oid, active_only=True)
     since, until = _window(days, date_from, date_to)
     eff = _effective_at()
 

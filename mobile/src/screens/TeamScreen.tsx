@@ -29,7 +29,7 @@ export function TeamScreen({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [showOwnerSetPassword, setShowOwnerSetPassword] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [lastReset, setLastReset] = useState<{
     name: string;
     slug: string;
@@ -118,9 +118,9 @@ export function TeamScreen({
       {currentUser.role === "owner" ? (
         <View style={styles.kinds}>
           <Chip
-            label={showOwnerSetPassword ? "Hide advanced" : "Show advanced"}
-            on={showOwnerSetPassword}
-            onPress={() => setShowOwnerSetPassword((v) => !v)}
+            label={showAdvanced ? "Hide advanced" : "Show advanced"}
+            on={showAdvanced}
+            onPress={() => setShowAdvanced((v) => !v)}
           />
         </View>
       ) : null}
@@ -162,7 +162,7 @@ export function TeamScreen({
                 {item.must_set_password ? " · must set password" : ""}
               </Text>
             </Text>
-            {currentUser.role === "owner" && item.id !== currentUser.id && (
+            {currentUser.role === "owner" && item.id !== currentUser.id && showAdvanced && (
               <>
                 <View style={styles.kinds}>
                   {(["employee", "manager", "owner"] as const).map((r) => (
@@ -222,14 +222,12 @@ export function TeamScreen({
                     );
                   }}
                 />
-                {showOwnerSetPassword ? (
-                  <Btn
-                    title="Set password (owner)"
-                    variant="ghost"
-                    disabled={busy}
-                    onPress={() => setResetId(item.id)}
-                  />
-                ) : null}
+                <Btn
+                  title="Set password (owner)"
+                  variant="ghost"
+                  disabled={busy}
+                  onPress={() => setResetId(item.id)}
+                />
               </>
             )}
           </View>

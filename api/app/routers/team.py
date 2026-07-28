@@ -22,6 +22,7 @@ from app.models import (
     User,
     UserRole,
 )
+from app.services.org_limits import require_org_member_capacity
 
 router = APIRouter(prefix="/orgs", tags=["team"])
 
@@ -44,6 +45,7 @@ def list_members(
         limit=120,
         window_sec=60,
     )
+    require_org_member_capacity(db, user.organization_id)
     rows = (
         db.query(User)
         .filter(User.organization_id == user.organization_id)
@@ -66,6 +68,7 @@ def org_directory(
         limit=120,
         window_sec=60,
     )
+    require_org_member_capacity(db, user.organization_id, active_only=True)
     rows = (
         db.query(User)
         .filter(User.organization_id == user.organization_id, User.is_active.is_(True))

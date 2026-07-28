@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import time
 from collections import defaultdict
 from threading import Lock
@@ -56,15 +57,47 @@ class FixedWindowLimiter:
 _limiter = FixedWindowLimiter()
 
 
+def _parse_networks(raw: str) -> list[ipaddress._BaseNetwork]:
+    nets: list[ipaddress._BaseNetwork] = []
+    for part in (raw or "").split(","):
+        item = part.strip()
+        if not item:
+            continue
+        try:
+            if "/" in item:
+                nets.append(ipaddress.ip_network(item, strict=False))
+            else:
+                ip = ipaddress.ip_address(item)
+                nets.append(ipaddress.ip_network(f"{ip}/{ip.max_prefixlen}", strict=False))
+        except ValueError:
+            continue
+    return nets
+
+
+def _ip_trusted(remote: str, cidrs: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(remote)
+    except ValueError:
+        return False
+    for net in _parse_networks(cidrs):
+        if addr in net:
+            return True
+    return False
+
+
 def client_ip(request: Request | None) -> str:
     if request is None:
         return "unknown"
+    remote = request.client.host if request.client and request.client.host else None
     if settings.trust_x_forwarded_for:
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            return forwarded.split(",")[0].strip() or "unknown"
-    if request.client and request.client.host:
-        return request.client.host
+        cidrs = (settings.trusted_proxy_cidrs or "").strip()
+        # Empty CIDRs keep legacy behavior for local/tests; production warns at startup.
+        if not cidrs or (remote and _ip_trusted(remote, cidrs)):
+            forwarded = request.headers.get("x-forwarded-for")
+            if forwarded:
+                return forwarded.split(",")[0].strip() or "unknown"
+    if remote:
+        return remote
     return "unknown"
 
 

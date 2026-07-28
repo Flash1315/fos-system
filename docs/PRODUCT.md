@@ -208,6 +208,10 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 
 - Never store plaintext passwords
 - JWT secret from env (`SECRET_KEY`); change in production
+- Set `ENVIRONMENT=production` so weak/default `SECRET_KEY` fails startup (min 32 chars)
+- Prefer explicit `CORS_ORIGINS` (not `*`) in production
+- If `TRUST_X_FORWARDED_FOR=true`, also set `TRUSTED_PROXY_CIDRS` to your proxy ranges
+- Soft org size ceiling: `MAX_ORG_MEMBERS` (default 300) for team balances / directory / org report
 - All record mutations scoped to caller’s `organization_id`
 - Do not leak other orgs’ data in list/balance endpoints
 - CORS configurable via `CORS_ORIGINS`
@@ -217,11 +221,15 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 ```bash
 # api/.env
 APP_NAME=Fos
+ENVIRONMENT=development
 SECRET_KEY=change-me-in-production
 DATABASE_URL=sqlite:///./fos.db
 # DATABASE_URL=postgresql+psycopg2://fos:fos@localhost:5432/fos
 ACCESS_TOKEN_EXPIRE_MINUTES=10080
 CORS_ORIGINS=*
+# TRUST_X_FORWARDED_FOR=true
+# TRUSTED_PROXY_CIDRS=10.0.0.0/8
+# MAX_ORG_MEMBERS=300
 ```
 
 Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`

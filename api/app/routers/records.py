@@ -621,6 +621,11 @@ def org_records(
         limit=120,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"records-list-org:{user.organization_id}",
+        limit=180,
+        window_sec=60,
+    )
     purpose = _bound_purpose(purpose)
     query = db.query(MoneyRecord).filter(MoneyRecord.organization_id == user.organization_id)
     if kind:
@@ -667,6 +672,11 @@ def pending_records(
     enforce_rate_limit(
         f"records-pending:{user.organization_id}:{user.id}",
         limit=120,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"records-list-org:{user.organization_id}",
+        limit=180,
         window_sec=60,
     )
     purpose = _bound_purpose(purpose)

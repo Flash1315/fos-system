@@ -302,7 +302,6 @@ export function CreateScreen({
       });
       photoIdemRef.current = null;
       setPhotoUrl(up.photo_url);
-      Alert.alert("Fos", "Receipt photo attached");
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Upload failed");
     } finally {

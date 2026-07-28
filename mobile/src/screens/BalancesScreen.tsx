@@ -523,6 +523,15 @@ export function BalancesScreen({
             Alert.alert("Fos", BILLING_READONLY_MSG);
             return;
           }
+          try {
+            const b = await billingMe();
+            const frozen = isBillingReadOnly(b.billing_status);
+            setBillingReadonly(frozen);
+            if (frozen) {
+              Alert.alert("Fos", BILLING_READONLY_MSG);
+              return;
+            }
+          } catch { /* API 403 if frozen */ }
           const noteKey = voidNote.replace(/\s+/g, " ").trim();
           const key = idemKeyFor(voidAdjIdemRef, voidAdjSlotRef, "avoid", `${id}:${noteKey}`);
           markBusy(true);

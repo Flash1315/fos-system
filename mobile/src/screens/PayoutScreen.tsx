@@ -63,7 +63,6 @@ export function PayoutScreen({
       await reloadBalances();
     } catch (e) {
       setBootError(e instanceof Error ? e.message : "Failed");
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
       setBooting(false);
     }
@@ -267,6 +266,15 @@ export function PayoutScreen({
             text: "Pay all",
             onPress: async () => {
               try {
+                try {
+                  const b = await billingMe();
+                  const frozen = isBillingReadOnly(b.billing_status);
+                  setBillingReadonly(frozen);
+                  if (frozen) {
+                    Alert.alert("Fos", BILLING_READONLY_MSG);
+                    return;
+                  }
+                } catch { /* API 403 if frozen */ }
                 if (!batchSpendIdemRef.current) {
                   batchSpendIdemRef.current = makeIdempotencyKey("bpay");
                 }
@@ -323,6 +331,15 @@ export function PayoutScreen({
             text: "Take all",
             onPress: async () => {
               try {
+                try {
+                  const b = await billingMe();
+                  const frozen = isBillingReadOnly(b.billing_status);
+                  setBillingReadonly(frozen);
+                  if (frozen) {
+                    Alert.alert("Fos", BILLING_READONLY_MSG);
+                    return;
+                  }
+                } catch { /* API 403 if frozen */ }
                 if (!batchCashIdemRef.current) {
                   batchCashIdemRef.current = makeIdempotencyKey("bcash");
                 }

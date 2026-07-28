@@ -46,6 +46,11 @@ DB_POOL_RECYCLE=1800
 - Record comment/void/cancel/decide enforce per-org `comment-org:` / `void-org:` / `cancel-org:` / `decide-org:` rate limits
 - Settlement requests enforce per-org `settle-request-org:` rate limits
 - Team activate/role enforce per-org `team-org:` rate limits
+- Photo upload enforces per-org `upload-org:` rate limits
+- Telegram chat/test enforce per-org `telegram-org:` rate limits
+- Member reset-password/token enforce per-org `reset-password-org:` / `reset-token-org:`
+- Org ledger/pending lists enforce per-org `records-list-org:` rate limits
+- `/metrics` sends `Cache-Control: no-store`; CORS allows `X-Metrics-Token`
 - Media file responses send `X-Content-Type-Options: nosniff`
 - CSV export responses send `Cache-Control: no-store`
 - Persist `/app/uploads` or S3; content-addressed keys; cancels may remove unused receipt objects

@@ -187,6 +187,7 @@ app.add_middleware(
         "Content-Type",
         "Idempotency-Key",
         "X-Request-Id",
+        "X-Metrics-Token",
         "Accept",
     ],
     expose_headers=["Content-Disposition", "X-Request-Id", "Retry-After"],
@@ -510,4 +511,8 @@ def metrics(request: Request):
         limiter=limiter_status,
         limiter_redis_up=(limiter_status == "redis") if redis_configured else None,
     )
-    return PlainTextResponse(body, media_type="text/plain; version=0.0.4")
+    return PlainTextResponse(
+        body,
+        media_type="text/plain; version=0.0.4",
+        headers={"Cache-Control": "no-store"},
+    )

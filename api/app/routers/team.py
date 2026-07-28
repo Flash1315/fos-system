@@ -299,6 +299,11 @@ def reset_member_password(
         limit=5,
         window_sec=900,
     )
+    enforce_rate_limit(
+        f"reset-password-org:{user.organization_id}",
+        limit=40,
+        window_sec=60,
+    )
     require_org_writable(db, user.organization_id)
     lock_organization(db, user.organization_id)
     member = (
@@ -348,6 +353,11 @@ def issue_member_reset_token(
         f"reset-token-member:{user.organization_id}:{member_id}",
         limit=3,
         window_sec=900,
+    )
+    enforce_rate_limit(
+        f"reset-token-org:{user.organization_id}",
+        limit=40,
+        window_sec=60,
     )
     from app.services.org_gates import require_org_writable
 

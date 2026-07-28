@@ -41,6 +41,7 @@ export function AuthScreen({
   const [showPassword, setShowPassword] = useState(false);
   const [rememberedSlug, setRememberedSlug] = useState<string | null>(null);
   const [rememberedEmail, setRememberedEmail] = useState<string | null>(null);
+  const [formError, setFormError] = useState("");
   const submitLock = useRef(false);
 
   useEffect(() => {
@@ -85,18 +86,19 @@ export function AuthScreen({
 
   const submit = async () => {
     if (busy || submitLock.current) return;
+    setFormError("");
     if (mode === "invite") {
       if (!inviteToken.trim() || inviteToken.trim().length < 16) {
-        Alert.alert("Fos", "Paste the invite token from your manager");
+        setFormError("Paste the invite token from your manager");
         return;
       }
       const invitePwErr = passwordStrengthError(password);
       if (invitePwErr) {
-        Alert.alert("Fos", invitePwErr);
+        setFormError(invitePwErr);
         return;
       }
       if (password !== passwordConfirm) {
-        Alert.alert("Fos", "Passwords do not match");
+        setFormError("Passwords do not match");
         return;
       }
       submitLock.current = true;
@@ -121,47 +123,47 @@ export function AuthScreen({
       return;
     }
     if (!orgSlug.trim()) {
-      Alert.alert("Fos", "Organization slug is required");
+      setFormError("Organization slug is required");
       return;
     }
     if (!email.trim() || !password) {
-      Alert.alert("Fos", "Email and password are required");
+      setFormError("Email and password are required");
       return;
     }
     const mailErr = emailFormatError(email);
     if (mailErr) {
-      Alert.alert("Fos", mailErr);
+      setFormError(mailErr);
       return;
     }
     if (mode === "register") {
       const regPwErr = passwordStrengthError(password);
       if (regPwErr) {
-        Alert.alert("Fos", regPwErr);
+        setFormError(regPwErr);
         return;
       }
       if (!orgName.trim() || orgName.trim().length < 2) {
-        Alert.alert("Fos", "Company name must be at least 2 characters");
+        setFormError("Company name must be at least 2 characters");
         return;
       }
       if (!name.trim() || name.trim().length < 2) {
-        Alert.alert("Fos", "Your name must be at least 2 characters");
+        setFormError("Your name must be at least 2 characters");
         return;
       }
       if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(orgSlug.toLowerCase().trim())) {
-        Alert.alert("Fos", "Slug: lowercase letters, numbers, hyphens only (no -- or leading/trailing -)");
+        setFormError("Slug: lowercase letters, numbers, hyphens only (no -- or leading/trailing -)");
         return;
       }
       const curErr = currencyCodeError(currency);
       if (curErr) {
-        Alert.alert("Fos", curErr);
+        setFormError(curErr);
         return;
       }
       if (password !== passwordConfirm) {
-        Alert.alert("Fos", "Passwords do not match");
+        setFormError("Passwords do not match");
         return;
       }
     } else if (password.length > 128) {
-      Alert.alert("Fos", "Password is too long (max 128 characters)");
+      setFormError("Password is too long (max 128 characters)");
       return;
     }
     const slug = orgSlug.toLowerCase().trim();
@@ -220,6 +222,7 @@ export function AuthScreen({
             ? "Paste the invite or password-reset token and choose your password."
             : "Creates your organization and owner account."}
       </Sub>
+      {!!formError ? <Sub>{formError}</Sub> : null}
       {mode === "login" && (!!rememberedSlug || !!rememberedEmail) && (
         <>
           <Sub>
@@ -316,13 +319,13 @@ export function AuthScreen({
         )}
       </Card>
       {mode === "login" && (
-        <LinkText onPress={() => setMode("invite")}>Have an invite or reset token?</LinkText>
+        <LinkText onPress={() => { setFormError(""); setMode("invite"); }}>Have an invite or reset token?</LinkText>
       )}
       {mode === "invite" && (
-        <LinkText onPress={() => setMode("login")}>Back to log in</LinkText>
+        <LinkText onPress={() => { setFormError(""); setMode("login"); }}>Back to log in</LinkText>
       )}
       {mode !== "invite" && (
-        <LinkText onPress={() => setMode(mode === "login" ? "register" : "login")}>
+        <LinkText onPress={() => { setFormError(""); setMode(mode === "login" ? "register" : "login"); }}>
           {mode === "login" ? "New company? Register" : "Have an account? Log in"}
         </LinkText>
       )}

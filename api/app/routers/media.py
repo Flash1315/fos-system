@@ -47,6 +47,11 @@ async def upload_photo(
         limit=30,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"upload-org:{user.organization_id}",
+        limit=60,
+        window_sec=60,
+    )
     key = normalize_idem_key(idempotency_key)
     data = await read_upload_capped(file)
     content_sha = hashlib.sha256(data).hexdigest()

@@ -238,8 +238,21 @@ export function TeamScreen({
                         {
                           text: "Issue",
                           onPress: async () => {
+                            if (busy || billingReadonly) {
+                              if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+                              return;
+                            }
                             setBusy(true);
                             try {
+                              try {
+                                const b = await billingMe();
+                                const frozen = isBillingReadOnly(b.billing_status);
+                                setBillingReadonly(frozen);
+                                if (frozen) {
+                                  Alert.alert("Fos", BILLING_READONLY_MSG);
+                                  return;
+                                }
+                              } catch { /* API 403 if frozen */ }
                               let res;
                               try {
                                 res = await issueMemberResetToken(item.id);
@@ -370,6 +383,10 @@ export function TeamScreen({
           const id = resetId;
           setResetId(null);
           if (id == null) return;
+          if (billingReadonly) {
+            Alert.alert("Fos", BILLING_READONLY_MSG);
+            return;
+          }
           const pwErr = passwordStrengthError(pwd);
           if (pwErr) {
             Alert.alert("Fos", pwErr);
@@ -377,6 +394,15 @@ export function TeamScreen({
           }
           setBusy(true);
           try {
+            try {
+              const b = await billingMe();
+              const frozen = isBillingReadOnly(b.billing_status);
+              setBillingReadonly(frozen);
+              if (frozen) {
+                Alert.alert("Fos", BILLING_READONLY_MSG);
+                return;
+              }
+            } catch { /* API 403 if frozen */ }
             await resetMemberPassword(id, pwd, pwd);
             Alert.alert("Fos", "Password reset — their other sessions signed out");
             await reload();

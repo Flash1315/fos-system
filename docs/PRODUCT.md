@@ -321,3 +321,4 @@ Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`
 - Soft-fail report reloads; Create teammate/categories retry; Transfer/RecordDetail resume freeze; `transfer-org:` rate limit; CSV export `Cache-Control: no-store`
 - Soft-fail load-more/Team; Invite/Account settle freeze re-check; `adjustment-org`/`payout-org`/`decide-batch-org` limits; demo login requires full env; prod `/docs` 404 CI
 - Confirm-path billingMe on Team/Approve/Payout/Balances/Account; PayoutHistory soft-fail; org limits comment/void/cancel/decide/settle-request/team; soft-retry GET/Idem only; media nosniff; ready media CI
+- Payout batch confirm freeze; Approve rejectAll/Balances void billingMe; Team reset freeze; upload/telegram/reset/list org limits; Auth inline form errors; Create photo quiet attach; metrics no-store + X-Metrics-Token CORS

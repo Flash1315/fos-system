@@ -98,6 +98,9 @@ jobs:
               echo "$ready" | grep -q '"media"'
               grep -q 'comment-org:' docs/DEPLOY.md
               grep -q 'team-org:' docs/DEPLOY.md
+              grep -q 'upload-org:' docs/DEPLOY.md
+              grep -q 'telegram-org:' docs/DEPLOY.md
+              grep -q 'records-list-org:' docs/DEPLOY.md
               expected=$(python3 -c "import pathlib,re; print(re.search(r'APP_VERSION\s*=\s*\"([^\"]+)\"', pathlib.Path('api/app/version.py').read_text()).group(1))")
               echo "$ready" | grep -q "\"version\":\"$expected\""
               # Dev image still exposes OpenAPI; prod hide is source-gated (_IS_PROD).

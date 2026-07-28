@@ -474,8 +474,21 @@ export function AccountScreen({
             variant="ghost"
             disabled={busy || billingReadonly}
             onPress={async () => {
+              if (busy || billingReadonly) {
+                if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+                return;
+              }
               setBusy(true);
               try {
+                try {
+                  const live = await billingMe();
+                  const frozen = isBillingReadOnly(live.billing_status);
+                  setBillingReadonly(frozen);
+                  if (frozen) {
+                    Alert.alert("Fos", BILLING_READONLY_MSG);
+                    return;
+                  }
+                } catch { /* API 403 if frozen */ }
                 const b = await setTelegramChat(tgChat.trim());
                 setBilling(b);
                 Alert.alert("Fos", "Telegram chat saved");
@@ -491,8 +504,21 @@ export function AccountScreen({
             variant="ghost"
             disabled={busy || billingReadonly}
             onPress={async () => {
+              if (busy || billingReadonly) {
+                if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+                return;
+              }
               setBusy(true);
               try {
+                try {
+                  const live = await billingMe();
+                  const frozen = isBillingReadOnly(live.billing_status);
+                  setBillingReadonly(frozen);
+                  if (frozen) {
+                    Alert.alert("Fos", BILLING_READONLY_MSG);
+                    return;
+                  }
+                } catch { /* API 403 if frozen */ }
                 await testTelegram();
                 Alert.alert("Fos", "Test message sent");
               } catch (e) {

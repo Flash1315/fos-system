@@ -130,6 +130,11 @@ def set_telegram_chat(
         limit=20,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"telegram-org:{user.organization_id}",
+        limit=30,
+        window_sec=60,
+    )
     from app.services.org_gates import require_org_writable
 
     require_org_writable(db, user.organization_id)
@@ -152,6 +157,11 @@ def test_telegram(
     enforce_rate_limit(
         f"telegram-test:{user.organization_id}:{user.id}",
         limit=5,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"telegram-org:{user.organization_id}",
+        limit=30,
         window_sec=60,
     )
     from app.services.org_gates import require_org_writable

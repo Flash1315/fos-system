@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { listSettlementRequests, myBalance, myOrg, myRecords, pendingRecords, requestSettlement, type MoneyRecord, type User } from "../api";
+import { listMySettlementRequests, listSettlementRequests, myBalance, myOrg, myRecords, pendingRecords, requestSettlement, type MoneyRecord, type User } from "../api";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
@@ -107,7 +107,12 @@ export function HomeScreen({
         }
       } else {
         setPendingCount(b.pending_count);
-        setSettlementCount(0);
+        try {
+          const mine = await listMySettlementRequests();
+          setSettlementCount(mine.filter((r) => r.status === "pending").length);
+        } catch {
+          setSettlementCount(0);
+        }
       }
       setRows(list);
     } catch (e) {

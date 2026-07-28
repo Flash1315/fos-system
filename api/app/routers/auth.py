@@ -164,16 +164,19 @@ def change_password(
         limit=10,
         window_sec=300,
     )
-    if not verify_password(body.current_password, user.hashed_password):
+    locked = db.query(User).filter(User.id == user.id).with_for_update().first()
+    if not locked:
+        raise HTTPException(404, "User not found")
+    if not verify_password(body.current_password, locked.hashed_password):
         raise HTTPException(400, "Current password is wrong")
-    user.hashed_password = hash_password(body.new_password)
-    bump_token_version(user)
-    user.must_set_password = False
-    user.invite_token = None
-    user.invite_token_expires_at = None
+    locked.hashed_password = hash_password(body.new_password)
+    bump_token_version(locked)
+    locked.must_set_password = False
+    locked.invite_token = None
+    locked.invite_token_expires_at = None
     db.commit()
-    db.refresh(user)
-    return _token_out(db, user)
+    db.refresh(locked)
+    return _token_out(db, locked)
 
 
 @router.post("/auth/accept-invite", response_model=TokenOut)
@@ -223,7 +226,9 @@ def update_org(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
-    org = db.get(Organization, user.organization_id)
+    from app.services.locks import lock_organization
+
+    org = lock_organization(db, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")
     data = body.model_dump(exclude_unset=True)

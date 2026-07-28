@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.20"
+    assert health.json()["version"] == "0.7.21"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -4617,3 +4617,104 @@ def test_record_patch_idempotency_and_batch_locks(client):
         )
     assert req.status_code == 200, req.text
     assert req.json()["note"] == "padded"
+
+
+def test_row_locks_note_trim_and_expired_reactivate(client):
+    owner = _register(client, "flow-0721", "v0721-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    # Decide note trim
+    pending = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 15,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert pending.status_code == 200, pending.text
+    rid = pending.json()["id"]
+    decided = client.post(
+        f"/records/{rid}/decide",
+        headers=h,
+        json={"approve": True, "note": "  ok  "},
+    )
+    assert decided.status_code == 200, decided.text
+    assert "[review] ok" in decided.json()["comment"]
+
+    # Soft cancel retry after lock path
+    pending2 = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 7,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert pending2.status_code == 200
+    rid2 = pending2.json()["id"]
+    c1 = client.delete(f"/records/{rid2}", headers=h)
+    assert c1.status_code == 200
+    c2 = client.delete(f"/records/{rid2}", headers=h)
+    assert c2.status_code == 200
+
+    # Telegram chat trim
+    tg = client.post(
+        "/integrations/telegram/chat",
+        headers=h,
+        json={"telegram_chat_id": "  12345  "},
+    )
+    assert tg.status_code == 200, tg.text
+    assert tg.json()["telegram_chat_id"] == "12345"
+
+    # Invite then expire token → reactivate blocked until new reset token
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={"email": "v0721-emp@example.com", "full_name": "Emp", "role": "employee"},
+    )
+    assert inv.status_code == 200, inv.text
+    emp_id = inv.json()["id"]
+    deact = client.post(
+        f"/orgs/members/{emp_id}/active",
+        headers=h,
+        json={"is_active": False},
+    )
+    assert deact.status_code == 200, deact.text
+    from app.db import SessionLocal
+    from app.models import User
+    from datetime import datetime, timedelta, timezone
+
+    db = SessionLocal()
+    try:
+        u = db.get(User, emp_id)
+        assert u is not None
+        u.invite_token_expires_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
+            days=1
+        )
+        db.commit()
+    finally:
+        db.close()
+    blocked = client.post(
+        f"/orgs/members/{emp_id}/active",
+        headers=h,
+        json={"is_active": True},
+    )
+    assert blocked.status_code == 400
+    assert "expired" in blocked.json()["detail"].lower()
+    # Recovery token while inactive + must_set_password
+    issued = client.post(f"/orgs/members/{emp_id}/reset-token", headers=h)
+    assert issued.status_code == 200, issued.text
+    assert issued.json()["invite_token"]
+    react = client.post(
+        f"/orgs/members/{emp_id}/active",
+        headers=h,
+        json={"is_active": True},
+    )
+    assert react.status_code == 200, react.text

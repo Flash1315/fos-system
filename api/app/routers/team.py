@@ -71,7 +71,12 @@ def set_member_active(
     from app.services.locks import lock_organization, lock_users
 
     lock_organization(db, user.organization_id)
-    member = db.get(User, member_id)
+    member = (
+        db.query(User)
+        .filter(User.id == member_id)
+        .with_for_update()
+        .first()
+    )
     if not member or member.organization_id != user.organization_id:
         raise HTTPException(404, "User not found")
     if member.id == user.id:
@@ -142,6 +147,16 @@ def set_member_active(
                 400,
                 "Issue a reset token before reactivating — teammate still must set a password",
             )
+        expires = getattr(member, "invite_token_expires_at", None)
+        if (
+            member.must_set_password
+            and expires is not None
+            and expires < _utcnow()
+        ):
+            raise HTTPException(
+                400,
+                "Invite/reset token expired — issue a new reset token before reactivating",
+            )
     member.is_active = body.is_active
     if not body.is_active:
         bump_token_version(member)
@@ -164,7 +179,12 @@ def set_member_role(
     from app.services.locks import lock_organization
 
     lock_organization(db, user.organization_id)
-    member = db.get(User, member_id)
+    member = (
+        db.query(User)
+        .filter(User.id == member_id)
+        .with_for_update()
+        .first()
+    )
     if not member or member.organization_id != user.organization_id:
         raise HTTPException(404, "User not found")
     if member.id == user.id and body.role != UserRole.owner:
@@ -208,7 +228,12 @@ def reset_member_password(
         limit=20,
         window_sec=60,
     )
-    member = db.get(User, member_id)
+    member = (
+        db.query(User)
+        .filter(User.id == member_id)
+        .with_for_update()
+        .first()
+    )
     if not member or member.organization_id != user.organization_id:
         raise HTTPException(404, "User not found")
     if member.id == user.id:
@@ -235,12 +260,18 @@ def issue_member_reset_token(
     from app.services.rate_limit import enforce_rate_limit
 
     enforce_rate_limit(f"reset-token:{user.organization_id}:{user.id}", limit=20, window_sec=60)
-    member = db.get(User, member_id)
+    member = (
+        db.query(User)
+        .filter(User.id == member_id)
+        .with_for_update()
+        .first()
+    )
     if not member or member.organization_id != user.organization_id:
         raise HTTPException(404, "User not found")
     if member.id == user.id:
         raise HTTPException(400, "Use Account → Change password for your own password")
-    if not member.is_active:
+    # Inactive members may receive a recovery token only when they still must set a password.
+    if not member.is_active and not member.must_set_password:
         raise HTTPException(400, "Member is inactive")
     org = db.get(Organization, user.organization_id)
     raw_token = secrets.token_urlsafe(24)

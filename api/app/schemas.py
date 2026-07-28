@@ -346,13 +346,23 @@ class BalanceOut(BaseModel):
 
 class DecideIn(BaseModel):
     approve: bool
-    note: str = ""
+    note: str = Field(default="", max_length=2000)
+
+    @field_validator("note")
+    @classmethod
+    def note_trim(cls, v: str) -> str:
+        return (v or "").strip()
 
 
 class DecideBatchIn(BaseModel):
     ids: list[int] = Field(min_length=1)
     approve: bool
-    note: str = ""
+    note: str = Field(default="", max_length=2000)
+
+    @field_validator("note")
+    @classmethod
+    def note_trim(cls, v: str) -> str:
+        return (v or "").strip()
 
 
 class DecideBatchOut(BaseModel):

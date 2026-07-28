@@ -720,7 +720,12 @@ def decide_batch(
     # Track cash_on_hand spend approved in this batch (session autoflush is off).
     extra_cash_spent: dict[int, float] = {}
     for rid in body.ids:
-        rec = db.get(MoneyRecord, rid)
+        rec = (
+            db.query(MoneyRecord)
+            .filter(MoneyRecord.id == rid)
+            .with_for_update()
+            .first()
+        )
         if not rec or rec.organization_id != user.organization_id:
             skipped += 1
             continue
@@ -1024,7 +1029,12 @@ def decide_record(
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
-    rec = db.get(MoneyRecord, record_id)
+    rec = (
+        db.query(MoneyRecord)
+        .filter(MoneyRecord.id == record_id)
+        .with_for_update()
+        .first()
+    )
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
     if rec.status != RecordStatus.pending:
@@ -1128,7 +1138,12 @@ def comment_record(
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
-    rec = db.get(MoneyRecord, record_id)
+    rec = (
+        db.query(MoneyRecord)
+        .filter(MoneyRecord.id == record_id)
+        .with_for_update()
+        .first()
+    )
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
     stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
@@ -1207,7 +1222,12 @@ def void_approved_record(
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
-    rec = db.get(MoneyRecord, record_id)
+    rec = (
+        db.query(MoneyRecord)
+        .filter(MoneyRecord.id == record_id)
+        .with_for_update()
+        .first()
+    )
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
     if rec.status != RecordStatus.approved:
@@ -1231,12 +1251,20 @@ def void_approved_record(
                 MoneyRecord.transfer_group_id == rec.transfer_group_id,
                 MoneyRecord.is_voided.is_(False),
             )
+            .order_by(MoneyRecord.id.asc())
+            .with_for_update()
             .all()
         )
         targets = siblings or [rec]
     from app.services.locks import lock_users
 
     lock_users(db, *[t.created_by for t in targets])
+    for row in targets:
+        if not can_void_record(db, row):
+            raise HTTPException(
+                400,
+                "Record is locked by a settlement. Void the latest payout first.",
+            )
     assert_void_records_keep_non_negative(db, targets)
     for row in targets:
         row.is_voided = True
@@ -1306,7 +1334,12 @@ def cancel_pending_record(
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
-    rec = db.get(MoneyRecord, record_id)
+    rec = (
+        db.query(MoneyRecord)
+        .filter(MoneyRecord.id == record_id)
+        .with_for_update()
+        .first()
+    )
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
     is_manager = user.role in (UserRole.owner, UserRole.manager)

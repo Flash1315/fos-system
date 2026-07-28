@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles
@@ -24,6 +24,11 @@ class BillingOut(BaseModel):
 
 class TelegramChatIn(BaseModel):
     telegram_chat_id: str = Field(max_length=64)
+
+    @field_validator("telegram_chat_id")
+    @classmethod
+    def chat_trim(cls, v: str) -> str:
+        return (v or "").strip()
 
 
 class PlanIn(BaseModel):
@@ -70,7 +75,9 @@ def set_plan(
             400,
             "Paid plans require billing integration — only free/trial available in stub mode",
         )
-    org = db.get(Organization, user.organization_id)
+    from app.services.locks import lock_organization
+
+    org = lock_organization(db, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")
     org.plan = body.plan
@@ -85,10 +92,12 @@ def set_telegram_chat(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
-    org = db.get(Organization, user.organization_id)
+    from app.services.locks import lock_organization
+
+    org = lock_organization(db, user.organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")
-    org.telegram_chat_id = body.telegram_chat_id.strip()
+    org.telegram_chat_id = body.telegram_chat_id
     db.commit()
     db.refresh(org)
     return billing_me(user, db)

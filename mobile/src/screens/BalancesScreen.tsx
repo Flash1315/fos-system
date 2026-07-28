@@ -140,20 +140,30 @@ export function BalancesScreen({
         ? `Pay ${item.full_name} expense reimbursement ${formatMoney(value, currency)}?`
         : `Take cash handover ${formatMoney(value, currency)} from ${item.full_name}?`;
     const slot = `${item.user_id}:${kind}`;
-    if (payoutSlotRef.current !== slot) {
-      payoutSlotRef.current = slot;
-      payoutIdemRef.current = null;
-    }
-    if (!payoutIdemRef.current) {
-      payoutIdemRef.current = makeIdempotencyKey(kind === "expense_payout" ? "pay" : "cash");
-    }
-    const settleKey = payoutIdemRef.current;
     Alert.alert("Fos", label, [
-      { text: "Cancel", style: "cancel" },
+      {
+        text: "Cancel",
+        style: "cancel",
+        onPress: () => {
+          if (payoutSlotRef.current === slot) {
+            payoutIdemRef.current = null;
+          }
+        },
+      },
       {
         text: "Settle",
         onPress: async () => {
           if (isBusy) return;
+          if (payoutSlotRef.current !== slot) {
+            payoutSlotRef.current = slot;
+            payoutIdemRef.current = null;
+          }
+          if (!payoutIdemRef.current) {
+            payoutIdemRef.current = makeIdempotencyKey(
+              kind === "expense_payout" ? "pay" : "cash",
+            );
+          }
+          const settleKey = payoutIdemRef.current;
           markBusy(true);
           try {
             const list = await teamBalances();
@@ -164,6 +174,7 @@ export function BalancesScreen({
                 : fresh?.available_cash ?? fresh?.cash_on_hand ?? 0;
             if (available + 1e-6 < value) {
               setRows(list);
+              payoutIdemRef.current = null;
               Alert.alert(
                 "Fos",
                 `Only ${formatMoney(available, currency)} available now — refresh and retry`,

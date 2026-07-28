@@ -272,6 +272,11 @@ def void_adjustment(
     if row.is_voided:
         u = db.get(User, row.user_id)
         return _out(row, u.full_name if u else "", db)
+    if not can_void_adjustment(db, row):
+        raise HTTPException(
+            400,
+            "Adjustment is locked by a later settlement. Void that payout first.",
+        )
     target = db.get(User, row.user_id)
     if not target:
         raise HTTPException(404, "User not found")

@@ -27,7 +27,7 @@ class PayoutCreate(BaseModel):
     kind: PayoutKind
     amount: float = Field(gt=0)
     payment_method: str = "cash"
-    note: str = ""
+    note: str = Field(default="", max_length=2000)
     overpayment: float = Field(default=0, ge=0)
 
     @field_validator("payment_method")
@@ -38,7 +38,7 @@ class PayoutCreate(BaseModel):
     @field_validator("note")
     @classmethod
     def note_trim(cls, v: str) -> str:
-        return (v or "").strip()
+        return (v or "").strip()[:2000]
 
 
 class PayoutOut(BaseModel):
@@ -76,23 +76,23 @@ class VoidIn(BaseModel):
 
 
 class CancelRequestIn(BaseModel):
-    note: str = ""
+    note: str = Field(default="", max_length=2000)
 
     @field_validator("note")
     @classmethod
     def note_trim(cls, v: str) -> str:
-        return (v or "").strip()
+        return (v or "").strip()[:2000]
 
 
 class SettlementRequestIn(BaseModel):
     kind: PayoutKind
     amount: float = Field(gt=0)
-    note: str = ""
+    note: str = Field(default="", max_length=2000)
 
     @field_validator("note")
     @classmethod
     def note_trim(cls, v: str) -> str:
-        return (v or "").strip()
+        return (v or "").strip()[:2000]
 
 
 class SettlementRequestOut(BaseModel):
@@ -425,6 +425,11 @@ def void_payout(
     if row.is_voided:
         u = db.get(User, row.user_id)
         return _payout_out(db, row, u.full_name if u else "")
+    if not _can_void_payout(db, row):
+        raise HTTPException(
+            400,
+            "Only the latest settlement of this type for the teammate can be voided",
+        )
     row.is_voided = True
     row.voided_at = _utcnow()
     row.voided_by = manager.id

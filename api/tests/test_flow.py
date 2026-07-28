@@ -2404,13 +2404,30 @@ def test_fuel_odometer_checked_on_approve(client):
         },
     )
     assert high.status_code == 200, high.text
-    # Approve higher first
+    # Approve higher (later-created) first
     ok = client.post(f"/records/{high.json()['id']}/decide", headers=h, json={"approve": True})
     assert ok.status_code == 200, ok.text
-    # Approving lower must fail
-    denied = client.post(f"/records/{low.json()['id']}/decide", headers=h, json={"approve": True})
-    assert denied.status_code == 400
-    assert "odometer" in denied.json()["detail"].lower()
+    # Earlier pending at 1100 still fits between 1000 and 1200 — chronology allows it
+    ok_low = client.post(f"/records/{low.json()['id']}/decide", headers=h, json={"approve": True})
+    assert ok_low.status_code == 200, ok_low.text
+    # Backdated insert cannot jump above a later reading
+    jumped = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 30,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "B1",
+            "odometer": 5000,
+            "liters": 2,
+            "occurred_at": "2020-01-01T12:00:00",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert jumped.status_code == 400
+    assert "later" in jumped.json()["detail"].lower() or "odometer" in jumped.json()["detail"].lower()
 
 def test_invite_token_accept_and_pagination(client):
     owner = _register(client, "flow-invite-tok", "invtok-owner@example.com")
@@ -2645,7 +2662,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.16"
+    assert health.json()["version"] == "0.7.17"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -4151,4 +4168,136 @@ def test_idem_fingerprint_occurred_at_patch_and_register_conflict(client):
     )
     assert cleared.status_code == 200, cleared.text
     assert cleared.json()["occurred_at"] is None
+
+
+def test_money_limit_odometer_chronology_and_payout_idem_fingerprint(client):
+    owner = _register(client, "flow-0717", "v0717-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    too_big = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 1e20,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert too_big.status_code == 400
+    assert "large" in too_big.json()["detail"].lower()
+
+    pending = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 12,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert pending.status_code == 200
+    null_amt = client.patch(
+        f"/records/{pending.json()['id']}",
+        headers=h,
+        json={"amount": None},
+    )
+    assert null_amt.status_code == 400
+
+    # Later reading first
+    later = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 50,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "Chrono",
+            "liters": 4,
+            "odometer": 2000,
+            "occurred_at": "2025-06-01T12:00:00",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert later.status_code == 200, later.text
+    # Backdated insert cannot exceed the later reading
+    too_high = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 40,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "Chrono",
+            "liters": 3,
+            "odometer": 2500,
+            "occurred_at": "2025-05-01T12:00:00",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert too_high.status_code == 400
+    assert "later" in too_high.json()["detail"].lower()
+    # Valid historical reading below the later one
+    earlier = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 40,
+            "category": "Bensin",
+            "purpose": "Other",
+            "bike": "Chrono",
+            "liters": 3,
+            "odometer": 1500,
+            "occurred_at": "2025-05-01T12:00:00",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert earlier.status_code == 200, earlier.text
+
+    # Payout create: same key + different payload → 409
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 800,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    key = "payout-create-0717"
+    p1 = client.post(
+        "/payouts",
+        headers={**h, "Idempotency-Key": key},
+        json={
+            "user_id": owner["user"]["id"],
+            "kind": "expense_payout",
+            "amount": 100,
+            "payment_method": "cash",
+            "note": "partial",
+        },
+    )
+    assert p1.status_code == 200, p1.text
+    p2 = client.post(
+        "/payouts",
+        headers={**h, "Idempotency-Key": key},
+        json={
+            "user_id": owner["user"]["id"],
+            "kind": "expense_payout",
+            "amount": 200,
+            "payment_method": "cash",
+            "note": "other",
+        },
+    )
+    assert p2.status_code == 409
 

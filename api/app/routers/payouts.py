@@ -230,9 +230,16 @@ def create_payout(
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
 
     key = normalize_idem_key(idempotency_key)
+    fp = fingerprint(body.model_dump(mode="json")) if key else None
     if key:
         hit = lookup_idem(
             db,
@@ -242,6 +249,7 @@ def create_payout(
             key=key,
         )
         if hit:
+            require_idem_match(hit, fp)
             existing = db.get(Payout, hit.resource_id)
             if existing and existing.organization_id == manager.organization_id:
                 u = db.get(User, existing.user_id)
@@ -255,6 +263,7 @@ def create_payout(
             scope="payouts.create",
             key=key,
             resource_id=row.id,
+            request_hash=fp,
         )
     db.commit()
     db.refresh(row)
@@ -318,9 +327,20 @@ def void_payout(
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
 
     key = normalize_idem_key(idempotency_key)
+    fp = (
+        fingerprint({"payout_id": payout_id, **body.model_dump(mode="json")})
+        if key
+        else None
+    )
     if key:
         hit = lookup_idem(
             db,
@@ -330,6 +350,7 @@ def void_payout(
             key=key,
         )
         if hit:
+            require_idem_match(hit, fp)
             existing = db.get(Payout, hit.resource_id)
             if existing and existing.organization_id == manager.organization_id:
                 u = db.get(User, existing.user_id)
@@ -408,6 +429,7 @@ def void_payout(
             scope="payouts.void",
             key=key,
             resource_id=row.id,
+            request_hash=fp,
         )
     db.commit()
     db.refresh(row)
@@ -423,9 +445,18 @@ def batch_pay_all_spendings(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Create expense_payout for every teammate with available spendings > 0 (one commit)."""
-    from app.services.idempotency import dumps_json, loads_json, lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        dumps_json,
+        fingerprint,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
 
     key = normalize_idem_key(idempotency_key)
+    fp = fingerprint({"payment_method": payment_method}) if key else None
     if key:
         hit = lookup_idem(
             db,
@@ -434,10 +465,12 @@ def batch_pay_all_spendings(
             scope="payouts.batch_spendings",
             key=key,
         )
-        if hit and hit.response_json:
-            cached = loads_json(hit.response_json)
-            if isinstance(cached, list):
-                return [PayoutOut.model_validate(item) for item in cached]
+        if hit:
+            require_idem_match(hit, fp)
+            if hit.response_json:
+                cached = loads_json(hit.response_json)
+                if isinstance(cached, list):
+                    return [PayoutOut.model_validate(item) for item in cached]
     members = (
         db.query(User)
         .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
@@ -475,6 +508,7 @@ def batch_pay_all_spendings(
             key=key,
             resource_id=out[0].id if out else 0,
             response_json=dumps_json([o.model_dump(mode="json") for o in out]),
+            request_hash=fp,
         )
     try:
         db.commit()
@@ -488,10 +522,12 @@ def batch_pay_all_spendings(
                 scope="payouts.batch_spendings",
                 key=key,
             )
-            if hit and hit.response_json:
-                cached = loads_json(hit.response_json)
-                if isinstance(cached, list):
-                    return [PayoutOut.model_validate(item) for item in cached]
+            if hit:
+                require_idem_match(hit, fp)
+                if hit.response_json:
+                    cached = loads_json(hit.response_json)
+                    if isinstance(cached, list):
+                        return [PayoutOut.model_validate(item) for item in cached]
         raise HTTPException(409, "Idempotent batch conflict — retry") from None
     return out
 
@@ -504,9 +540,18 @@ def batch_take_all_cash(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Create income_handover for every teammate with available cash > 0 (one commit)."""
-    from app.services.idempotency import dumps_json, loads_json, lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        dumps_json,
+        fingerprint,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
 
     key = normalize_idem_key(idempotency_key)
+    fp = fingerprint({"payment_method": payment_method}) if key else None
     if key:
         hit = lookup_idem(
             db,
@@ -515,10 +560,12 @@ def batch_take_all_cash(
             scope="payouts.batch_cash",
             key=key,
         )
-        if hit and hit.response_json:
-            cached = loads_json(hit.response_json)
-            if isinstance(cached, list):
-                return [PayoutOut.model_validate(item) for item in cached]
+        if hit:
+            require_idem_match(hit, fp)
+            if hit.response_json:
+                cached = loads_json(hit.response_json)
+                if isinstance(cached, list):
+                    return [PayoutOut.model_validate(item) for item in cached]
     members = (
         db.query(User)
         .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
@@ -556,6 +603,7 @@ def batch_take_all_cash(
             key=key,
             resource_id=out[0].id if out else 0,
             response_json=dumps_json([o.model_dump(mode="json") for o in out]),
+            request_hash=fp,
         )
     try:
         db.commit()
@@ -569,10 +617,12 @@ def batch_take_all_cash(
                 scope="payouts.batch_cash",
                 key=key,
             )
-            if hit and hit.response_json:
-                cached = loads_json(hit.response_json)
-                if isinstance(cached, list):
-                    return [PayoutOut.model_validate(item) for item in cached]
+            if hit:
+                require_idem_match(hit, fp)
+                if hit.response_json:
+                    cached = loads_json(hit.response_json)
+                    if isinstance(cached, list):
+                        return [PayoutOut.model_validate(item) for item in cached]
         raise HTTPException(409, "Idempotent batch conflict — retry") from None
     return out
 
@@ -627,10 +677,17 @@ def request_settlement(
     user: User = Depends(get_current_user),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
     from app.services.money import require_positive_money
 
     key = normalize_idem_key(idempotency_key)
+    fp = fingerprint(body.model_dump(mode="json")) if key else None
     if key:
         hit = lookup_idem(
             db,
@@ -640,6 +697,7 @@ def request_settlement(
             key=key,
         )
         if hit:
+            require_idem_match(hit, fp)
             existing = db.get(SettlementRequest, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _request_out(existing, user.full_name)
@@ -682,6 +740,7 @@ def request_settlement(
             scope="payouts.request",
             key=key,
             resource_id=row.id,
+            request_hash=fp,
         )
     db.commit()
     db.refresh(row)
@@ -868,9 +927,20 @@ def cancel_settlement_request(
     user: User = Depends(get_current_user),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
 
     key = normalize_idem_key(idempotency_key)
+    fp = (
+        fingerprint({"request_id": request_id, **body.model_dump(mode="json")})
+        if key
+        else None
+    )
     if key:
         hit = lookup_idem(
             db,
@@ -880,6 +950,7 @@ def cancel_settlement_request(
             key=key,
         )
         if hit:
+            require_idem_match(hit, fp)
             existing = db.get(SettlementRequest, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 u = db.get(User, existing.user_id)
@@ -911,6 +982,7 @@ def cancel_settlement_request(
             scope="payouts.cancel_request",
             key=key,
             resource_id=req.id,
+            request_hash=fp,
         )
     db.commit()
     db.refresh(req)

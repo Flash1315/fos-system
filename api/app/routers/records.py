@@ -183,6 +183,49 @@ def _last_fuel_odometer(
     return q.order_by(eff.desc(), MoneyRecord.id.desc()).first()
 
 
+def _fuel_odometer_neighbors(
+    db: Session,
+    org_id: int,
+    owner_id: int,
+    bike: str,
+    *,
+    at: datetime,
+    exclude_id: int | None = None,
+) -> tuple[MoneyRecord | None, MoneyRecord | None]:
+    """Nearest prior/next fuel readings with odometer around effective time `at`."""
+    eff = func.coalesce(MoneyRecord.occurred_at, MoneyRecord.created_at)
+    q = db.query(MoneyRecord).filter(
+        MoneyRecord.organization_id == org_id,
+        MoneyRecord.kind == RecordKind.fuel,
+        MoneyRecord.status != RecordStatus.rejected,
+        MoneyRecord.is_voided.is_(False),
+        MoneyRecord.odometer.isnot(None),
+    )
+    bike_key = (bike or "").strip()
+    if bike_key:
+        q = q.filter(func.trim(MoneyRecord.bike) == bike_key)
+    else:
+        q = q.filter(
+            MoneyRecord.created_by == owner_id,
+            func.trim(MoneyRecord.bike) == "",
+        )
+    if exclude_id is not None:
+        q = q.filter(MoneyRecord.id != exclude_id)
+    rows = q.order_by(eff.asc(), MoneyRecord.id.asc()).all()
+    pred: MoneyRecord | None = None
+    succ: MoneyRecord | None = None
+    for row in rows:
+        row_at = row.occurred_at or row.created_at
+        if row_at is None:
+            continue
+        if row_at < at or (row_at == at and (exclude_id is None or row.id < (exclude_id or 0))):
+            pred = row
+        elif row_at > at or (row_at == at and exclude_id is not None and row.id > exclude_id):
+            succ = row
+            break
+    return pred, succ
+
+
 def _assert_odometer(
     db: Session,
     org_id: int,
@@ -190,23 +233,43 @@ def _assert_odometer(
     bike: str,
     odometer: float | None,
     *,
+    at: datetime | None = None,
     exclude_id: int | None = None,
 ) -> None:
-    last = _last_fuel_odometer(db, org_id, owner_id, bike, exclude_id=exclude_id)
+    when = at or _utcnow()
+    if when.tzinfo is not None:
+        when = when.astimezone(timezone.utc).replace(tzinfo=None)
+    pred, succ = _fuel_odometer_neighbors(
+        db, org_id, owner_id, bike, at=when, exclude_id=exclude_id
+    )
+    has_history = pred is not None or succ is not None
+    if not has_history:
+        # Fall back: any prior reading still forces odometer (legacy latest path).
+        has_history = _last_fuel_odometer(db, org_id, owner_id, bike, exclude_id=exclude_id) is not None
+    label = (bike or "").strip() or "this rider"
     if odometer is None:
-        if last is not None:
-            label = (bike or "").strip() or "this rider"
+        if has_history:
+            last = pred or succ or _last_fuel_odometer(
+                db, org_id, owner_id, bike, exclude_id=exclude_id
+            )
             raise HTTPException(
                 400,
                 f"Odometer is required after a prior fuel reading for {label} "
-                f"(last {last.odometer}).",
+                f"(last {last.odometer if last else '—'}).",
             )
         return
-    if last is not None and float(odometer) + 1e-6 < float(last.odometer or 0):
-        label = (bike or "").strip() or "this rider"
+    value = float(odometer)
+    if pred is not None and value + 1e-6 < float(pred.odometer or 0):
         raise HTTPException(
             400,
-            f"Odometer cannot decrease for {label} (last {last.odometer}).",
+            f"Odometer cannot decrease for {label} "
+            f"(previous {pred.odometer} at {(pred.occurred_at or pred.created_at)}).",
+        )
+    if succ is not None and value - 1e-6 > float(succ.odometer or 0):
+        raise HTTPException(
+            400,
+            f"Odometer cannot exceed a later reading for {label} "
+            f"(next {succ.odometer} at {(succ.occurred_at or succ.created_at)}).",
         )
 
 
@@ -285,6 +348,7 @@ def create_record(
             owner_id,
             body.bike,
             body.odometer,
+            at=occurred_at or _utcnow(),
         )
     rec = MoneyRecord(
         organization_id=user.organization_id,
@@ -315,6 +379,7 @@ def create_record(
                 owner_id,
                 body.bike,
                 body.odometer,
+                at=occurred_at or _utcnow(),
                 exclude_id=None,
             )
         _assert_cash_for_approve(db, rec)
@@ -627,6 +692,7 @@ def decide_batch(
                         rec.created_by,
                         rec.bike or "",
                         float(rec.odometer) if rec.odometer is not None else None,
+                        at=rec.occurred_at or rec.created_at,
                         exclude_id=rec.id,
                     )
                 except HTTPException:
@@ -741,6 +807,8 @@ def update_pending_record(
     if rec.status != RecordStatus.pending:
         raise HTTPException(400, "Only pending records can be edited")
     data = body.model_dump(exclude_unset=True)
+    if "amount" in data and data["amount"] is None:
+        raise HTTPException(400, "amount cannot be null")
     if "amount" in data and data["amount"] is not None:
         from app.services.money import require_positive_money
 
@@ -755,12 +823,18 @@ def update_pending_record(
     if rec.kind == RecordKind.fuel:
         next_bike = data["bike"] if "bike" in data else rec.bike
         next_odo = data["odometer"] if "odometer" in data else rec.odometer
+        next_at = (
+            data["occurred_at"]
+            if "occurred_at" in data
+            else (rec.occurred_at or rec.created_at)
+        )
         _assert_odometer(
             db,
             rec.organization_id,
             rec.created_by,
             next_bike or "",
             next_odo,
+            at=next_at,
             exclude_id=rec.id,
         )
     if "category" in data or "purpose" in data:
@@ -842,6 +916,7 @@ def decide_record(
                 rec.created_by,
                 rec.bike or "",
                 float(rec.odometer) if rec.odometer is not None else None,
+                at=rec.occurred_at or rec.created_at,
                 exclude_id=rec.id,
             )
         _assert_cash_for_approve(db, rec)

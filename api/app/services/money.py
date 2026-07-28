@@ -6,6 +6,9 @@ from typing import Union
 
 MoneyLike = Union[float, int, str, Decimal]
 
+# Matches Numeric(18, 2): 16 digits left of decimal + 2 right.
+MAX_MONEY = Decimal("9999999999999999.99")
+
 
 def as_decimal(value: MoneyLike) -> Decimal:
     try:
@@ -15,9 +18,12 @@ def as_decimal(value: MoneyLike) -> Decimal:
     if not raw.is_finite():
         raise ValueError("Amount must be a finite number")
     try:
-        return raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        quantized = raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     except InvalidOperation as exc:
         raise ValueError("Amount must be a finite number") from exc
+    if abs(quantized) > MAX_MONEY:
+        raise ValueError("Amount is too large")
+    return quantized
 
 
 def round_money(value: MoneyLike) -> float:

@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import { Alert, Image, Text, StyleSheet } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect } from "../useFocus";
 import {
   cancelRecord,
@@ -9,6 +10,7 @@ import {
   makeIdempotencyKey,
   mediaUrlWithMediaToken,
   updateRecord,
+  uploadPhoto,
   voidRecord,
   type MoneyRecord,
   type User,
@@ -53,6 +55,7 @@ export function RecordDetailScreen({
   const [editOdometer, setEditOdometer] = useState("");
   const [editBike, setEditBike] = useState("");
   const [editOccurred, setEditOccurred] = useState("");
+  const [editPhotoUrl, setEditPhotoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [photoUri, setPhotoUri] = useState("");
@@ -79,6 +82,7 @@ export function RecordDetailScreen({
     setEditOdometer(row.odometer != null ? String(row.odometer) : "");
     setEditBike(row.bike || "");
     setEditOccurred(row.occurred_at ? String(row.occurred_at).slice(0, 10) : "");
+    setEditPhotoUrl(row.photo_url || "");
   };
 
   const reload = async (opts?: { preserveEdits?: boolean }) => {
@@ -289,6 +293,9 @@ export function RecordDetailScreen({
     } else {
       body.occurred_at = null;
     }
+    if (editPhotoUrl !== (rec?.photo_url || "")) {
+      body.photo_url = editPhotoUrl || "";
+    }
     setBusy(true);
     try {
       const updated = await updateRecord(id, body);
@@ -297,6 +304,45 @@ export function RecordDetailScreen({
       setEditing(false);
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pickEditPhoto = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Fos", "Photo permission required");
+      return;
+    }
+    const shot = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 0.7,
+    });
+    if (shot.canceled || !shot.assets[0]) return;
+    const asset = shot.assets[0];
+    const mime = (asset.mimeType || "").toLowerCase();
+    const fname = (asset.fileName || asset.uri || "").toLowerCase();
+    if (
+      mime.includes("heic") ||
+      mime.includes("heif") ||
+      fname.endsWith(".heic") ||
+      fname.endsWith(".heif")
+    ) {
+      Alert.alert("Fos", "HEIC/HEIF is not supported. Choose JPEG, PNG, or WebP.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const up = await uploadPhoto(asset.uri, {
+        name: asset.fileName || undefined,
+        type: asset.mimeType || undefined,
+      });
+      setEditPhotoUrl(up.photo_url);
+      setPhotoUri(await mediaUrlWithMediaToken(up.photo_url));
+      Alert.alert("Fos", "Receipt photo ready — tap Save to apply");
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Upload failed");
     } finally {
       setBusy(false);
     }
@@ -513,6 +559,22 @@ export function RecordDetailScreen({
                 onChangeText={setEditOccurred}
                 placeholder="leave empty = clear"
               />
+              <Label>Receipt photo</Label>
+              <Sub>{editPhotoUrl ? "Attached" : "None"}</Sub>
+              <Row>
+                <Btn title="Replace photo" variant="ghost" disabled={busy} onPress={() => void pickEditPhoto()} />
+                {!!editPhotoUrl && (
+                  <Btn
+                    title="Remove photo"
+                    variant="ghost"
+                    disabled={busy}
+                    onPress={() => {
+                      setEditPhotoUrl("");
+                      setPhotoUri("");
+                    }}
+                  />
+                )}
+              </Row>
               <Label>Comment</Label>
               <Field value={editComment} onChangeText={setEditComment} />
               <Row>

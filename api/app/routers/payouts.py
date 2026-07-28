@@ -398,6 +398,11 @@ def org_payouts(
         limit=120,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"finance-list-org:{user.organization_id}",
+        limit=240,
+        window_sec=60,
+    )
     q = db.query(Payout).filter(Payout.organization_id == user.organization_id)
     if voided is True:
         q = q.filter(Payout.is_voided.is_(True))
@@ -1031,6 +1036,11 @@ def list_settlement_requests(
         limit=120,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"finance-list-org:{user.organization_id}",
+        limit=240,
+        window_sec=60,
+    )
     q = db.query(SettlementRequest).filter(
         SettlementRequest.organization_id == user.organization_id,
     )
@@ -1066,6 +1076,11 @@ def org_pending_settlement_count(
     enforce_rate_limit(
         f"settle-org-count:{user.organization_id}:{user.id}",
         limit=120,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"finance-list-org:{user.organization_id}",
+        limit=240,
         window_sec=60,
     )
     count = (
@@ -1271,6 +1286,11 @@ def cancel_settlement_request(
     enforce_rate_limit(
         f"settle-cancel:{user.organization_id}:{user.id}",
         limit=60,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"settle-cancel-org:{user.organization_id}",
+        limit=120,
         window_sec=60,
     )
     # Cancel is allowed during billing freeze so reserved amounts can be released.

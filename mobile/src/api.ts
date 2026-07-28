@@ -63,6 +63,19 @@ function markAuthCleared() {
   lastAuthClearedMs = Date.now();
 }
 
+/** Thrown after local session clear so screens can skip a second Alert. */
+export class SessionExpiredError extends Error {
+  constructor(message = "Session expired") {
+    super(message);
+    this.name = "SessionExpiredError";
+  }
+}
+
+/** Suppress screen Alerts when App already showed the session-expired dialog. */
+export function shouldSkipErrorAlert(err: unknown): boolean {
+  return err instanceof SessionExpiredError || wasAuthRecentlyCleared();
+}
+
 export type User = {
   id: number;
   email: string;
@@ -198,15 +211,23 @@ async function authHeaders(): Promise<Record<string, string>> {
 }
 
 export async function saveToken(token: string, expiresInSec?: number) {
-  await storageSet(TOKEN_KEY, token);
-  cachedToken = token;
+  // Persist expiry metadata before the JWT so a crash cannot leave a fresh
+  // token without fos_token_exp (client preflight would skip forever).
   if (expiresInSec != null && Number.isFinite(expiresInSec) && expiresInSec > 0) {
     const expMs = Date.now() + Math.floor(expiresInSec) * 1000;
-    cachedTokenExpMs = expMs;
     await storageSet(TOKEN_EXP_KEY, String(expMs));
+    await storageSet(TOKEN_KEY, token);
+    cachedTokenExpMs = expMs;
+    cachedToken = token;
   } else {
+    try {
+      await storageDelete(TOKEN_EXP_KEY);
+    } catch {
+      /* best-effort */
+    }
+    await storageSet(TOKEN_KEY, token);
     cachedTokenExpMs = 0;
-    await storageDelete(TOKEN_EXP_KEY);
+    cachedToken = token;
   }
 }
 
@@ -215,8 +236,8 @@ export async function clearToken() {
   cachedTokenExpMs = 0;
   cachedMediaToken = null;
   cachedMediaTokenExpMs = 0;
-  await storageDelete(TOKEN_KEY);
-  await storageDelete(TOKEN_EXP_KEY);
+  // Best-effort: clear both keys even if one SecureStore delete fails.
+  await Promise.allSettled([storageDelete(TOKEN_KEY), storageDelete(TOKEN_EXP_KEY)]);
 }
 
 /** Revoke server-side tokens then clear local session. */
@@ -254,7 +275,7 @@ async function ensureAccessTokenNotExpired(): Promise<void> {
   // Small skew so we don't race the server clock.
   if (Date.now() + 5_000 < expMs) return;
   await notifyUnauthorized(token);
-  throw new Error("Session expired");
+  throw new SessionExpiredError();
 }
 
 function newClientRequestId(): string {
@@ -345,6 +366,7 @@ async function request<T>(
     if (!res.ok) {
       if (res.status === 401) {
         await notifyUnauthorized(requestToken);
+        throw new SessionExpiredError();
       }
       if (
         attempt < maxAttempts &&
@@ -412,6 +434,7 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
     if (!res.ok) {
       if (res.status === 401) {
         await notifyUnauthorized(requestToken);
+        throw new SessionExpiredError();
       }
       if (attempt < maxAttempts && shouldSoftRetry(res.status, null) && res.status !== 401) {
         const retryAfter = parseRetryAfterSec(res.headers.get("Retry-After"));
@@ -456,7 +479,7 @@ export function isBillingReadOnly(status: string | null | undefined): boolean {
 }
 
 export const BILLING_READONLY_MSG =
-  "Billing restricted — org is read-only (canceled or past due). You can still view data and cancel pending items; creates, approvals, and invites are blocked until billing is restored.";
+  "Billing restricted — org is read-only (canceled or past due). You can still view data and cancel pending items; creates, approvals, invites, org/team edits, payouts, and receipt uploads are blocked until billing is restored.";
 
 function formatApiError(
   data: unknown,

@@ -197,6 +197,11 @@ def org_report(
         limit=30,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"reports-read-org:{user.organization_id}",
+        limit=60,
+        window_sec=60,
+    )
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
     oid = user.organization_id

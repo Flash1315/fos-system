@@ -1,3 +1,3 @@
 """Single runtime version for FastAPI metadata and /health."""
 
-APP_VERSION = "0.7.110"
+APP_VERSION = "0.7.120"

@@ -129,8 +129,7 @@ export function AccountScreen({
       setMineHasMore(mineRows.length >= PAGE);
     } catch (e) {
       if (gen !== reqReloadGen.current) return;
-      setMine([]);
-      setMineHasMore(false);
+      // Retain previous personal requests on refresh failure.
       setReqLoadError(e instanceof Error ? e.message : "Failed to load requests");
     }
     if (!isManager) return;
@@ -145,8 +144,7 @@ export function AccountScreen({
       setTeamHasMore(teamRows.length >= PAGE);
     } catch (e) {
       if (gen !== reqReloadGen.current) return;
-      setRequests([]);
-      setTeamHasMore(false);
+      // Retain previous team requests on refresh failure.
       setReqLoadError(e instanceof Error ? e.message : "Failed to load team requests");
     }
   };
@@ -204,7 +202,7 @@ export function AccountScreen({
           : (b.available_cash ?? b.cash_on_hand);
       setAmount(available > 0 ? String(available) : "");
     } catch {
-      setAmount("");
+      // Keep previous suggested amount on a transient balance blip.
     }
   };
 
@@ -219,6 +217,7 @@ export function AccountScreen({
   useEffect(() => onResumeRefresh(() => {
     void (async () => {
       await reloadOrg();
+      await refreshSuggestedAmount();
       await reloadRequests();
     })();
   }), []);
@@ -280,6 +279,13 @@ export function AccountScreen({
     }
     setBusy(true);
     try {
+      const b = await billingMe();
+      setBilling(b);
+      setBillingReadonly(isBillingReadOnly(b.billing_status));
+      if (isBillingReadOnly(b.billing_status)) {
+        Alert.alert("Fos", BILLING_READONLY_MSG);
+        return;
+      }
       const fresh = await myOrg();
       setCurrencyLocked(!!fresh.currency_locked);
       const payload: { name: string; currency?: string } = { name: orgName.trim() };

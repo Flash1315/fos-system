@@ -114,6 +114,11 @@ def list_adjustments(
         limit=120,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"finance-list-org:{user.organization_id}",
+        limit=240,
+        window_sec=60,
+    )
     q = db.query(BalanceAdjustment).filter(
         BalanceAdjustment.organization_id == user.organization_id
     )

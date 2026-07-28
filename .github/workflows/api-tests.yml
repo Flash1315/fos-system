@@ -67,8 +67,11 @@ jobs:
           api = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', pathlib.Path("api/app/version.py").read_text()).group(1)
           pkg = json.loads(pathlib.Path("mobile/package.json").read_text())["version"]
           app = json.loads(pathlib.Path("mobile/app.json").read_text())["expo"]["version"]
-          print(f"versions api={api} package={pkg} app={app}")
-          assert api == pkg == app, (api, pkg, app)
+          lock = json.loads(pathlib.Path("mobile/package-lock.json").read_text())
+          lock_root = lock.get("version")
+          lock_pkg = (lock.get("packages") or {}).get("", {}).get("version")
+          print(f"versions api={api} package={pkg} app={app} lock={lock_root} lock_pkg={lock_pkg}")
+          assert api == pkg == app == lock_root == lock_pkg, (api, pkg, app, lock_root, lock_pkg)
           PY
       - name: Build API image
         run: docker build -t fos-api ./api
@@ -101,6 +104,12 @@ jobs:
               grep -q 'upload-org:' docs/DEPLOY.md
               grep -q 'telegram-org:' docs/DEPLOY.md
               grep -q 'records-list-org:' docs/DEPLOY.md
+              grep -q 'record-write-org:' docs/DEPLOY.md
+              grep -q 'org-update-org:' docs/DEPLOY.md
+              grep -q 'settle-cancel-org:' docs/DEPLOY.md
+              grep -q 'balances-read-org:' docs/DEPLOY.md
+              grep -q 'reports-read-org:' docs/DEPLOY.md
+              grep -q 'finance-list-org:' docs/DEPLOY.md
               expected=$(python3 -c "import pathlib,re; print(re.search(r'APP_VERSION\s*=\s*\"([^\"]+)\"', pathlib.Path('api/app/version.py').read_text()).group(1))")
               echo "$ready" | grep -q "\"version\":\"$expected\""
               # Dev image still exposes OpenAPI; prod hide is source-gated (_IS_PROD).

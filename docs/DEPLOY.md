@@ -50,6 +50,12 @@ DB_POOL_RECYCLE=1800
 - Telegram chat/test enforce per-org `telegram-org:` rate limits
 - Member reset-password/token enforce per-org `reset-password-org:` / `reset-token-org:`
 - Org ledger/pending lists enforce per-org `records-list-org:` rate limits
+- Record create/update enforce per-org `record-write-org:` rate limits
+- Org profile update enforces per-org `org-update-org:` rate limits
+- Settlement cancel enforces per-org `settle-cancel-org:` rate limits
+- Team balances enforce per-org `balances-read-org:` rate limits
+- Org report enforces per-org `reports-read-org:` rate limits
+- Org payout/settlement/adjustment lists enforce per-org `finance-list-org:` rate limits
 - `/metrics` sends `Cache-Control: no-store`; CORS allows `X-Metrics-Token`
 - Media file responses send `X-Content-Type-Options: nosniff`
 - CSV export responses send `Cache-Control: no-store`

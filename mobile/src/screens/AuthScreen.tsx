@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert } from "react-native";
 import { acceptInvite, login, registerOrg, type User } from "../api";
 import { storageDelete, storageGet, storageSet } from "../storage";
 import { Brand, Btn, Card, Field, Label, LinkText, Screen, Sub } from "../components/ui";
@@ -115,7 +114,7 @@ export function AuthScreen({
         }
         await onDone(res.access_token, res.user, res.expires_in);
       } catch (e) {
-        Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+        setFormError(e instanceof Error ? e.message : "Failed");
       } finally {
         submitLock.current = false;
         setBusy(false);
@@ -204,7 +203,7 @@ export function AuthScreen({
             ? msg
             : "Check company slug, email, and password. Invited teammates use Accept invite or the slug from their manager — not Register."
           : msg;
-      Alert.alert("Fos", friendly);
+      setFormError(friendly);
     } finally {
       submitLock.current = false;
       setBusy(false);

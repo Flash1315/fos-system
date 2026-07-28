@@ -58,7 +58,7 @@ export function PayoutHistoryScreen({
       setMembersError("");
       setMembers(await listMembers());
     } catch (e) {
-      setMembers([]);
+      // Keep last-known teammate filter choices on a transient directory blip.
       setMembersError(e instanceof Error ? e.message : "Failed to load teammates");
     }
   };
@@ -94,8 +94,7 @@ export function PayoutHistoryScreen({
       setHasMore(data.length >= PAGE);
     } catch (e) {
       if (gen !== reloadGen.current) return;
-      setRows([]);
-      setHasMore(false);
+      // Retain previous rows/hasMore on refresh failure (stale-data soft-fail).
       setLoadError(e instanceof Error ? e.message : "Failed");
     } finally {
       if (gen === reloadGen.current) setLoading(false);
@@ -146,6 +145,7 @@ export function PayoutHistoryScreen({
   }, []);
 
   useEffect(() => onResumeRefresh(() => {
+    void loadMembers();
     void reload();
     void billingMe()
       .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))

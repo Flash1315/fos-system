@@ -311,6 +311,11 @@ def update_org(
         limit=20,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"org-update-org:{user.organization_id}",
+        limit=40,
+        window_sec=60,
+    )
     require_org_writable(db, user.organization_id)
     org = lock_organization(db, user.organization_id)
     if not org:

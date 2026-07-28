@@ -44,6 +44,7 @@ export function BalancesScreen({
   const [adjTrackFilter, setAdjTrackFilter] = useState<"" | "cash_on_hand" | "spendings">("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [adjLoadError, setAdjLoadError] = useState("");
   const [adjHasMore, setAdjHasMore] = useState(false);
   const [loadingMoreAdj, setLoadingMoreAdj] = useState(false);
   const reloadGen = useRef(0);
@@ -75,24 +76,39 @@ export function BalancesScreen({
     setLoading(true);
     try {
       setLoadError("");
-      const [list, org, adj] = await Promise.all([
+      setAdjLoadError("");
+      const [balRes, orgRes, adjRes] = await Promise.allSettled([
         teamBalances(),
         myOrg(),
         listAdjustments({ ...adjParams(), offset: 0 }),
       ]);
       if (gen !== reloadGen.current) return;
-      setRows(list);
-      setCurrency(org.currency);
-      setAdjustments(adj);
-      setAdjHasMore(adj.length >= PAGE);
-      if (userId == null && list[0]) setUserId(list[0].user_id);
-    } catch (e) {
-      if (gen !== reloadGen.current) return;
-      setRows([]);
-      setAdjustments([]);
-      setAdjHasMore(false);
-      setLoadError(e instanceof Error ? e.message : "Failed");
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+      const paneErrors: string[] = [];
+      if (balRes.status === "fulfilled") {
+        setRows(balRes.value);
+        if (userId == null && balRes.value[0]) setUserId(balRes.value[0].user_id);
+      } else {
+        paneErrors.push(
+          balRes.reason instanceof Error ? balRes.reason.message : "Balances failed",
+        );
+      }
+      if (orgRes.status === "fulfilled") {
+        setCurrency(orgRes.value.currency);
+      } else {
+        paneErrors.push(
+          orgRes.reason instanceof Error ? orgRes.reason.message : "Company failed",
+        );
+      }
+      if (adjRes.status === "fulfilled") {
+        setAdjustments(adjRes.value);
+        setAdjHasMore(adjRes.value.length >= PAGE);
+      } else {
+        // Retain previous adjustments pane on a transient list failure.
+        setAdjLoadError(
+          adjRes.reason instanceof Error ? adjRes.reason.message : "Adjustments failed",
+        );
+      }
+      if (paneErrors.length) setLoadError(paneErrors.join(" · "));
     } finally {
       if (gen === reloadGen.current) setLoading(false);
     }
@@ -366,6 +382,7 @@ export function BalancesScreen({
             <Field value={note} onChangeText={setNote} placeholder="Opening balance / correction" maxLength={2000} />
             <Btn title={isBusy ? "…" : "Post adjustment"} onPress={postAdjustment} disabled={isBusy || billingReadonly} />
             <Label>Adjustments</Label>
+            {adjLoadError ? <Sub>Adjustments refresh failed — {adjLoadError}</Sub> : null}
             <View style={styles.chips}>
               <Chip label="Active" on={adjFilter === "active"} onPress={() => setAdjFilter("active")} />
               <Chip label="Voided" on={adjFilter === "voided"} onPress={() => setAdjFilter("voided")} />

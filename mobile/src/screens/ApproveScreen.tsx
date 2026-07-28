@@ -75,8 +75,7 @@ export function ApproveScreen({
       }
     } catch (e) {
       if (gen !== reloadGen.current) return;
-      setRows([]);
-      setHasMore(false);
+      // Retain previous rows/hasMore on refresh failure (stale-data soft-fail).
       setLoadError(e instanceof Error ? e.message : "Failed");
     } finally {
       if (gen === reloadGen.current) setLoading(false);

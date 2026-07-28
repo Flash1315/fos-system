@@ -420,6 +420,11 @@ def create_record(
         limit=60,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"record-write-org:{user.organization_id}",
+        limit=120,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None
@@ -771,6 +776,11 @@ def team_balances(
     enforce_rate_limit(
         f"balance-team:{user.organization_id}:{user.id}",
         limit=60,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"balances-read-org:{user.organization_id}",
+        limit=120,
         window_sec=60,
     )
     require_org_member_capacity(db, user.organization_id, active_only=True)
@@ -1161,6 +1171,11 @@ def update_pending_record(
     enforce_rate_limit(
         f"record-update:{user.organization_id}:{user.id}",
         limit=60,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"record-write-org:{user.organization_id}",
+        limit=120,
         window_sec=60,
     )
     from app.services.org_gates import require_org_writable

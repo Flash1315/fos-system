@@ -39,7 +39,7 @@ export function LedgerScreen({
       setMembersError("");
       setMembers(await listMembers());
     } catch (e) {
-      setMembers([]);
+      // Keep last-known teammate filter choices on a transient directory blip.
       setMembersError(e instanceof Error ? e.message : "Failed to load teammates");
     }
   };
@@ -69,8 +69,7 @@ export function LedgerScreen({
       setHasMore(list.length >= PAGE);
     } catch (e) {
       if (gen !== reloadGen.current) return;
-      setRows([]);
-      setHasMore(false);
+      // Retain previous rows/hasMore on refresh failure (stale-data soft-fail).
       setLoadError(e instanceof Error ? e.message : "Failed");
     } finally {
       if (gen === reloadGen.current) setLoading(false);
@@ -99,6 +98,7 @@ export function LedgerScreen({
   }, [status, kind, purpose, memberId, searchDebounced]);
 
   useEffect(() => onResumeRefresh(() => {
+    void loadMembers();
     void reload();
   }), []);
 

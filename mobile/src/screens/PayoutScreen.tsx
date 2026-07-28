@@ -82,6 +82,7 @@ export function PayoutScreen({
     void billingMe()
       .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
       .catch(() => {});
+    void boot({ preserveSelection: true });
   }), []);
 
   const onPullRefresh = async () => {

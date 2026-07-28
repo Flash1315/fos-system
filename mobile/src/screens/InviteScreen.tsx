@@ -44,7 +44,7 @@ export function InviteScreen({
       const org = await myOrg();
       setOrgSlug(org.slug);
     } catch (e) {
-      setOrgSlug("");
+      // Keep last-known slug on a resume/network blip.
       setSlugError(e instanceof Error ? e.message : "Could not load company slug");
     }
   };

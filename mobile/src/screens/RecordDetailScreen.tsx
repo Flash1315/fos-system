@@ -486,6 +486,10 @@ export function RecordDetailScreen({
   };
 
   const pickEditPhoto = async () => {
+    if (billingReadonly) {
+      Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert("Fos", "Photo permission required");
@@ -510,6 +514,12 @@ export function RecordDetailScreen({
     }
     setBusy(true);
     try {
+      const live = await billingMe();
+      setBillingReadonly(isBillingReadOnly(live.billing_status));
+      if (isBillingReadOnly(live.billing_status)) {
+        Alert.alert("Fos", BILLING_READONLY_MSG);
+        return;
+      }
       if (!photoIdemRef.current) photoIdemRef.current = makeIdempotencyKey("photo");
       const up = await uploadPhoto(asset.uri, {
         name: asset.fileName || undefined,

@@ -138,7 +138,7 @@ export function CreateScreen({
       try {
         setTeamBals(await teamBalances());
       } catch {
-        setTeamBals([]);
+        /* keep previous team balances */
       }
       try {
         const org = await myOrg();
@@ -147,8 +147,7 @@ export function CreateScreen({
         /* ignore currency */
       }
     } catch (e) {
-      setMembers([]);
-      setTeamBals([]);
+      // Keep last-known teammate directory on a transient failure.
       setTeamLoadError(e instanceof Error ? e.message : "Failed to load teammates");
     }
   };
@@ -294,6 +293,12 @@ export function CreateScreen({
     }
     setBusy(true);
     try {
+      const live = await billingMe();
+      setBillingReadonly(isBillingReadOnly(live.billing_status));
+      if (isBillingReadOnly(live.billing_status)) {
+        Alert.alert("Fos", BILLING_READONLY_MSG);
+        return;
+      }
       if (!photoIdemRef.current) photoIdemRef.current = makeIdempotencyKey("photo");
       const up = await uploadPhoto(asset.uri, {
         name: asset.fileName || undefined,

@@ -219,6 +219,8 @@ def _json_error(
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
         "Referrer-Policy": "no-referrer",
+        "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+        "Cross-Origin-Opener-Policy": "same-origin",
         "Cache-Control": "no-store",
         "X-Request-Id": _ensure_request_id(request),
     }

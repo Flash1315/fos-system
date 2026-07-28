@@ -214,8 +214,89 @@ def test_transfer_rejects_when_insufficient_cash(client):
         json={"to_email": "xfer2-recv@example.com", "amount": 999999, "comment": "too much"},
     )
     assert denied.status_code == 400
-    assert "Insufficient cash" in denied.json()["detail"]
+    assert "available" in denied.json()["detail"].lower() or "Insufficient" in denied.json()["detail"]
 
+
+def test_transfer_and_approve_honor_reserved_cash(client):
+    owner = _register(client, "flow-resvcash", "resvcash-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "resvcash-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    assert inv.status_code == 200
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 10000,
+            "category": "Other",
+            "payment_method": "cash",
+            "approve_now": True,
+        },
+    )
+    req = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "income_handover", "amount": 6000, "note": "hold cash"},
+    )
+    assert req.status_code == 200
+    bal = client.get("/records/balance/me", headers=h).json()
+    assert bal["available_cash"] == 4000
+    assert bal["reserved_cash"] == 6000
+    denied_xfer = client.post(
+        "/transfers",
+        headers=h,
+        json={"to_email": "resvcash-emp@example.com", "amount": 5000, "comment": "too much"},
+    )
+    assert denied_xfer.status_code == 400
+    ok_xfer = client.post(
+        "/transfers",
+        headers=h,
+        json={"to_email": "resvcash-emp@example.com", "amount": 1000, "comment": "ok"},
+    )
+    assert ok_xfer.status_code == 200, ok_xfer.text
+    # Remaining available = 3000; approving 4000 from cash must fail
+    pend = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 4000,
+            "category": "Taxi",
+            "payment_source": "cash_on_hand",
+        },
+    )
+    assert pend.status_code == 200
+    denied_appr = client.post(
+        f"/records/{pend.json()['id']}/decide",
+        headers=h,
+        json={"approve": True},
+    )
+    assert denied_appr.status_code == 400
+    ok_spend = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 2000,
+            "category": "Taxi",
+            "payment_source": "cash_on_hand",
+            "approve_now": True,
+        },
+    )
+    assert ok_spend.status_code == 200, ok_spend.text
+    after = client.get("/records/balance/me", headers=h).json()
+    assert after["cash_on_hand"] == 7000  # 10000 - 1000 transfer - 2000 spend
+    assert after["reserved_cash"] == 6000
+    assert after["available_cash"] == 1000
 
 
 def test_expense_payout_resets_spendings(client):
@@ -918,7 +999,7 @@ def test_approve_rejects_insufficient_cash_on_hand(client):
     rid = rec.json()["id"]
     denied = client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
     assert denied.status_code == 400
-    assert "Insufficient cash" in denied.json()["detail"]
+    assert "available" in denied.json()["detail"].lower() or "Insufficient" in denied.json()["detail"]
     # my_pocket spend still approvable without cash
     pocket = client.post(
         "/records",

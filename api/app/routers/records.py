@@ -62,7 +62,7 @@ def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
 
 
 def _assert_cash_for_approve(db: Session, rec: MoneyRecord) -> None:
-    """Block approving spend from cash_on_hand when the owner lacks held cash."""
+    """Block approving spend from cash_on_hand when available cash is insufficient."""
     if rec.kind not in (RecordKind.expense, RecordKind.fuel):
         return
     source = rec.payment_source or "cash_on_hand"
@@ -71,11 +71,18 @@ def _assert_cash_for_approve(db: Session, rec: MoneyRecord) -> None:
     owner = db.get(User, rec.created_by)
     if not owner:
         return
-    held = float(user_balance(db, owner).get("cash_on_hand") or 0)
-    if float(rec.amount) > held + 1e-6:
+    bal = user_balance(db, owner)
+    held = float(bal.get("cash_on_hand") or 0)
+    reserved = float(bal.get("reserved_cash") or 0)
+    available = float(
+        bal.get("available_cash") if bal.get("available_cash") is not None else max(0.0, held - reserved)
+    )
+    if float(rec.amount) > available + 1e-6:
         raise HTTPException(
             400,
-            f"Insufficient cash on hand ({held}). Cannot approve {rec.amount} from cash.",
+            f"Only {available} available from cash on hand "
+            f"({held} held, {reserved} reserved by pending requests). "
+            f"Cannot approve {rec.amount} from cash.",
         )
 
 

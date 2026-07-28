@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
-import { me, orgDirectory, transferCash, type User } from "../api";
+import { me, myBalance, orgDirectory, transferCash, type User } from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
 export function TransferScreen({
@@ -18,6 +18,10 @@ export function TransferScreen({
   const [email, setEmail] = useState("");
   const [amount, setAmount] = useState("");
   const [comment, setComment] = useState("");
+  const [held, setHeld] = useState(0);
+  const [reserved, setReserved] = useState(0);
+  const [available, setAvailable] = useState(0);
+  const [currency, setCurrency] = useState("IDR");
 
   useEffect(() => {
     (async () => {
@@ -25,6 +29,11 @@ export function TransferScreen({
         const u = await me();
         const rows = await orgDirectory();
         setMembers(rows.filter((m) => m.id !== u.id));
+        const bal = await myBalance();
+        setHeld(bal.cash_on_hand);
+        setReserved(bal.reserved_cash ?? 0);
+        setAvailable(bal.available_cash ?? bal.cash_on_hand);
+        setCurrency(bal.currency);
       } catch {
         /* ignore */
       }
@@ -35,6 +44,14 @@ export function TransferScreen({
     const value = Number(amount.replace(",", "."));
     if (!email.trim() || !value || value <= 0) {
       Alert.alert("Fos", "Recipient and amount required");
+      return;
+    }
+    if (value > available) {
+      Alert.alert(
+        "Fos",
+        `Only ${available.toLocaleString()} ${currency} available ` +
+          `(${held.toLocaleString()} held, ${reserved.toLocaleString()} reserved).`,
+      );
       return;
     }
     setBusy(true);
@@ -57,7 +74,13 @@ export function TransferScreen({
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Transfer cash to teammate</Label>
-      <Sub>Moves cash on hand immediately (approved transfer pair).</Sub>
+      <Sub>Moves available cash on hand immediately (approved transfer pair).</Sub>
+      <Sub>
+        Held {held.toLocaleString()} {currency}
+        {reserved > 0 ? ` · reserved ${reserved.toLocaleString()}` : ""}
+        {" · "}
+        available {available.toLocaleString()}
+      </Sub>
       {members.length > 0 && (
         <>
           <Label>Teammate</Label>

@@ -54,10 +54,14 @@ def create_transfer(
         raise HTTPException(400, "Cannot transfer to yourself")
 
     bal = user_balance(db, user)
-    if body.amount > float(bal["cash_on_hand"]) + 1e-6:
+    held = float(bal.get("cash_on_hand") or 0)
+    reserved = float(bal.get("reserved_cash") or 0)
+    available = float(bal.get("available_cash") if bal.get("available_cash") is not None else max(0.0, held - reserved))
+    if body.amount > available + 1e-6:
         raise HTTPException(
             400,
-            f"Insufficient cash on hand ({bal['cash_on_hand']}). Transfer amount exceeds held cash.",
+            f"Only {available} available to transfer "
+            f"({held} held, {reserved} reserved by pending requests).",
         )
 
     org = db.get(Organization, user.organization_id)

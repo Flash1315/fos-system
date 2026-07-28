@@ -141,10 +141,14 @@ export function CreateScreen({
       if (kind !== "income" && paymentSource === "cash_on_hand") {
         try {
           const bal = await myBalance();
-          if (value > bal.cash_on_hand) {
+          const available = bal.available_cash ?? bal.cash_on_hand;
+          if (value > available) {
             Alert.alert(
               "Fos",
-              `Cash on hand is ${bal.cash_on_hand.toLocaleString()} ${bal.currency}. Amount exceeds held cash — continue anyway on confirm if intentional.`,
+              `Available cash is ${available.toLocaleString()} ${bal.currency}` +
+                ` (${bal.cash_on_hand.toLocaleString()} held` +
+                `${(bal.reserved_cash || 0) > 0 ? `, ${(bal.reserved_cash || 0).toLocaleString()} reserved` : ""}). ` +
+                `Amount exceeds available — continue anyway on confirm if intentional.`,
             );
           }
         } catch {

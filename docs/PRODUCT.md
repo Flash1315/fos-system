@@ -254,10 +254,11 @@ Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`
 - [x] Invite with roles
 - [x] Create expense/fuel/income as pending
 - [x] Manager/owner approve/reject
-- [x] Cash on hand endpoint + mobile home
-- [x] Expo auth/home/create/approve screens
+- [x] Dual balance (cash on hand + spendings) + mobile home
+- [x] Settlements, transfers, adjustments, settlement requests
+- [x] Expo auth/home/create/approve/ledger/reports/settlements screens
 - [x] Team / reports / ledger / receipt photo (local)
 - [x] README quick start
 - [x] API pytest + CI workflow
-- [ ] Production Postgres deploy (compose file ready)
+- [ ] Production Postgres deploy (compose file ready — verify in target env)
 - [ ] Store builds (EAS config stub in `mobile/eas.json`)

@@ -358,6 +358,11 @@ def export_csv(
         limit=10,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"export-org:{user.organization_id}",
+        limit=20,
+        window_sec=60,
+    )
 
     oid = user.organization_id
     org = db.get(Organization, oid)

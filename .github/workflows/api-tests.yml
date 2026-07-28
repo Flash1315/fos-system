@@ -84,13 +84,19 @@ jobs:
           ok=0
           for _ in $(seq 1 40); do
             if curl -fsS http://127.0.0.1:8000/health/live | grep -q '"ok"'; then
-              curl -fsS http://127.0.0.1:8000/health/live
+              headers=$(curl -fsS -D- -o /tmp/fos-live.json http://127.0.0.1:8000/health/live)
+              echo "$headers"
+              echo "$headers" | grep -qi 'cache-control:.*no-store'
+              cat /tmp/fos-live.json
               ready=$(curl -fsS http://127.0.0.1:8000/health/ready)
               echo "$ready"
               echo "$ready" | grep -q '"db":"ok"'
               echo "$ready" | grep -q '"limiter"'
               expected=$(python3 -c "import pathlib,re; print(re.search(r'APP_VERSION\s*=\s*\"([^\"]+)\"', pathlib.Path('api/app/version.py').read_text()).group(1))")
               echo "$ready" | grep -q "\"version\":\"$expected\""
+              # Dev image still exposes OpenAPI; prod hide is source-gated (_IS_PROD).
+              code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/docs)
+              test "$code" = "200"
               ok=1
               break
             fi
@@ -165,5 +171,10 @@ jobs:
                   },
               )
               assert login.status_code == 200, login.text
+              live = client.get("/health/live")
+              assert live.status_code == 200
+              assert "no-store" in (live.headers.get("cache-control") or "").lower()
+              docs = client.get("/docs")
+              assert docs.status_code == 200  # development image
           print("postgres smoke ok")
           PY

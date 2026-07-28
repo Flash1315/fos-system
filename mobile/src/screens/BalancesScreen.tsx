@@ -492,6 +492,10 @@ export function BalancesScreen({
           const id = voidId;
           setVoidId(null);
           if (id == null) return;
+          if (billingReadonly) {
+            Alert.alert("Fos", BILLING_READONLY_MSG);
+            return;
+          }
           const noteKey = voidNote.replace(/\s+/g, " ").trim();
           const key = idemKeyFor(voidAdjIdemRef, voidAdjSlotRef, "avoid", `${id}:${noteKey}`);
           markBusy(true);

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
-import { listMembers, listMyPayouts, listOrgPayouts, idemKeyFor, makeIdempotencyKey, onResumeRefresh, voidPayout, type User } from "../api";
+import { BILLING_READONLY_MSG, billingMe, isBillingReadOnly, listMembers, listMyPayouts, listOrgPayouts, idemKeyFor, makeIdempotencyKey, onResumeRefresh, voidPayout, type User } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
@@ -41,6 +41,7 @@ export function PayoutHistoryScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [voidId, setVoidId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [billingReadonly, setBillingReadonly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -139,14 +140,24 @@ export function PayoutHistoryScreen({
     void reload();
   }, [scope, voidFilter, kindFilter, userFilter]);
 
+  useEffect(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => onResumeRefresh(() => {
     void reload();
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
   }), []);
 
   return (
     <Screen>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Text style={styles.title}>Payout history</Text>
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
       {isManager && (
         <View style={styles.kinds}>
           <Chip label="Org" on={scope === "org"} onPress={() => setScope("org")} />
@@ -262,7 +273,7 @@ export function PayoutHistoryScreen({
               <Btn
                 title="Void"
                 variant="ghost"
-                disabled={busy}
+                disabled={busy || billingReadonly}
                 onPress={() => setVoidId(item.id)}
               />
             )}
@@ -288,6 +299,10 @@ export function PayoutHistoryScreen({
           const id = voidId;
           setVoidId(null);
           if (id == null) return;
+          if (billingReadonly) {
+            Alert.alert("Fos", BILLING_READONLY_MSG);
+            return;
+          }
           const noteKey = note.replace(/\s+/g, " ").trim();
           const key = idemKeyFor(voidIdemRef, voidSlotRef, "pvoid", `${id}:${noteKey}`);
           setBusy(true);

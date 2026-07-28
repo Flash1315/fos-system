@@ -116,6 +116,12 @@ def user_from_token(
     # Access JWTs must belong to users who finished invite/password setup.
     if typ == "access" and getattr(user, "must_set_password", False):
         raise credentials_exc
+    # Access token role claim must match the current account role
+    # (defense in depth with token_version / org bind).
+    if typ == "access":
+        claim_role = payload.get("role")
+        if claim_role is None or str(claim_role) != str(user.role.value):
+            raise credentials_exc
     return user
 
 

@@ -36,12 +36,14 @@ DB_POOL_RECYCLE=1800
 ## 4. Boot / health
 
 - Probe `GET /health/live` (liveness; use for container healthchecks) and `GET /health/ready` (DB; also reports `media` status without failing ready on media blips)
+- Live/ready responses send `Cache-Control: no-store`
 - Persist `/app/uploads` or S3; content-addressed keys; cancels may remove unused receipt objects
 - Idempotency rows are pruned on API startup (and on store)
 - Ready reports `limiter` (`memory` / `redis` / `redis_error`) without failing on Redis blips; multi-worker should set `RATE_LIMIT_REDIS_URL`
+- CSV export is rate-limited per user (10/min) and per org (20/min)
 - `METRICS_TOKEN` is **required** in production; scrapers call `GET /metrics` with `Authorization: Bearer <token>`
 - Production refuses `CORS_ORIGINS=*`; schema via Alembic only (no create_all)
-- OpenAPI/docs are hidden when `ENVIRONMENT=production`
+- OpenAPI/docs are hidden when `ENVIRONMENT=production` (`/docs`, `/redoc`, `/openapi.json`)
 - Example compose shape: [`docker-compose.prod.example.yml`](../docker-compose.prod.example.yml)
 
 ## 5. Mobile

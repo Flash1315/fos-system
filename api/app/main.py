@@ -445,7 +445,10 @@ def _db_ping() -> str:
 @app.get("/health/live")
 def health_live():
     """Liveness — no DB, no rate limit (safe for orchestrator probes)."""
-    return {"ok": True, "app": settings.app_name, "version": APP_VERSION}
+    return JSONResponse(
+        content={"ok": True, "app": settings.app_name, "version": APP_VERSION},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/health/ready")
@@ -466,9 +469,10 @@ def health_ready(request: Request):
         "media": media_status,
         "limiter": limiter_status,
     }
+    headers = {"Cache-Control": "no-store"}
     if db_status != "ok":
-        return JSONResponse(status_code=503, content=body)
-    return body
+        return JSONResponse(status_code=503, content=body, headers=headers)
+    return JSONResponse(content=body, headers=headers)
 
 
 @app.get("/health")

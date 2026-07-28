@@ -478,6 +478,9 @@ export function AccountScreen({
       )}
 
       <Label>Change password</Label>
+      {billingReadonly ? (
+        <Sub>Password change still works while billing is restricted.</Sub>
+      ) : null}
       <Field
         secureTextEntry
         value={current}

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Alert, Share, View, StyleSheet } from "react-native";
 import { BILLING_READONLY_MSG, billingMe, inviteUser, isBillingReadOnly, myOrg, onResumeRefresh, type InviteResult, type User } from "../api";
 import { Btn, Chip, Field, Label, LinkText, Screen, Sub, TopBar } from "../components/ui";
-import { passwordStrengthError } from "../format";
+import { emailFormatError, passwordStrengthError } from "../format";
 
 export function InviteScreen({
   busy,
@@ -101,6 +101,11 @@ export function InviteScreen({
     }
     if (!email.trim() || !fullName.trim()) {
       Alert.alert("Fos", "Name and email required");
+      return;
+    }
+    const mailErr = emailFormatError(email);
+    if (mailErr) {
+      Alert.alert("Fos", mailErr);
       return;
     }
     if (setTempPassword) {

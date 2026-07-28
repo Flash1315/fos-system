@@ -8,6 +8,7 @@
 #
 # Health: container healthcheck uses /health/live (liveness). Orchestrators that
 # distinguish readiness should also probe /health/ready (DB; includes media signal).
+# Production hides /docs /redoc /openapi.json; probes send Cache-Control: no-store.
 
 services:
   api:

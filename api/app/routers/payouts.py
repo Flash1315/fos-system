@@ -253,6 +253,8 @@ def my_payouts(
 @router.get("/org", response_model=list[PayoutOut])
 def org_payouts(
     voided: bool | None = None,
+    user_id: int | None = None,
+    kind: PayoutKind | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -261,6 +263,10 @@ def org_payouts(
         q = q.filter(Payout.is_voided.is_(True))
     elif voided is False:
         q = q.filter(Payout.is_voided.is_(False))
+    if user_id is not None:
+        q = q.filter(Payout.user_id == user_id)
+    if kind is not None:
+        q = q.filter(Payout.kind == kind)
     rows = q.order_by(Payout.created_at.desc()).limit(100).all()
     out = []
     for r in rows:

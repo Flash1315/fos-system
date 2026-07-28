@@ -35,6 +35,7 @@ export function PayoutHistoryScreen({
   const isManager = user.role === "owner" || user.role === "manager";
   const [scope, setScope] = useState<"mine" | "org">(isManager ? "org" : "mine");
   const [voidFilter, setVoidFilter] = useState<"active" | "voided" | "all">("active");
+  const [kindFilter, setKindFilter] = useState<"" | "expense_payout" | "income_handover">("");
   const [rows, setRows] = useState<PayoutRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [voidId, setVoidId] = useState<number | null>(null);
@@ -49,9 +50,16 @@ export function PayoutHistoryScreen({
         voidFilter === "voided" ? true : voidFilter === "active" ? false : undefined;
       const data =
         scope === "org" && isManager
-          ? await listOrgPayouts({ voided })
+          ? await listOrgPayouts({
+              voided,
+              kind: kindFilter || undefined,
+            })
           : await listMyPayouts({ voided });
-      setRows(data);
+      setRows(
+        scope === "mine" && kindFilter
+          ? data.filter((r) => r.kind === kindFilter)
+          : data,
+      );
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -63,7 +71,7 @@ export function PayoutHistoryScreen({
   useFocusEffect(reload);
   React.useEffect(() => {
     void reload();
-  }, [scope, voidFilter]);
+  }, [scope, voidFilter, kindFilter]);
 
   return (
     <Screen>
@@ -79,6 +87,19 @@ export function PayoutHistoryScreen({
         <Chip label="Active" on={voidFilter === "active"} onPress={() => setVoidFilter("active")} />
         <Chip label="Voided" on={voidFilter === "voided"} onPress={() => setVoidFilter("voided")} />
         <Chip label="All" on={voidFilter === "all"} onPress={() => setVoidFilter("all")} />
+      </View>
+      <View style={styles.kinds}>
+        <Chip label="Any kind" on={kindFilter === ""} onPress={() => setKindFilter("")} />
+        <Chip
+          label="Reimbursement"
+          on={kindFilter === "expense_payout"}
+          onPress={() => setKindFilter("expense_payout")}
+        />
+        <Chip
+          label="Handover"
+          on={kindFilter === "income_handover"}
+          onPress={() => setKindFilter("income_handover")}
+        />
       </View>
       <FlatList
         data={rows}
@@ -111,7 +132,7 @@ export function PayoutHistoryScreen({
         renderItem={({ item }) => (
           <View style={styles.row}>
             <Text style={styles.rowTitle}>
-              {item.kind === "expense_payout" ? "Expense payout" : "Income handover"}
+              {item.kind === "expense_payout" ? "Expense reimbursement" : "Cash handover"}
               {" · "}
               {formatMoney(item.amount, item.currency)}
               {item.is_voided ? " · voided" : ""}

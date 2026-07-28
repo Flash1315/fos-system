@@ -86,21 +86,36 @@ export function BalancesScreen({
       );
       return;
     }
-    markBusy(true);
-    try {
-      await createPayout({
-        user_id: item.user_id,
-        kind,
-        amount: value,
-        payment_method: "cash",
-        note: kind === "expense_payout" ? "quick pay from balances" : "quick take from balances",
-      });
-      await reload();
-    } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-    } finally {
-      markBusy(false);
-    }
+    const label =
+      kind === "expense_payout"
+        ? `Pay ${item.full_name} expense reimbursement ${formatMoney(value, currency)}?`
+        : `Take cash handover ${formatMoney(value, currency)} from ${item.full_name}?`;
+    Alert.alert("Fos", label, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Settle",
+        onPress: async () => {
+          markBusy(true);
+          try {
+            await createPayout({
+              user_id: item.user_id,
+              kind,
+              amount: value,
+              payment_method: "cash",
+              note:
+                kind === "expense_payout"
+                  ? "quick pay from balances"
+                  : "quick take from balances",
+            });
+            await reload();
+          } catch (e) {
+            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+          } finally {
+            markBusy(false);
+          }
+        },
+      },
+    ]);
   };
 
   const postAdjustment = async () => {

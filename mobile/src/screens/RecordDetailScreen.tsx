@@ -55,6 +55,26 @@ export function RecordDetailScreen({
   useFocusEffect(reload);
 
   const decide = async (approve: boolean, note = "") => {
+    if (approve && rec?.is_in_closed_cycle) {
+      Alert.alert(
+        "Fos",
+        `This belongs to a settled period${
+          rec.settlement_cutoff_at ? ` (cutoff ${formatWhen(rec.settlement_cutoff_at)})` : ""
+        }. Approving will not change the current balance. Continue?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Approve anyway",
+            onPress: () => void doDecide(true, note),
+          },
+        ],
+      );
+      return;
+    }
+    await doDecide(approve, note);
+  };
+
+  const doDecide = async (approve: boolean, note = "") => {
     setBusy(true);
     try {
       setRec(await decideRecord(id, approve, note));

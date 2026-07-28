@@ -468,9 +468,15 @@ export function listMyPayouts(params?: { voided?: boolean }) {
   >(`/payouts/mine${suffix}`);
 }
 
-export function listOrgPayouts(params?: { voided?: boolean }) {
+export function listOrgPayouts(params?: {
+  voided?: boolean;
+  user_id?: number;
+  kind?: "expense_payout" | "income_handover";
+}) {
   const q = new URLSearchParams();
   if (params?.voided != null) q.set("voided", String(params.voided));
+  if (params?.user_id != null) q.set("user_id", String(params.user_id));
+  if (params?.kind) q.set("kind", params.kind);
   const suffix = q.toString() ? `?${q}` : "";
   return request<
     {

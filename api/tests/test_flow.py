@@ -1482,6 +1482,12 @@ def test_payout_voided_filter(client):
     assert all(x["id"] != pid for x in active)
     voided = client.get("/payouts/org?voided=true", headers=h).json()
     assert any(x["id"] == pid and x["is_voided"] for x in voided)
+    by_kind = client.get("/payouts/org?kind=expense_payout&voided=true", headers=h).json()
+    assert any(x["id"] == pid for x in by_kind)
+    by_user = client.get(f"/payouts/org?user_id={uid}&voided=true", headers=h).json()
+    assert any(x["id"] == pid for x in by_user)
+    wrong_kind = client.get("/payouts/org?kind=income_handover&voided=true", headers=h).json()
+    assert all(x["id"] != pid for x in wrong_kind)
 
 
 def test_manager_cancel_request_requires_note(client):

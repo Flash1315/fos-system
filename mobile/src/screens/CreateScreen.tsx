@@ -7,6 +7,7 @@ import {
   lastFuelOdometer,
   listMembers,
   myBalance,
+  myOrg,
   teamBalances,
   uploadPhoto,
   type TeamBalance,
@@ -84,6 +85,12 @@ export function CreateScreen({
         setTeamBals(await teamBalances());
       } catch {
         setTeamBals([]);
+      }
+      try {
+        const org = await myOrg();
+        setMyCurrency(org.currency || "IDR");
+      } catch {
+        /* ignore */
       }
     })();
   }, [isManager]);

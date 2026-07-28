@@ -2662,7 +2662,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.17"
+    assert health.json()["version"] == "0.7.18"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -4300,4 +4300,119 @@ def test_money_limit_odometer_chronology_and_payout_idem_fingerprint(client):
         },
     )
     assert p2.status_code == 409
+
+
+def test_overpayment_credit_null_patch_and_inactive_owner_demote(client):
+    owner = _register(client, "flow-0718", "v0718-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+
+    # Seed spendings then overpay
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 100,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    over = client.post(
+        "/payouts",
+        headers=h,
+        json={
+            "user_id": uid,
+            "kind": "expense_payout",
+            "amount": 250,
+            "payment_method": "cash",
+            "note": "overpay",
+        },
+    )
+    assert over.status_code == 200, over.text
+    assert over.json()["overpayment"] == 150
+    # Tiny follow-up payout while owed is 0 must carry unused credit
+    carry = client.post(
+        "/payouts",
+        headers=h,
+        json={
+            "user_id": uid,
+            "kind": "expense_payout",
+            "amount": 10,
+            "payment_method": "cash",
+            "note": "carry credit",
+        },
+    )
+    assert carry.status_code == 200, carry.text
+    assert carry.json()["overpayment"] == 160
+    # New pocket spend 40 → spendings stay 0 (credit 160 covers it)
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 40,
+            "category": "Food",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    bal = client.get("/records/balance/me", headers=h)
+    assert bal.status_code == 200
+    assert bal.json()["spendings"] == 0
+
+    # Null text fields on PATCH coerce to empty (no 500)
+    pending = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 5,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "place": "Office A",
+        },
+    )
+    assert pending.status_code == 200
+    rid = pending.json()["id"]
+    cleared = client.patch(
+        f"/records/{rid}",
+        headers=h,
+        json={"place": None, "comment": None, "bike": None},
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["place"] == ""
+
+    # Inactive owner can be demoted even if they are the only inactive owner
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0718-co@example.com",
+            "full_name": "Co Owner",
+            "role": "owner",
+            "password": "secret12",
+            "password_confirm": "secret12",
+        },
+    )
+    assert inv.status_code == 200
+    co_id = inv.json()["id"]
+    # Deactivate co-owner after settling any balances (none)
+    deact = client.post(
+        f"/orgs/members/{co_id}/active",
+        headers=h,
+        json={"is_active": False},
+    )
+    assert deact.status_code == 200, deact.text
+    demote = client.post(
+        f"/orgs/members/{co_id}/role",
+        headers=h,
+        json={"role": "employee"},
+    )
+    assert demote.status_code == 200, demote.text
+    assert demote.json()["role"] == "employee"
 

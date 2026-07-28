@@ -151,6 +151,9 @@ def create_adjustment(
     target = db.get(User, body.user_id)
     if not target or target.organization_id != manager.organization_id or not target.is_active:
         raise HTTPException(404, "User not found")
+    from app.services.locks import lock_users
+
+    lock_users(db, target.id)
     bal = user_balance(db, target)
     current = (
         float(bal.get("cash_on_hand") or 0)
@@ -186,7 +189,24 @@ def create_adjustment(
             resource_id=row.id,
             request_hash=fp,
         )
-    db.commit()
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=manager.organization_id,
+        user_id=manager.id,
+        scope="adjustments.create",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _out(existing, (u.full_name if (u := db.get(User, existing.user_id)) else ""), db)
+            if (existing := db.get(BalanceAdjustment, hit.resource_id))
+            and existing.organization_id == manager.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(row)
     return _out(row, target.full_name, db)
 
@@ -268,6 +288,23 @@ def void_adjustment(
             resource_id=row.id,
             request_hash=fp,
         )
-    db.commit()
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=manager.organization_id,
+        user_id=manager.id,
+        scope="adjustments.void",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _out(existing, (u.full_name if (u := db.get(User, existing.user_id)) else ""), db)
+            if (existing := db.get(BalanceAdjustment, hit.resource_id))
+            and existing.organization_id == manager.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(row)
     return _out(row, target.full_name, db)

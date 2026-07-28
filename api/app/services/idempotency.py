@@ -99,3 +99,38 @@ def loads_json(raw: str | None):
     if not raw:
         return None
     return json.loads(raw)
+
+
+def commit_or_replay(
+    db: Session,
+    *,
+    organization_id: int,
+    user_id: int,
+    scope: str,
+    key: str | None,
+    request_hash: str | None,
+    load_replay,
+):
+    """Commit; on unique idempotency race, roll back and return the winner's response."""
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        db.commit()
+        return None
+    except IntegrityError:
+        db.rollback()
+        if not key:
+            raise HTTPException(409, "Concurrent request conflict — retry") from None
+        hit = lookup_idem(
+            db,
+            organization_id=organization_id,
+            user_id=user_id,
+            scope=scope,
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, request_hash)
+            replay = load_replay(hit)
+            if replay is not None:
+                return replay
+        raise HTTPException(409, "Concurrent request conflict — retry") from None

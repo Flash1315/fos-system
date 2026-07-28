@@ -272,7 +272,9 @@ def user_balance(db: Session, user: User) -> dict:
     adj_cash = _sum_adjustments(db, org_id, user.id, AdjustmentTrack.cash_on_hand, since_hand)
     adj_spend = _sum_adjustments(db, org_id, user.id, AdjustmentTrack.spendings, since_pay)
 
-    spendings = max(0.0, spendings_raw + carry_spend - overpay + adj_spend)
+    spendings_net = spendings_raw + carry_spend - overpay + adj_spend
+    spendings = max(0.0, spendings_net)
+    remaining_overpayment_credit = max(0.0, -spendings_net)
     cash_on_hand = income_cash - from_cash + carry_cash + adj_cash
 
     reserved_spendings = pending_reserved(db, user.id, org_id, PayoutKind.expense_payout)
@@ -307,4 +309,5 @@ def user_balance(db: Session, user: User) -> dict:
         "reserved_cash": reserved_cash,
         "available_spendings": available_spendings,
         "available_cash": available_cash,
+        "remaining_overpayment_credit": remaining_overpayment_credit,
     }

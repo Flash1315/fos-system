@@ -279,7 +279,10 @@ class RecordUpdate(BaseModel):
     )
     @classmethod
     def strip_optional_text(cls, v: Optional[str]) -> Optional[str]:
-        return _strip_optional(v)
+        # Explicit JSON null → empty string so NOT NULL columns never 500.
+        if v is None:
+            return ""
+        return v.strip()
 
     @field_validator("liters")
     @classmethod

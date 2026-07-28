@@ -155,12 +155,14 @@ def _create_payout_row(
     does not block itself.
     """
     from app.services.money import require_positive_money, round_money
+    from app.services.locks import lock_users
 
     target = db.get(User, body.user_id)
     if not target or target.organization_id != manager.organization_id:
         raise HTTPException(404, "User not found")
     if not target.is_active:
         raise HTTPException(400, "User inactive")
+    lock_users(db, target.id)
     org = db.get(Organization, manager.organization_id)
     bal = user_balance(db, target)
     method = (body.payment_method or "cash").strip().lower()
@@ -174,13 +176,15 @@ def _create_payout_row(
     balance_after = 0.0
     if body.kind == PayoutKind.expense_payout:
         owed = float(bal.get("spendings") or 0)
+        credit = float(bal.get("remaining_overpayment_credit") or 0)
         reserved = pending_reserved(
             db, target.id, manager.organization_id, PayoutKind.expense_payout, exclude_request_id
         )
         available = max(0.0, owed - reserved)
         if amount > available + 1e-6:
             if reserved <= 1e-9 and amount > owed + 1e-6:
-                overpayment = round_money(amount - owed)
+                # Preserve unused prior overpayment credit across payout cutoffs.
+                overpayment = round_money(amount - owed + credit)
                 balance_after = 0.0
             else:
                 raise HTTPException(
@@ -189,7 +193,8 @@ def _create_payout_row(
                     f"({owed} owed, {reserved} reserved by pending requests).",
                 )
         else:
-            overpayment = 0.0
+            # owed > 0 implies prior credit was already consumed in balance calc.
+            overpayment = round_money(credit) if owed <= 1e-9 else 0.0
             balance_after = round_money(max(0.0, owed - amount))
     elif body.kind == PayoutKind.income_handover:
         held = float(bal.get("cash_on_hand") or 0)
@@ -265,7 +270,28 @@ def create_payout(
             resource_id=row.id,
             request_hash=fp,
         )
-    db.commit()
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=manager.organization_id,
+        user_id=manager.id,
+        scope="payouts.create",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _payout_out(
+                db,
+                existing,
+                (u.full_name if (u := db.get(User, existing.user_id)) else ""),
+            )
+            if (existing := db.get(Payout, hit.resource_id))
+            and existing.organization_id == manager.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(row)
     return _payout_out(db, row, target.full_name)
 

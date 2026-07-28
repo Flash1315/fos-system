@@ -68,12 +68,15 @@ def set_member_active(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
+    from app.services.locks import lock_organization
+
+    lock_organization(db, user.organization_id)
     member = db.get(User, member_id)
     if not member or member.organization_id != user.organization_id:
         raise HTTPException(404, "User not found")
     if member.id == user.id:
         raise HTTPException(400, "Cannot deactivate yourself")
-    if member.role == UserRole.owner and not body.is_active:
+    if member.role == UserRole.owner and member.is_active and not body.is_active:
         owners = (
             db.query(User)
             .filter(
@@ -157,12 +160,19 @@ def set_member_role(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
+    from app.services.locks import lock_organization
+
+    lock_organization(db, user.organization_id)
     member = db.get(User, member_id)
     if not member or member.organization_id != user.organization_id:
         raise HTTPException(404, "User not found")
     if member.id == user.id and body.role != UserRole.owner:
         raise HTTPException(400, "Cannot demote yourself")
-    if member.role == UserRole.owner and body.role != UserRole.owner:
+    if (
+        member.role == UserRole.owner
+        and body.role != UserRole.owner
+        and member.is_active
+    ):
         owners = (
             db.query(User)
             .filter(
@@ -173,7 +183,7 @@ def set_member_role(
             .count()
         )
         if owners <= 1:
-            raise HTTPException(400, "Cannot demote the last owner")
+            raise HTTPException(400, "Cannot demote the last active owner")
     if member.role != body.role:
         member.role = body.role
         bump_token_version(member)

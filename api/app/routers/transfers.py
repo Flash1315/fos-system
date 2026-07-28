@@ -94,6 +94,10 @@ def create_transfer(
     if recipient.id == user.id:
         raise HTTPException(400, "Cannot transfer to yourself")
 
+    from app.services.locks import lock_users
+
+    lock_users(db, user.id, recipient.id)
+
     try:
         amount = require_positive_money(body.amount)
     except ValueError as exc:

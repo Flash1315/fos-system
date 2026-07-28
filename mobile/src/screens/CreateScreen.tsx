@@ -269,7 +269,12 @@ export function CreateScreen({
         Alert.alert("Fos", `Odometer is required (last reading ${lastOdo})`);
         return;
       }
-      if (odoVal != null && lastOdo != null && odoVal < lastOdo) {
+      if (
+        odoVal != null &&
+        lastOdo != null &&
+        odoVal < lastOdo &&
+        !occurredDate.trim()
+      ) {
         Alert.alert(
           "Fos",
           `Odometer cannot decrease (last ${lastOdo}). Enter a higher reading.`,

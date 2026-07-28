@@ -938,7 +938,24 @@ def decide_record(
             resource_id=rec.id,
             request_hash=fp,
         )
-    db.commit()
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="records.decide",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _record_out(db, existing)
+            if (existing := db.get(MoneyRecord, hit.resource_id))
+            and existing.organization_id == user.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(rec)
     return _record_out(db, rec)
 
@@ -993,7 +1010,24 @@ def comment_record(
             resource_id=rec.id,
             request_hash=fp,
         )
-    db.commit()
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="records.comment",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _record_out(db, existing)
+            if (existing := db.get(MoneyRecord, hit.resource_id))
+            and existing.organization_id == user.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(rec)
     return _record_out(db, rec)
 
@@ -1083,7 +1117,24 @@ def void_approved_record(
             resource_id=rec.id,
             request_hash=fp,
         )
-    db.commit()
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="records.void",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _record_out(db, existing)
+            if (existing := db.get(MoneyRecord, hit.resource_id))
+            and existing.organization_id == user.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(rec)
     return _record_out(db, rec)
 
@@ -1143,6 +1194,23 @@ def cancel_pending_record(
             resource_id=rec.id,
             request_hash=fp,
         )
-    db.commit()
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="records.cancel",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _record_out(db, existing)
+            if (existing := db.get(MoneyRecord, hit.resource_id))
+            and existing.organization_id == user.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(rec)
     return _record_out(db, rec)

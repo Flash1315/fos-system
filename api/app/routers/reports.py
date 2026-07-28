@@ -82,6 +82,13 @@ def my_report(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"report-me:{user.organization_id}:{user.id}",
+        limit=60,
+        window_sec=60,
+    )
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
     bal = user_balance(db, user)
@@ -165,6 +172,13 @@ def org_report(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"report-org:{user.organization_id}:{user.id}",
+        limit=60,
+        window_sec=60,
+    )
     org = db.get(Organization, user.organization_id)
     currency = org.currency if org else "IDR"
     oid = user.organization_id

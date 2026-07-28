@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.26"
+    assert health.json()["version"] == "0.7.27"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -5160,7 +5160,7 @@ def test_login_slug_norm_telegram_and_security_headers(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.26"
+    assert health.json()["version"] == "0.7.27"
     assert health.headers.get("x-content-type-options") == "nosniff"
     assert health.headers.get("x-frame-options") == "DENY"
     assert health.headers.get("referrer-policy") == "no-referrer"
@@ -5188,3 +5188,82 @@ def test_login_slug_norm_telegram_and_security_headers(client):
 
     huge = client.get("/adjustments?limit=501", headers=h)
     assert huge.status_code == 422
+
+
+def test_login_bounds_password_same_and_transfer_email(client):
+    owner = _register(client, "flow-0727", "v0727-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    bad_slug = client.post(
+        "/auth/login",
+        json={
+            "email": "v0727-owner@example.com",
+            "password": "secret12",
+            "organization_slug": "Flow_0727",
+        },
+    )
+    assert bad_slug.status_code == 422
+
+    too_long = client.post(
+        "/auth/login",
+        json={
+            "email": "v0727-owner@example.com",
+            "password": "x" * 129,
+            "organization_slug": "flow-0727",
+        },
+    )
+    assert too_long.status_code == 422
+
+    same = client.post(
+        "/auth/password",
+        headers=h,
+        json={
+            "current_password": "secret12",
+            "new_password": "secret12",
+            "password_confirm": "secret12",
+        },
+    )
+    assert same.status_code == 422
+
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["version"] == "0.7.27"
+    assert health.headers.get("cache-control") == "no-store"
+
+    # Seed cash via income then transfer with mixed-case email
+    income = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 5000,
+            "category": "Sales",
+            "purpose": "Rental",
+            "payment_method": "cash",
+            "client_name": "A",
+            "approve_now": True,
+        },
+    )
+    assert income.status_code == 200, income.text
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0727-recv@example.com",
+            "full_name": "Recv",
+            "role": "employee",
+            "password": "secret12",
+            "password_confirm": "secret12",
+        },
+    )
+    assert inv.status_code == 200, inv.text
+    xfer = client.post(
+        "/transfers",
+        headers={**h, "Idempotency-Key": "xfer-case-1"},
+        json={
+            "to_email": "  V0727-Recv@Example.com ",
+            "amount": 1000,
+            "comment": "case",
+        },
+    )
+    assert xfer.status_code == 200, xfer.text

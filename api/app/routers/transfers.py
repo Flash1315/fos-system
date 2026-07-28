@@ -35,6 +35,11 @@ class TransferIn(BaseModel):
     amount: float = Field(gt=0)
     comment: str = Field(default="", max_length=2000)
 
+    @field_validator("to_email", mode="before")
+    @classmethod
+    def email_norm(cls, v):
+        return str(v or "").strip().lower()
+
     @field_validator("comment")
     @classmethod
     def strip_comment(cls, v: str) -> str:

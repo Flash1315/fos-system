@@ -112,7 +112,7 @@ export function TransferScreen({
               }
               await transferCash(
                 {
-                  to_email: email.trim(),
+                  to_email: email.trim().toLowerCase(),
                   amount: value,
                   comment: comment.trim(),
                 },

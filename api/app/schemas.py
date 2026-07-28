@@ -108,7 +108,7 @@ class TokenOut(BaseModel):
 
 class LoginIn(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=128)
     organization_slug: str
 
     @field_validator("email", mode="before")
@@ -120,8 +120,10 @@ class LoginIn(BaseModel):
     @classmethod
     def slug_norm(cls, v):
         slug = str(v or "").strip().lower()
-        if not slug:
-            raise ValueError("organization_slug is required")
+        if len(slug) < 2 or len(slug) > 80:
+            raise ValueError("organization_slug must be 2–80 characters")
+        if not re.fullmatch(r"[a-z0-9-]+", slug):
+            raise ValueError("organization_slug: lowercase letters, numbers, hyphens only")
         return slug
 
 
@@ -171,6 +173,11 @@ class AcceptInviteIn(BaseModel):
     password: str = Field(min_length=6, max_length=128)
     password_confirm: str = Field(min_length=6, max_length=128)
 
+    @field_validator("token", mode="before")
+    @classmethod
+    def token_strip(cls, v):
+        return str(v or "").strip()
+
     @model_validator(mode="after")
     def confirm_matches(self):
         if self.password_confirm != self.password:
@@ -187,6 +194,8 @@ class PasswordChangeIn(BaseModel):
     def confirm_matches(self):
         if self.password_confirm != self.new_password:
             raise ValueError("Passwords do not match")
+        if self.new_password == self.current_password:
+            raise ValueError("New password must be different from current password")
         return self
 
 

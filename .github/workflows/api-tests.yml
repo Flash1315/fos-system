@@ -17,15 +17,20 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
+      - name: Dependency lock gate
+        working-directory: .
+        run: test -f api/requirements.lock.txt
       - name: Install
         run: |
           python -m pip install -U pip
+          pip install -r requirements.lock.txt
           pip install -r requirements-dev.txt
       - name: Dependency audit
-        continue-on-error: true
         run: |
           python -m pip install pip-audit
-          pip-audit -r requirements.txt
+          # python-jose pulls ecdsa; PYSEC-2026-1325 has no fixed release and
+          # affects ECDSA signing/ECDH, while this API is configured for HS256.
+          pip-audit -r requirements.lock.txt --ignore-vuln PYSEC-2026-1325
       - name: Test
         env:
           SECRET_KEY: ci-secret
@@ -186,6 +191,7 @@ jobs:
         working-directory: api
     services:
       postgres:
+        # Keep the major/minor line explicit; production deployments should pin a digest.
         image: postgres:16-alpine
         env:
           POSTGRES_USER: fos
@@ -206,6 +212,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install -U pip
+          pip install -r requirements.lock.txt
           pip install -r requirements-dev.txt
       - name: Smoke on Postgres
         env:
@@ -252,3 +259,9 @@ jobs:
               assert docs.status_code == 200  # development image
           print("postgres smoke ok")
           PY
+      - name: PostgreSQL concurrency
+        env:
+          SECRET_KEY: ci-secret-key-32chars-minimumxx
+          DATABASE_URL: postgresql+psycopg2://fos:fos@localhost:5432/fos
+          RATE_LIMIT_ENABLED: "0"
+        run: PYTHONPATH=. pytest -q tests/test_pg_concurrency.py

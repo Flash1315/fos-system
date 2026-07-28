@@ -2,6 +2,8 @@
 
 This checklist is for a real host or managed stack. Local `docker compose up` remains **dev-only**.
 
+- Production images should install Python dependencies from `api/requirements.lock.txt` and pin base/service images by digest.
+
 ## 1. Postgres
 
 1. Provision PostgreSQL 14+ (managed preferred).

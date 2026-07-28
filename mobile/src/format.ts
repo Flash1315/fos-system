@@ -59,7 +59,7 @@ function asUtcDate(iso: string): Date {
     return new Date(s);
   }
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s);
-  return new Date(`${s}Z`);
+  return new Date(s + "Z");
 }
 
 export function formatWhen(iso: string | null | undefined) {

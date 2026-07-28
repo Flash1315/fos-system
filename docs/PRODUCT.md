@@ -215,7 +215,10 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Logout bumps `token_version` and revokes **all** sessions for the account
 - Passwords: min 8 characters with at least one letter and one digit
 - Optional `ENABLE_HSTS` behind HTTPS terminators; OpenAPI/docs hidden when `ENVIRONMENT=production`
-- `billing_status` of `canceled` or `past_due` is read-only: login OK; money creates/approve/void/invite/accept/reset-token/org edits/team mutations/billing integrations blocked; cancel pending record/settlement allowed; media served via authenticated API (local or S3)
+- `billing_status` of `canceled` or `past_due` puts the organization into a read-only billing freeze; media remains available through the authenticated API (local or S3)
+- Billing freeze matrix:
+  - Blocked: money creates/approve/void, payouts, adjustments, transfers, invites, org edits, team mutations, Telegram changes/tests, photo upload, and plan changes
+  - Allowed: login, view, cancel pending record, cancel settlement request, password change, and accept-invite
 - Production refuses padded/blank `SECRET_KEY` and `TRUST_X_FORWARDED_FOR` without valid `TRUSTED_PROXY_CIDRS`
 - Reactivating an inactive member uses the active-seat ceiling (does not treat existing rows as new invites)
 - SMTP/Telegram outbound I/O capped (~5s); Telegram event alerts run after the response when possible
@@ -323,3 +326,4 @@ Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`
 - Confirm-path billingMe on Team/Approve/Payout/Balances/Account; PayoutHistory soft-fail; org limits comment/void/cancel/decide/settle-request/team; soft-retry GET/Idem only; media nosniff; ready media CI
 - Payout batch confirm freeze; Approve rejectAll/Balances void billingMe; Team reset freeze; upload/telegram/reset/list org limits; Auth inline form errors; Create photo quiet attach; metrics no-store + X-Metrics-Token CORS
 - Soft-fail retains stale lists; pane-isolated Balances/Account; resume refresh for Payout/filters; Auth API errors inline; record-write/org-update/settle-cancel + balances/reports/finance-list org limits; early-error header parity
+- v0.7.121–0.7.220 hardening: shared org budgets, non-money idempotency, security/config matrices, mobile stale-response guards, pinned/audited CI, and route inventory

@@ -55,12 +55,17 @@ DB_POOL_RECYCLE=1800
 - Settlement cancel enforces per-org `settle-cancel-org:` rate limits
 - Team balances enforce per-org `balances-read-org:` rate limits
 - Org report enforces per-org `reports-read-org:` rate limits
-- Org payout/settlement/adjustment lists enforce per-org `finance-list-org:` rate limits
+- Org and personal payout/settlement/adjustment reads enforce per-org `finance-list-org:` rate limits
+- Password changes and logout enforce per-org `password-org:` / `logout-org:` rate limits
+- Accept-invite enforces `accept-invite-org:` only after the invite token resolves to an organization
+- Categories, media-token, and fuel-odometer reads enforce per-org `categories-org:` / `media-token-org:` / `fuel-odo-org:` rate limits
+- Billing status reads enforce per-org `billing-me-org:` rate limits
 - `/metrics` sends `Cache-Control: no-store`; CORS allows `X-Metrics-Token`
 - Media file responses send `X-Content-Type-Options: nosniff`
 - CSV export responses send `Cache-Control: no-store`
 - Persist `/app/uploads` or S3; content-addressed keys; cancels may remove unused receipt objects
 - Idempotency rows are pruned on API startup (and on store)
+- Non-money invite, team, Telegram, org-update, plan, and accept-invite mutations support `Idempotency-Key`
 - Ready reports `limiter` (`memory` / `redis` / `redis_error`) without failing on Redis blips; multi-worker should set `RATE_LIMIT_REDIS_URL`
 - CSV export is rate-limited per user (10/min) and per org (20/min)
 - `METRICS_TOKEN` is **required** in production; scrapers call `GET /metrics` with `Authorization: Bearer <token>`

@@ -27,12 +27,16 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 def _parse_day(value: str | None, *, end: bool = False) -> datetime | None:
     if not value:
         return None
+    raw = value.strip()
+    if len(raw) != 10:
+        raise HTTPException(400, "date_from/date_to must be YYYY-MM-DD")
     try:
-        day = datetime.strptime(value.strip()[:10], "%Y-%m-%d")
+        day = datetime.strptime(raw, "%Y-%m-%d")
     except ValueError as exc:
         raise HTTPException(400, "date_from/date_to must be YYYY-MM-DD") from exc
     if end:
-        return day.replace(hour=23, minute=59, second=59)
+        # Exclusive upper bound: date_to=YYYY-MM-DD means < next midnight
+        return day + timedelta(days=1)
     return day
 
 
@@ -44,13 +48,23 @@ def _window(
     if date_from or date_to:
         since = _parse_day(date_from)
         until = _parse_day(date_to, end=True)
-        if since and until and since > until:
+        if since and until and since >= until:
             raise HTTPException(400, "date_from must be on or before date_to")
         return since, until
     if days:
         since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
         return since, None
     return None, None
+
+
+def _csv_text(value) -> str:
+    """Neutralize spreadsheet formula injection for free-text cells."""
+    if value is None:
+        return ""
+    s = str(value)
+    if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + s
+    return s
 
 
 def _effective_at():
@@ -85,7 +99,7 @@ def my_report(
         if since is not None:
             q = q.filter(eff >= since)
         if until is not None:
-            q = q.filter(eff <= until)
+            q = q.filter(eff < until)
         return float(q.scalar() or 0)
 
     purpose_q = db.query(
@@ -102,7 +116,7 @@ def my_report(
     if since is not None:
         purpose_q = purpose_q.filter(eff >= since)
     if until is not None:
-        purpose_q = purpose_q.filter(eff <= until)
+        purpose_q = purpose_q.filter(eff < until)
     by_purpose = [
         PurposeTotal(purpose=p or "—", total=float(t)) for p, t in purpose_q.group_by(MoneyRecord.purpose).all()
     ]
@@ -121,7 +135,7 @@ def my_report(
     if since is not None:
         cat_q = cat_q.filter(eff >= since)
     if until is not None:
-        cat_q = cat_q.filter(eff <= until)
+        cat_q = cat_q.filter(eff < until)
     by_category = [
         CategoryTotal(kind=k.value if hasattr(k, "value") else str(k), category=c or "—", total=float(t))
         for k, c, t in cat_q.group_by(MoneyRecord.kind, MoneyRecord.category).all()
@@ -167,7 +181,7 @@ def org_report(
         if since is not None:
             q = q.filter(eff >= since)
         if until is not None:
-            q = q.filter(eff <= until)
+            q = q.filter(eff < until)
         return float(q.scalar() or 0)
 
     expense = sum_approved(RecordKind.expense)
@@ -187,7 +201,7 @@ def org_report(
         if since is not None:
             q = q.filter(eff >= since)
         if until is not None:
-            q = q.filter(eff <= until)
+            q = q.filter(eff < until)
         return float(q.scalar() or 0)
 
     xfer_q = db.query(func.coalesce(func.sum(MoneyRecord.amount), 0.0)).filter(
@@ -200,7 +214,7 @@ def org_report(
     if since is not None:
         xfer_q = xfer_q.filter(eff >= since)
     if until is not None:
-        xfer_q = xfer_q.filter(eff <= until)
+        xfer_q = xfer_q.filter(eff < until)
     internal_transfer_total = float(xfer_q.scalar() or 0)
 
     spend_from_cash = sum_spend_source(["cash_on_hand", ""])
@@ -215,7 +229,7 @@ def org_report(
     if since is not None:
         pending_q = pending_q.filter(eff >= since)
     if until is not None:
-        pending_q = pending_q.filter(eff <= until)
+        pending_q = pending_q.filter(eff < until)
     pending = pending_q.scalar() or 0
     members = (
         db.query(User)
@@ -239,7 +253,7 @@ def org_report(
     if since is not None:
         cat_q = cat_q.filter(eff >= since)
     if until is not None:
-        cat_q = cat_q.filter(eff <= until)
+        cat_q = cat_q.filter(eff < until)
     cat_rows = cat_q.group_by(MoneyRecord.kind, MoneyRecord.category).all()
     by_category = [
         CategoryTotal(kind=k.value if hasattr(k, "value") else str(k), category=c or "—", total=float(t))
@@ -259,7 +273,7 @@ def org_report(
     if since is not None:
         purpose_q = purpose_q.filter(eff >= since)
     if until is not None:
-        purpose_q = purpose_q.filter(eff <= until)
+        purpose_q = purpose_q.filter(eff < until)
     purpose_rows = purpose_q.group_by(MoneyRecord.purpose).all()
     by_purpose = [
         PurposeTotal(purpose=p or "—", total=float(t)) for p, t in purpose_rows
@@ -303,8 +317,10 @@ def export_csv(
     if since is not None:
         q = q.filter(eff >= since)
     if until is not None:
-        q = q.filter(eff <= until)
-    rows = q.order_by(MoneyRecord.created_at.asc()).limit(5000).all()
+        q = q.filter(eff < until)
+    rows = q.order_by(MoneyRecord.created_at.asc()).limit(5001).all()
+    if len(rows) > 5000:
+        raise HTTPException(400, "Export too large — narrow the date range")
 
     buf = StringIO()
     writer = csv.writer(buf)
@@ -344,19 +360,19 @@ def export_csv(
                 status,
                 r.amount,
                 r.currency,
-                r.category,
-                r.purpose,
-                r.place,
-                r.bike,
-                r.payment_source,
-                r.payment_method,
-                name,
+                _csv_text(r.category),
+                _csv_text(r.purpose),
+                _csv_text(r.place),
+                _csv_text(r.bike),
+                _csv_text(r.payment_source),
+                _csv_text(r.payment_method),
+                _csv_text(name),
                 r.created_at.isoformat() if r.created_at else "",
                 r.occurred_at.isoformat() if r.occurred_at else "",
                 "",
                 "",
                 1 if r.is_voided else 0,
-                r.comment or "",
+                _csv_text(r.comment or ""),
             ]
         )
 
@@ -364,8 +380,11 @@ def export_csv(
     if since is not None:
         pq = pq.filter(Payout.created_at >= since)
     if until is not None:
-        pq = pq.filter(Payout.created_at <= until)
-    for p in pq.order_by(Payout.created_at.asc()).limit(2000).all():
+        pq = pq.filter(Payout.created_at < until)
+    payouts = pq.order_by(Payout.created_at.asc()).limit(2001).all()
+    if len(payouts) > 2000:
+        raise HTTPException(400, "Export too large — narrow the date range")
+    for p in payouts:
         u = db.get(User, p.user_id)
         name = u.full_name if u else ""
         pkind = p.kind.value if hasattr(p.kind, "value") else str(p.kind)
@@ -382,14 +401,14 @@ def export_csv(
                 "",
                 "",
                 "",
-                p.payment_method,
-                name,
+                _csv_text(p.payment_method),
+                _csv_text(name),
                 p.created_at.isoformat() if p.created_at else "",
                 "",
                 float(p.overpayment or 0),
                 float(p.balance_after or 0),
                 1 if p.is_voided else 0,
-                (p.void_note or p.note or ""),
+                _csv_text(p.void_note or p.note or ""),
             ]
         )
 
@@ -397,8 +416,11 @@ def export_csv(
     if since is not None:
         aq = aq.filter(BalanceAdjustment.occurred_at >= since)
     if until is not None:
-        aq = aq.filter(BalanceAdjustment.occurred_at <= until)
-    for a in aq.order_by(BalanceAdjustment.created_at.asc()).limit(2000).all():
+        aq = aq.filter(BalanceAdjustment.occurred_at < until)
+    adjustments = aq.order_by(BalanceAdjustment.created_at.asc()).limit(2001).all()
+    if len(adjustments) > 2000:
+        raise HTTPException(400, "Export too large — narrow the date range")
+    for a in adjustments:
         u = db.get(User, a.user_id)
         name = u.full_name if u else ""
         track = a.track.value if hasattr(a.track, "value") else str(a.track)
@@ -416,13 +438,13 @@ def export_csv(
                 "",
                 track,
                 "",
-                name,
+                _csv_text(name),
                 a.created_at.isoformat() if a.created_at else "",
                 a.occurred_at.isoformat() if a.occurred_at else "",
                 "",
                 "",
                 1 if a.is_voided else 0,
-                a.note or "",
+                _csv_text(a.note or ""),
             ]
         )
 

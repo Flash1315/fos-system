@@ -580,8 +580,24 @@ def request_settlement(
     body: SettlementRequestIn,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
     from app.services.money import round_money
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="payouts.request",
+            key=key,
+        )
+        if hit:
+            existing = db.get(SettlementRequest, hit.resource_id)
+            if existing and existing.organization_id == user.organization_id:
+                return _request_out(existing, user.full_name)
 
     amount = round_money(body.amount)
     bal = user_balance(db, user)
@@ -609,6 +625,16 @@ def request_settlement(
         created_at=_utcnow(),
     )
     db.add(row)
+    db.flush()
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="payouts.request",
+            key=key,
+            resource_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     return _request_out(row, user.full_name)

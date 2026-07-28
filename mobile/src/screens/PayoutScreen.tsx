@@ -191,6 +191,7 @@ export function PayoutScreen({
       );
       if (!payable.length) {
         Alert.alert("Fos", "No available spendings to pay");
+        setBusy(false);
         return;
       }
       Alert.alert(
@@ -237,6 +238,7 @@ export function PayoutScreen({
       );
       if (!payable.length) {
         Alert.alert("Fos", "No available cash to take");
+        setBusy(false);
         return;
       }
       Alert.alert(

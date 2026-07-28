@@ -52,8 +52,19 @@ def create_media_token(user_id: int, org_id: int, token_version: int = 0, minute
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
-def user_from_token(token: str, db: Session, *, allow_media: bool = False) -> User:
-    """Decode JWT and return active user; rejects revoked token_version."""
+def user_from_token(
+    token: str,
+    db: Session,
+    *,
+    allow_media: bool = False,
+    require_media: bool = False,
+) -> User:
+    """Decode JWT and return active user; rejects revoked token_version.
+
+    - allow_media: accept typ=media (media routes).
+    - require_media: reject typ=access (use for ?token= query so long-lived
+      access JWTs are not pasted into URLs / image caches / logs).
+    """
     credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -66,9 +77,11 @@ def user_from_token(token: str, db: Session, *, allow_media: bool = False) -> Us
         typ = payload.get("typ") or "access"
     except (JWTError, ValueError, TypeError):
         raise credentials_exc
-    if typ == "media" and not allow_media:
-        raise credentials_exc
     if typ not in ("access", "media"):
+        raise credentials_exc
+    if require_media and typ != "media":
+        raise credentials_exc
+    if typ == "media" and not allow_media:
         raise credentials_exc
     user = db.get(User, user_id)
     if not user or not user.is_active:

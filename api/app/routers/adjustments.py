@@ -2,14 +2,14 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.auth import require_roles
 from app.db import get_db
 from app.models import AdjustmentTrack, BalanceAdjustment, User, UserRole
-from app.routers.records import _utcnow
+from app.routers.records import _utcnow, _validate_occurred_at
 from app.services.balances import adjustment_void_blocked_reason, can_void_adjustment, user_balance
 
 router = APIRouter(prefix="/adjustments", tags=["adjustments"])
@@ -114,8 +114,25 @@ def create_adjustment(
     body: AdjustmentIn,
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
     from app.services.money import round_money
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="adjustments.create",
+            key=key,
+        )
+        if hit:
+            existing = db.get(BalanceAdjustment, hit.resource_id)
+            if existing and existing.organization_id == manager.organization_id:
+                u = db.get(User, existing.user_id)
+                return _out(existing, u.full_name if u else "", db)
 
     amount = round_money(body.amount)
     if abs(amount) < 1e-9:
@@ -135,17 +152,28 @@ def create_adjustment(
             f"Adjustment would make {body.track.value} negative "
             f"(current {current}, delta {amount})",
         )
+    occurred_at = _validate_occurred_at(body.occurred_at) or _utcnow()
     row = BalanceAdjustment(
         organization_id=manager.organization_id,
         user_id=target.id,
         track=body.track,
         amount=amount,
         note=body.note.strip(),
-        occurred_at=body.occurred_at or _utcnow(),
+        occurred_at=occurred_at,
         created_by=manager.id,
         created_at=_utcnow(),
     )
     db.add(row)
+    db.flush()
+    if key:
+        store_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="adjustments.create",
+            key=key,
+            resource_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     return _out(row, target.full_name, db)

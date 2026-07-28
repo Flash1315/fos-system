@@ -20,7 +20,13 @@ function isFormDataBody(body: BodyInit | null | undefined): boolean {
   return typeof (body as { append?: unknown }).append === "function";
 }
 
-async function notifyUnauthorized() {
+async function notifyUnauthorized(requestToken: string | null) {
+  // Only clear session if the failing request still matches the active token
+  // (a delayed 401 from an old JWT must not wipe a freshly logged-in session).
+  const active = await getToken();
+  if (requestToken && active && requestToken !== active) {
+    return;
+  }
   try {
     await clearToken();
   } catch {
@@ -31,6 +37,13 @@ async function notifyUnauthorized() {
   } catch {
     /* ignore */
   }
+}
+
+function newIdemKey(prefix: string): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export type User = {
@@ -132,9 +145,13 @@ async function request<T>(
   init: RequestInit = {},
   opts?: { timeoutMs?: number },
 ): Promise<T> {
+  const auth = await authHeaders();
+  const requestToken = auth.Authorization?.startsWith("Bearer ")
+    ? auth.Authorization.slice(7)
+    : null;
   const headers: Record<string, string> = {
     ...(isFormDataBody(init.body) ? {} : { "Content-Type": "application/json" }),
-    ...(await authHeaders()),
+    ...auth,
     ...((init.headers as Record<string, string>) || {}),
   };
   const controller = new AbortController();
@@ -164,7 +181,7 @@ async function request<T>(
   }
   if (!res.ok) {
     if (res.status === 401) {
-      await notifyUnauthorized();
+      await notifyUnauthorized(requestToken);
     }
     throw new Error(formatApiError(data, res.statusText || `HTTP ${res.status}`));
   }
@@ -172,8 +189,12 @@ async function request<T>(
 }
 
 async function requestText(path: string, init: RequestInit = {}): Promise<string> {
+  const auth = await authHeaders();
+  const requestToken = auth.Authorization?.startsWith("Bearer ")
+    ? auth.Authorization.slice(7)
+    : null;
   const headers: Record<string, string> = {
-    ...(await authHeaders()),
+    ...auth,
     ...((init.headers as Record<string, string>) || {}),
   };
   const controller = new AbortController();
@@ -196,7 +217,7 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
   const text = await res.text();
   if (!res.ok) {
     if (res.status === 401) {
-      await notifyUnauthorized();
+      await notifyUnauthorized(requestToken);
     }
     let detail = text;
     try {
@@ -806,6 +827,7 @@ export function requestSettlement(body: {
 }) {
   return request("/payouts/requests", {
     method: "POST",
+    headers: { "Idempotency-Key": newIdemKey("sreq") },
     body: JSON.stringify(body),
   });
 }
@@ -899,6 +921,7 @@ export function createAdjustment(body: {
 }) {
   return request<BalanceAdjustment>("/adjustments", {
     method: "POST",
+    headers: { "Idempotency-Key": newIdemKey("adj") },
     body: JSON.stringify(body),
   });
 }
@@ -932,12 +955,10 @@ export function mediaUrl(path: string, token?: string | null): string {
   // Never attach credentials to absolute third-party URLs
   if (/^https?:\/\//i.test(path)) return path;
   const base = `${API_URL}${path.startsWith("/") ? path : `/${path}`}`;
-  const auth = token ?? cachedToken;
-  if (!auth) return base;
-  // Only sign our own media paths
-  if (!path.startsWith("/media/files/")) return base;
+  // Query auth must use a short-lived media JWT only (never the access token).
+  if (!token || !path.startsWith("/media/files/")) return base;
   const sep = base.includes("?") ? "&" : "?";
-  return `${base}${sep}token=${encodeURIComponent(auth)}`;
+  return `${base}${sep}token=${encodeURIComponent(token)}`;
 }
 
 export async function mediaUrlWithMediaToken(path: string): Promise<string> {
@@ -946,10 +967,6 @@ export async function mediaUrlWithMediaToken(path: string): Promise<string> {
   if (!path.startsWith("/media/files/")) {
     return mediaUrl(path);
   }
-  try {
-    const res = await request<{ access_token: string }>("/records/media-token");
-    return mediaUrl(path, res.access_token);
-  } catch {
-    return mediaUrl(path);
-  }
+  const res = await request<{ access_token: string }>("/records/media-token");
+  return mediaUrl(path, res.access_token);
 }

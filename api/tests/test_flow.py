@@ -1943,7 +1943,10 @@ def test_media_auth_bearer_and_query_token(client):
     assert denied.status_code == 401
     ok_bearer = client.get(url, headers=h)
     assert ok_bearer.status_code == 200
-    ok_q = client.get(f"{url}?token={token}")
+    # Long-lived access JWT must not work in ?token=
+    assert client.get(f"{url}?token={token}").status_code == 401
+    media_tok = client.get("/records/media-token", headers=h).json()["access_token"]
+    ok_q = client.get(f"{url}?token={media_tok}")
     assert ok_q.status_code == 200
     other = _register(client, "flow-media-auth2", "media-auth2-owner@example.com")
     other_h = {"Authorization": f"Bearer {other['access_token']}"}
@@ -2592,7 +2595,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.2"
+    assert health.json()["version"] == "0.7.3"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -2651,4 +2654,132 @@ def test_photo_url_media_token_and_invite_expiry(client):
     )
     assert expired.status_code == 400
     assert client.get("/records/pending/count", headers=h).json()["count"] == 0
+
+
+def test_media_query_rejects_access_token(client, tmp_path, monkeypatch):
+    owner = _register(client, "flow-mq", "mq-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    oid = owner["user"]["organization_id"]
+    from app.services import storage
+
+    monkeypatch.setattr(storage, "UPLOAD_ROOT", tmp_path)
+    name = "receipt.jpg"
+    path = storage.local_path(oid, name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"\xff\xd8\xff" + b"0" * 64)
+    access = owner["access_token"]
+    # Access JWT must not work via ?token=
+    denied = client.get(f"/media/files/{oid}/{name}?token={access}")
+    assert denied.status_code == 401
+    # Bearer access still works
+    ok_bearer = client.get(f"/media/files/{oid}/{name}", headers=h)
+    assert ok_bearer.status_code == 200
+    media_tok = client.get("/records/media-token", headers=h).json()["access_token"]
+    ok_q = client.get(f"/media/files/{oid}/{name}?token={media_tok}")
+    assert ok_q.status_code == 200
+
+
+def test_adjustment_occurred_at_bounds_and_idempotency(client):
+    owner = _register(client, "flow-adj-bounds", "adjb-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    far = client.post(
+        "/adjustments",
+        headers=h,
+        json={
+            "user_id": uid,
+            "track": "spendings",
+            "amount": 100,
+            "note": "opening",
+            "occurred_at": "1990-01-01T00:00:00",
+        },
+    )
+    assert far.status_code == 400
+    future = client.post(
+        "/adjustments",
+        headers=h,
+        json={
+            "user_id": uid,
+            "track": "spendings",
+            "amount": 100,
+            "note": "opening",
+            "occurred_at": "2099-01-01T00:00:00",
+        },
+    )
+    assert future.status_code == 400
+    headers = {**h, "Idempotency-Key": "adj-once-1"}
+    first = client.post(
+        "/adjustments",
+        headers=headers,
+        json={
+            "user_id": uid,
+            "track": "spendings",
+            "amount": 250,
+            "note": "opening balance",
+        },
+    )
+    assert first.status_code == 200, first.text
+    second = client.post(
+        "/adjustments",
+        headers=headers,
+        json={
+            "user_id": uid,
+            "track": "spendings",
+            "amount": 250,
+            "note": "opening balance",
+        },
+    )
+    assert second.status_code == 200
+    assert second.json()["id"] == first.json()["id"]
+    bal = client.get("/records/balance/me", headers=h).json()
+    assert bal["spendings"] == 250
+
+
+def test_settlement_request_idempotency_and_report_date_strict(client):
+    owner = _register(client, "flow-sreq-idem", "sreq-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rid = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 3000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "purpose": "Office",
+        },
+    ).json()["id"]
+    client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
+    headers = {**h, "Idempotency-Key": "sreq-once-1"}
+    first = client.post(
+        "/payouts/requests",
+        headers=headers,
+        json={"kind": "expense_payout", "amount": 1000, "note": "partial"},
+    )
+    assert first.status_code == 200, first.text
+    second = client.post(
+        "/payouts/requests",
+        headers=headers,
+        json={"kind": "expense_payout", "amount": 1000, "note": "partial"},
+    )
+    assert second.status_code == 200
+    assert second.json()["id"] == first.json()["id"]
+    junk = client.get("/reports/org?date_from=2026-01-01x&date_to=2026-12-31", headers=h)
+    assert junk.status_code == 400
+    # Formula-ish comment should be neutralized in CSV
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 11,
+            "category": "Supplies",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "comment": "=1+1",
+        },
+    )
+    csv = client.get("/reports/export.csv?days=30", headers=h)
+    assert csv.status_code == 200
+    assert "'=1+1" in csv.text or ",'=1+1" in csv.text
 

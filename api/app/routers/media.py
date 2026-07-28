@@ -18,10 +18,6 @@ ALLOWED = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
 _optional_bearer = HTTPBearer(auto_error=False)
 
 
-def _user_from_token(token: str, db: Session) -> User:
-    return user_from_token(token, db, allow_media=True)
-
-
 @router.post("/media/photo", response_model=PhotoOut)
 async def upload_photo(
     file: UploadFile = File(...),
@@ -52,15 +48,14 @@ def get_photo(
     creds: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
     db: Session = Depends(get_db),
 ):
-    """Auth via Bearer header or ?token= for <Image> tags that cannot set headers."""
-    raw = None
+    """Auth via Bearer (access or media) or ?token= (media-only) for <Image> tags."""
     if creds and creds.credentials:
-        raw = creds.credentials
+        user = user_from_token(creds.credentials, db, allow_media=True)
     elif token:
-        raw = token
-    if not raw:
+        # Query tokens must be short-lived media JWTs — never long-lived access tokens.
+        user = user_from_token(token, db, allow_media=True, require_media=True)
+    else:
         raise HTTPException(401, "Could not validate credentials")
-    user = _user_from_token(raw, db)
     if org_id != user.organization_id:
         raise HTTPException(403, "Forbidden")
     if "/" in filename or ".." in filename:

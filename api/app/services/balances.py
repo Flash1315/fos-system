@@ -3,10 +3,20 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import MoneyRecord, Payout, PayoutKind, RecordKind, RecordStatus, User
+from app.models import (
+    AdjustmentTrack,
+    BalanceAdjustment,
+    MoneyRecord,
+    Payout,
+    PayoutKind,
+    RecordKind,
+    RecordStatus,
+    User,
+)
 
 # Prefer occurred_at when present (late entries), else created_at
 _effective_at = func.coalesce(MoneyRecord.occurred_at, MoneyRecord.created_at)
+_adj_at = func.coalesce(BalanceAdjustment.occurred_at, BalanceAdjustment.created_at)
 
 
 def last_payout(db: Session, org_id: int, user_id: int, kind: PayoutKind) -> Payout | None:
@@ -77,6 +87,18 @@ def can_void_record(db: Session, rec: MoneyRecord) -> bool:
     return not record_locked_by_settlement(db, rec)
 
 
+def _sum_adjustments(db: Session, org_id: int, user_id: int, track: AdjustmentTrack, since) -> float:
+    q = db.query(func.coalesce(func.sum(BalanceAdjustment.amount), 0.0)).filter(
+        BalanceAdjustment.organization_id == org_id,
+        BalanceAdjustment.user_id == user_id,
+        BalanceAdjustment.track == track,
+        BalanceAdjustment.is_voided.is_(False),
+    )
+    if since is not None:
+        q = q.filter(_adj_at > since)
+    return float(q.scalar() or 0)
+
+
 def user_balance(db: Session, user: User) -> dict:
     org_id = user.organization_id
     hand_cut = last_payout(db, org_id, user.id, PayoutKind.income_handover)
@@ -117,9 +139,11 @@ def user_balance(db: Session, user: User) -> dict:
     carry_cash = float(hand_cut.balance_after or 0) if hand_cut is not None else 0.0
     carry_spend = float(pay_cut.balance_after or 0) if pay_cut is not None else 0.0
     overpay = float(pay_cut.overpayment or 0) if pay_cut is not None else 0.0
+    adj_cash = _sum_adjustments(db, org_id, user.id, AdjustmentTrack.cash_on_hand, since_hand)
+    adj_spend = _sum_adjustments(db, org_id, user.id, AdjustmentTrack.spendings, since_pay)
 
-    spendings = max(0.0, spendings_raw + carry_spend - overpay)
-    cash_on_hand = income_cash - from_cash + carry_cash
+    spendings = max(0.0, spendings_raw + carry_spend - overpay + adj_spend)
+    cash_on_hand = income_cash - from_cash + carry_cash + adj_cash
 
     pending = (
         db.query(func.count(MoneyRecord.id))

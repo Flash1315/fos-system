@@ -8,7 +8,16 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles
 from app.db import get_db
-from app.models import MoneyRecord, Organization, Payout, RecordKind, RecordStatus, User, UserRole
+from app.models import (
+    BalanceAdjustment,
+    MoneyRecord,
+    Organization,
+    Payout,
+    RecordKind,
+    RecordStatus,
+    User,
+    UserRole,
+)
 from app.schemas import OrgReportOut, CategoryTotal, PurposeTotal, MyReportOut
 from app.services.balances import user_balance
 
@@ -377,6 +386,39 @@ def export_csv(
                 float(p.balance_after or 0),
                 1 if p.is_voided else 0,
                 (p.void_note or p.note or ""),
+            ]
+        )
+
+    aq = db.query(BalanceAdjustment).filter(BalanceAdjustment.organization_id == oid)
+    if since is not None:
+        aq = aq.filter(BalanceAdjustment.occurred_at >= since)
+    if until is not None:
+        aq = aq.filter(BalanceAdjustment.occurred_at <= until)
+    for a in aq.order_by(BalanceAdjustment.created_at.asc()).limit(2000).all():
+        u = db.get(User, a.user_id)
+        name = u.full_name if u else ""
+        track = a.track.value if hasattr(a.track, "value") else str(a.track)
+        writer.writerow(
+            [
+                "adjustment",
+                a.id,
+                track,
+                "voided" if a.is_voided else "posted",
+                a.amount,
+                "",
+                "",
+                "",
+                "",
+                "",
+                track,
+                "",
+                name,
+                a.created_at.isoformat() if a.created_at else "",
+                a.occurred_at.isoformat() if a.occurred_at else "",
+                "",
+                "",
+                1 if a.is_voided else 0,
+                a.note or "",
             ]
         )
 

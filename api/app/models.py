@@ -161,3 +161,26 @@ class SettlementRequest(Base):
     # Filled when approved — actual payout amount may be clamped
     settled_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     payout_id: Mapped[int | None] = mapped_column(ForeignKey("payouts.id"), nullable=True)
+
+
+class AdjustmentTrack(str, enum.Enum):
+    cash_on_hand = "cash_on_hand"
+    spendings = "spendings"
+
+
+class BalanceAdjustment(Base):
+    """Non-operating opening/correction entries — do not hit P&L reports."""
+    __tablename__ = "balance_adjustments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    track: Mapped[AdjustmentTrack] = mapped_column(Enum(AdjustmentTrack), nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)  # signed
+    note: Mapped[str] = mapped_column(Text, default="")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    is_voided: Mapped[bool] = mapped_column(Boolean, default=False)
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    voided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)

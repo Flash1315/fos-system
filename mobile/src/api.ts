@@ -538,6 +538,43 @@ export function cancelSettlementRequest(id: number) {
   return request(`/payouts/requests/${id}/cancel`, { method: "POST" });
 }
 
+export type BalanceAdjustment = {
+  id: number;
+  user_id: number;
+  user_name: string;
+  track: "cash_on_hand" | "spendings";
+  amount: number;
+  note: string;
+  occurred_at: string;
+  created_by: number;
+  created_at: string;
+  is_voided: boolean;
+};
+
+export function listAdjustments() {
+  return request<BalanceAdjustment[]>("/adjustments");
+}
+
+export function createAdjustment(body: {
+  user_id: number;
+  track: "cash_on_hand" | "spendings";
+  amount: number;
+  note: string;
+  occurred_at?: string;
+}) {
+  return request<BalanceAdjustment>("/adjustments", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function voidAdjustment(id: number, note: string) {
+  return request<BalanceAdjustment>(`/adjustments/${id}/void`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+}
+
 export async function uploadPhoto(uri: string, name = "receipt.jpg") {
   const form = new FormData();
   form.append("file", {

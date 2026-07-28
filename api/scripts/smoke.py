@@ -133,6 +133,22 @@ def main() -> None:
     )
     assert auto["status"] == "approved"
     print("ok approve_now")
+
+    adj = call(
+        "POST",
+        "/adjustments",
+        token,
+        {
+            "user_id": user_id,
+            "track": "spendings",
+            "amount": 2500,
+            "note": "smoke opening",
+        },
+    )
+    bal = call("GET", "/records/balance/me", token)
+    assert bal["spendings"] >= 2500
+    call("POST", f"/adjustments/{adj['id']}/void", token, {"note": "smoke void"})
+    print("ok adjustment")
     print("SMOKE_OK")
 
 

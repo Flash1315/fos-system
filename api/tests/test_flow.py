@@ -1316,3 +1316,83 @@ def test_transfer_excluded_from_operating_report(client):
     assert report["approved_expense_total"] == 3000
     assert report["internal_transfer_total"] == 10000
     assert report["net_result"] == 47000  # 50000 - 3000
+
+
+def test_balance_adjustments_and_atomic_approve(client):
+    owner = _register(client, "flow-adj", "adj-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+
+    # Opening spendings debt without an expense record
+    adj = client.post(
+        "/adjustments",
+        headers=h,
+        json={
+            "user_id": uid,
+            "track": "spendings",
+            "amount": 15000,
+            "note": "opening pocket debt",
+        },
+    )
+    assert adj.status_code == 200, adj.text
+    bal = client.get("/records/balance/me", headers=h).json()
+    assert bal["spendings"] == 15000
+
+    cash_adj = client.post(
+        "/adjustments",
+        headers=h,
+        json={
+            "user_id": uid,
+            "track": "cash_on_hand",
+            "amount": 40000,
+            "note": "opening cash float",
+        },
+    )
+    assert cash_adj.status_code == 200, cash_adj.text
+    bal = client.get("/records/balance/me", headers=h).json()
+    assert bal["cash_on_hand"] == 40000
+
+    # Zero amount rejected
+    zero = client.post(
+        "/adjustments",
+        headers=h,
+        json={"user_id": uid, "track": "spendings", "amount": 0, "note": "noop"},
+    )
+    assert zero.status_code == 400
+
+    # Approve settlement request creates payout + marks request in one commit
+    req = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 15000, "note": "pay opening"},
+    )
+    assert req.status_code == 200, req.text
+    approved = client.post(f"/payouts/requests/{req.json()['id']}/approve", headers=h)
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["amount"] == 15000
+    decided = client.get("/payouts/requests/mine", headers=h).json()
+    row = next(x for x in decided if x["id"] == req.json()["id"])
+    assert row["status"] == "approved"
+    assert row["payout_id"] == approved.json()["id"]
+    assert row["settled_amount"] == 15000
+    bal = client.get("/records/balance/me", headers=h).json()
+    assert bal["spendings"] == 0
+
+    # Void adjustment restores? (cash still open — void cash adj)
+    voided = client.post(
+        f"/adjustments/{cash_adj.json()['id']}/void",
+        headers=h,
+        json={"note": "wrong float"},
+    )
+    assert voided.status_code == 200
+    assert voided.json()["is_voided"] is True
+    bal = client.get("/records/balance/me", headers=h).json()
+    assert bal["cash_on_hand"] == 0
+
+    csv = client.get("/reports/export.csv", headers=h)
+    assert csv.status_code == 200
+    assert "adjustment" in csv.text
+
+    # Adjustments do not inflate operating expense totals
+    report = client.get("/reports/org", headers=h).json()
+    assert report["approved_expense_total"] == 0

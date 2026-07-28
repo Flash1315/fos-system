@@ -135,12 +135,12 @@ def _request_out(row: SettlementRequest, user_name: str) -> SettlementRequestOut
     )
 
 
-@router.post("", response_model=PayoutOut)
-def create_payout(
+def _create_payout_row(
     body: PayoutCreate,
-    db: Session = Depends(get_db),
-    manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
-):
+    db: Session,
+    manager: User,
+) -> tuple[Payout, User]:
+    """Build a payout row and flush (no commit) so callers can batch atomically."""
     target = db.get(User, body.user_id)
     if not target or target.organization_id != manager.organization_id:
         raise HTTPException(404, "User not found")
@@ -185,12 +185,23 @@ def create_payout(
         created_at=_utcnow(),
     )
     db.add(row)
-    db.commit()
-    db.refresh(row)
+    db.flush()
     print(
         f"payout org={manager.organization_id} kind={body.kind.value} "
         f"user={target.id} amount={body.amount} overpay={overpayment} after={balance_after}"
     )
+    return row, target
+
+
+@router.post("", response_model=PayoutOut)
+def create_payout(
+    body: PayoutCreate,
+    db: Session = Depends(get_db),
+    manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    row, target = _create_payout_row(body, db, manager)
+    db.commit()
+    db.refresh(row)
     return _payout_out(db, row, target.full_name)
 
 
@@ -276,20 +287,20 @@ def batch_pay_all_spendings(
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
-    """Create expense_payout for every teammate with spendings > 0 (pay-all owed)."""
+    """Create expense_payout for every teammate with spendings > 0 (one commit)."""
     members = (
         db.query(User)
         .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
         .all()
     )
-    out: list[PayoutOut] = []
+    built: list[tuple[Payout, User]] = []
     for m in members:
         bal = user_balance(db, m)
         owed = float(bal.get("spendings") or 0)
         if owed <= 0:
             continue
-        out.append(
-            create_payout(
+        built.append(
+            _create_payout_row(
                 PayoutCreate(
                     user_id=m.id,
                     kind=PayoutKind.expense_payout,
@@ -301,6 +312,11 @@ def batch_pay_all_spendings(
                 manager=manager,
             )
         )
+    db.commit()
+    out = []
+    for row, target in built:
+        db.refresh(row)
+        out.append(_payout_out(db, row, target.full_name))
     return out
 
 
@@ -310,20 +326,20 @@ def batch_take_all_cash(
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
-    """Create income_handover for every teammate with cash_on_hand > 0."""
+    """Create income_handover for every teammate with cash_on_hand > 0 (one commit)."""
     members = (
         db.query(User)
         .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
         .all()
     )
-    out: list[PayoutOut] = []
+    built: list[tuple[Payout, User]] = []
     for m in members:
         bal = user_balance(db, m)
         held = float(bal.get("cash_on_hand") or 0)
         if held <= 0:
             continue
-        out.append(
-            create_payout(
+        built.append(
+            _create_payout_row(
                 PayoutCreate(
                     user_id=m.id,
                     kind=PayoutKind.income_handover,
@@ -335,6 +351,11 @@ def batch_take_all_cash(
                 manager=manager,
             )
         )
+    db.commit()
+    out = []
+    for row, target in built:
+        db.refresh(row)
+        out.append(_payout_out(db, row, target.full_name))
     return out
 
 
@@ -444,12 +465,7 @@ def approve_settlement_request(
             f"(request is {req.amount}).",
         )
     amount = float(req.amount)
-    req.status = SettlementRequestStatus.approved
-    req.decided_at = _utcnow()
-    req.decided_by = manager.id
-    req.settled_amount = amount
-    db.flush()
-    payout = create_payout(
+    row, target = _create_payout_row(
         PayoutCreate(
             user_id=req.user_id,
             kind=req.kind,
@@ -460,16 +476,14 @@ def approve_settlement_request(
         db=db,
         manager=manager,
     )
-    # create_payout commits; re-attach payout link
-    req = db.get(SettlementRequest, request_id)
-    if req is not None:
-        req.payout_id = payout.id
-        req.settled_amount = amount
-        req.status = SettlementRequestStatus.approved
-        req.decided_at = req.decided_at or _utcnow()
-        req.decided_by = req.decided_by or manager.id
-        db.commit()
-    return payout
+    req.status = SettlementRequestStatus.approved
+    req.decided_at = _utcnow()
+    req.decided_by = manager.id
+    req.settled_amount = amount
+    req.payout_id = row.id
+    db.commit()
+    db.refresh(row)
+    return _payout_out(db, row, target.full_name)
 
 
 @router.post("/requests/{request_id}/cancel", response_model=SettlementRequestOut)

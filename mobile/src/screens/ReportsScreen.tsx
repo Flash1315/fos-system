@@ -75,6 +75,86 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
     }
   };
 
+  let body: React.ReactNode = null;
+  if (!report && !loadError) {
+    body = <Sub>Loading...</Sub>;
+  } else if (loadError && !report) {
+    body = (
+      <>
+        <Sub>Could not load — {loadError}</Sub>
+        <Btn title="Retry" variant="ghost" onPress={reload} />
+      </>
+    );
+  } else if (report) {
+    body = (
+      <>
+        <Card>
+          <Label>Net result (period)</Label>
+          <Text style={styles.big}>
+            {(report.net_result ?? report.cash_position).toLocaleString()} {report.currency}
+          </Text>
+          <Sub>All income - all approved spend</Sub>
+          <Label>Cash movement (period)</Label>
+          <Text style={styles.line}>
+            {report.cash_position.toLocaleString()} {report.currency}
+          </Text>
+          <Sub>Cash income - spend paid from cash on hand</Sub>
+          <Sub>
+            {report.pending_count} pending · {report.team_count} active teammates
+          </Sub>
+          <Label>Spend from cash / my pocket</Label>
+          <Text style={styles.line}>
+            {(report.spend_from_cash ?? 0).toLocaleString()} /{" "}
+            {(report.spend_from_pocket ?? 0).toLocaleString()}
+          </Text>
+          {(report.internal_transfer_total ?? 0) > 0 && (
+            <>
+              <Label>Internal transfers (excluded from totals)</Label>
+              <Text style={styles.line}>{(report.internal_transfer_total ?? 0).toLocaleString()}</Text>
+            </>
+          )}
+          <Label>Team held cash</Label>
+          <Text style={styles.line}>{(report.total_cash_held ?? 0).toLocaleString()}</Text>
+          <Label>Team spendings owed</Label>
+          <Text style={styles.line}>{(report.total_spendings ?? 0).toLocaleString()}</Text>
+        </Card>
+        <Card>
+          <Label>Approved totals</Label>
+          <Text style={styles.line}>Expense: {report.approved_expense_total.toLocaleString()}</Text>
+          <Text style={styles.line}>Fuel: {report.approved_fuel_total.toLocaleString()}</Text>
+          <Text style={styles.line}>Income cash: {report.approved_income_cash.toLocaleString()}</Text>
+          <Text style={styles.line}>
+            Income transfer: {report.approved_income_transfer.toLocaleString()}
+          </Text>
+        </Card>
+        <Card>
+          <Label>By category</Label>
+          {report.by_category.length === 0 ? (
+            <Sub>No approved records yet</Sub>
+          ) : (
+            report.by_category.map((c) => (
+              <Text key={`${c.kind}-${c.category}`} style={styles.line}>
+                {c.kind}/{c.category}: {c.total.toLocaleString()}
+              </Text>
+            ))
+          )}
+        </Card>
+        <Card>
+          <Label>By purpose (spend)</Label>
+          {(report.by_purpose ?? []).length === 0 ? (
+            <Sub>No approved spend yet</Sub>
+          ) : (
+            (report.by_purpose ?? []).map((p) => (
+              <Text key={p.purpose} style={styles.line}>
+                {p.purpose}: {p.total.toLocaleString()}
+              </Text>
+            ))
+          )}
+        </Card>
+      </>
+    );
+  }
+
   return (
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
@@ -108,81 +188,8 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
           <Field autoCapitalize="none" value={dateTo} onChangeText={setDateTo} placeholder="optional" />
         </>
       )}
-      <Btn title={exporting ? "…" : "Export CSV"} variant="ghost" onPress={onExport} disabled={exporting} />
-      {!report && !loadError ? (
-        <Sub>Loading…</Sub>
-      ) : loadError && !report ? (
-        <>
-          <Sub>Could not load — {loadError}</Sub>
-          <Btn title="Retry" variant="ghost" onPress={reload} />
-        </>
-      ) : report ? (
-        <>
-          <Card>
-            <Label>Net result (period)</Label>
-            <Text style={styles.big}>
-              {(report.net_result ?? report.cash_position).toLocaleString()} {report.currency}
-            </Text>
-            <Sub>All income − all approved spend</Sub>
-            <Label>Cash movement (period)</Label>
-            <Text style={styles.line}>
-              {report.cash_position.toLocaleString()} {report.currency}
-            </Text>
-            <Sub>Cash income − spend paid from cash on hand</Sub>
-            <Sub>
-              {report.pending_count} pending · {report.team_count} active teammates
-            </Sub>
-            <Label>Spend from cash / my pocket</Label>
-            <Text style={styles.line}>
-              {(report.spend_from_cash ?? 0).toLocaleString()} /{" "}
-              {(report.spend_from_pocket ?? 0).toLocaleString()}
-            </Text>
-            {(report.internal_transfer_total ?? 0) > 0 && (
-              <>
-                <Label>Internal transfers (excluded from totals)</Label>
-                <Text style={styles.line}>{(report.internal_transfer_total ?? 0).toLocaleString()}</Text>
-              </>
-            )}
-            <Label>Team held cash</Label>
-            <Text style={styles.line}>{(report.total_cash_held ?? 0).toLocaleString()}</Text>
-            <Label>Team spendings owed</Label>
-            <Text style={styles.line}>{(report.total_spendings ?? 0).toLocaleString()}</Text>
-          </Card>
-          <Card>
-            <Label>Approved totals</Label>
-            <Text style={styles.line}>Expense: {report.approved_expense_total.toLocaleString()}</Text>
-            <Text style={styles.line}>Fuel: {report.approved_fuel_total.toLocaleString()}</Text>
-            <Text style={styles.line}>Income cash: {report.approved_income_cash.toLocaleString()}</Text>
-            <Text style={styles.line}>
-              Income transfer: {report.approved_income_transfer.toLocaleString()}
-            </Text>
-          </Card>
-          <Card>
-            <Label>By category</Label>
-            {report.by_category.length === 0 ? (
-              <Sub>No approved records yet</Sub>
-            ) : (
-              report.by_category.map((c) => (
-                <Text key={`${c.kind}-${c.category}`} style={styles.line}>
-                  {c.kind}/{c.category}: {c.total.toLocaleString()}
-                </Text>
-              ))
-            )}
-          </Card>
-          <Card>
-            <Label>By purpose (spend)</Label>
-            {(report.by_purpose ?? []).length === 0 ? (
-              <Sub>No approved spend yet</Sub>
-            ) : (
-              (report.by_purpose ?? []).map((p) => (
-                <Text key={p.purpose} style={styles.line}>
-                  {p.purpose}: {p.total.toLocaleString()}
-                </Text>
-              ))
-            )}
-          </Card>
-        </>
-      ) : null}
+      <Btn title={exporting ? "..." : "Export CSV"} variant="ghost" onPress={onExport} disabled={exporting} />
+      {body}
     </Screen>
   );
 }

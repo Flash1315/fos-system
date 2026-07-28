@@ -42,6 +42,62 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
     void reload();
   }, [days, custom, dateFrom, dateTo]);
 
+  let body: React.ReactNode = null;
+  if (!report && !loadError) {
+    body = <Sub>Loading...</Sub>;
+  } else if (loadError && !report) {
+    body = (
+      <>
+        <Sub>Could not load — {loadError}</Sub>
+        <Btn title="Retry" variant="ghost" onPress={reload} />
+      </>
+    );
+  } else if (report) {
+    body = (
+      <>
+        <Card>
+          <Label>Cash on hand</Label>
+          <Text style={styles.big}>
+            {report.cash_on_hand.toLocaleString()} {report.currency}
+          </Text>
+          <Label>Spendings owed</Label>
+          <Text style={styles.line}>{report.spendings.toLocaleString()}</Text>
+          <Sub>{report.pending_count} pending</Sub>
+        </Card>
+        <Card>
+          <Label>Approved totals</Label>
+          <Text style={styles.line}>Expense: {report.approved_expense_total.toLocaleString()}</Text>
+          <Text style={styles.line}>Fuel: {report.approved_fuel_total.toLocaleString()}</Text>
+          <Text style={styles.line}>Income cash: {report.approved_income_cash.toLocaleString()}</Text>
+        </Card>
+        <Card>
+          <Label>By purpose</Label>
+          {(report.by_purpose ?? []).length === 0 ? (
+            <Sub>No approved spend yet</Sub>
+          ) : (
+            (report.by_purpose ?? []).map((p) => (
+              <Text key={p.purpose} style={styles.line}>
+                {p.purpose}: {p.total.toLocaleString()}
+              </Text>
+            ))
+          )}
+        </Card>
+        <Card>
+          <Label>By category</Label>
+          {(report.by_category ?? []).length === 0 ? (
+            <Sub>No approved records yet</Sub>
+          ) : (
+            (report.by_category ?? []).map((c) => (
+              <Text key={`${c.kind}-${c.category}`} style={styles.line}>
+                {c.kind}/{c.category}: {c.total.toLocaleString()}
+              </Text>
+            ))
+          )}
+        </Card>
+      </>
+    );
+  }
+
   return (
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
@@ -75,56 +131,7 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
           <Field autoCapitalize="none" value={dateTo} onChangeText={setDateTo} placeholder="optional" />
         </>
       )}
-      {!report && !loadError ? (
-        <Sub>Loading…</Sub>
-      ) : loadError && !report ? (
-        <>
-          <Sub>Could not load — {loadError}</Sub>
-          <Btn title="Retry" variant="ghost" onPress={reload} />
-        </>
-      ) : report ? (
-        <>
-          <Card>
-            <Label>Cash on hand</Label>
-            <Text style={styles.big}>
-              {report.cash_on_hand.toLocaleString()} {report.currency}
-            </Text>
-            <Label>Spendings owed</Label>
-            <Text style={styles.line}>{report.spendings.toLocaleString()}</Text>
-            <Sub>{report.pending_count} pending</Sub>
-          </Card>
-          <Card>
-            <Label>Approved totals</Label>
-            <Text style={styles.line}>Expense: {report.approved_expense_total.toLocaleString()}</Text>
-            <Text style={styles.line}>Fuel: {report.approved_fuel_total.toLocaleString()}</Text>
-            <Text style={styles.line}>Income cash: {report.approved_income_cash.toLocaleString()}</Text>
-          </Card>
-          <Card>
-            <Label>By purpose</Label>
-            {(report.by_purpose ?? []).length === 0 ? (
-              <Sub>No approved spend yet</Sub>
-            ) : (
-              (report.by_purpose ?? []).map((p) => (
-                <Text key={p.purpose} style={styles.line}>
-                  {p.purpose}: {p.total.toLocaleString()}
-                </Text>
-              ))
-            )}
-          </Card>
-          <Card>
-            <Label>By category</Label>
-            {(report.by_category ?? []).length === 0 ? (
-              <Sub>No approved records yet</Sub>
-            ) : (
-              (report.by_category ?? []).map((c) => (
-                <Text key={`${c.kind}-${c.category}`} style={styles.line}>
-                  {c.kind}/{c.category}: {c.total.toLocaleString()}
-                </Text>
-              ))
-            )}
-          </Card>
-        </>
-      ) : null}
+      {body}
     </Screen>
   );
 }

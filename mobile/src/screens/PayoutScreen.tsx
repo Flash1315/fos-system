@@ -68,10 +68,25 @@ export function PayoutScreen({
       Alert.alert("Fos", "Select teammate and amount");
       return;
     }
+    if (value > suggested + 1e-6) {
+      Alert.alert(
+        "Fos",
+        `Amount exceeds available (${suggested.toLocaleString()}). Extra becomes overpayment / leftover handling. Continue?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Continue", onPress: () => void doSubmit(value) },
+        ],
+      );
+      return;
+    }
+    await doSubmit(value);
+  };
+
+  const doSubmit = async (value: number) => {
     setBusy(true);
     try {
       await createPayout({
-        user_id: userId,
+        user_id: userId!,
         kind,
         amount: value,
         payment_method: method,
@@ -79,7 +94,7 @@ export function PayoutScreen({
       });
       Alert.alert(
         "Fos",
-        kind === "expense_payout" ? "Expense payout recorded" : "Income handover recorded",
+        kind === "expense_payout" ? "Expense reimbursement recorded" : "Cash handover recorded",
       );
       onDone();
     } catch (e) {
@@ -90,31 +105,53 @@ export function PayoutScreen({
   };
 
   const payAllSpendings = async () => {
-    setBusy(true);
-    try {
-      const rows = (await batchPaySpendings(method)) as unknown[];
-      Alert.alert("Fos", `Paid spendings for ${Array.isArray(rows) ? rows.length : 0} teammate(s)`);
-      await reloadBalances();
-      onDone();
-    } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
+    Alert.alert("Fos", "Pay available spendings for all teammates?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Pay all",
+        onPress: async () => {
+          setBusy(true);
+          try {
+            const rows = (await batchPaySpendings(method)) as unknown[];
+            Alert.alert(
+              "Fos",
+              `Paid spendings for ${Array.isArray(rows) ? rows.length : 0} teammate(s)`,
+            );
+            await reloadBalances();
+            onDone();
+          } catch (e) {
+            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
   };
 
   const takeAllCash = async () => {
-    setBusy(true);
-    try {
-      const rows = (await batchTakeCash(method)) as unknown[];
-      Alert.alert("Fos", `Took cash from ${Array.isArray(rows) ? rows.length : 0} teammate(s)`);
-      await reloadBalances();
-      onDone();
-    } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
+    Alert.alert("Fos", "Take available cash from all teammates?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Take all",
+        onPress: async () => {
+          setBusy(true);
+          try {
+            const rows = (await batchTakeCash(method)) as unknown[];
+            Alert.alert(
+              "Fos",
+              `Took cash from ${Array.isArray(rows) ? rows.length : 0} teammate(s)`,
+            );
+            await reloadBalances();
+            onDone();
+          } catch (e) {
+            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -140,9 +177,13 @@ export function PayoutScreen({
       />
       <Label>Type</Label>
       <View style={styles.kinds}>
-        <Chip label="Pay expense" on={kind === "expense_payout"} onPress={() => setKind("expense_payout")} />
         <Chip
-          label="Receive income"
+          label="Expense reimbursement"
+          on={kind === "expense_payout"}
+          onPress={() => setKind("expense_payout")}
+        />
+        <Chip
+          label="Cash handover"
           on={kind === "income_handover"}
           onPress={() => setKind("income_handover")}
         />

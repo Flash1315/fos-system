@@ -25,12 +25,18 @@ export function TeamScreen({
 }) {
   const [rows, setRows] = useState<User[]>([]);
   const [resetId, setResetId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const reload = async () => {
     try {
+      setLoadError("");
       setRows(await listMembers());
     } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -73,7 +79,15 @@ export function TeamScreen({
       <FlatList
         data={rows}
         keyExtractor={(item) => String(item.id)}
-        ListEmptyComponent={<Sub>No members</Sub>}
+        ListEmptyComponent={
+          <Sub>
+            {loading
+              ? "Loading…"
+              : loadError
+                ? `Could not load — ${loadError}`
+                : "No members"}
+          </Sub>
+        }
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Text style={styles.row}>
@@ -115,6 +129,9 @@ export function TeamScreen({
       <NoteModal
         visible={resetId != null}
         title="New password (min 6)"
+        required
+        label="New password"
+        placeholder="min 6 characters"
         onCancel={() => setResetId(null)}
         onSubmit={async (pwd) => {
           const id = resetId;

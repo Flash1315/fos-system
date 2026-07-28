@@ -220,7 +220,7 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll refreshing={refreshingPeriod} onRefresh={() => void reload()}>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Org reports</Label>
       <View style={styles.kinds}>

@@ -71,6 +71,7 @@ export function AccountScreen({
   const [teamHasMore, setTeamHasMore] = useState(false);
   const [loadingMoreMine, setLoadingMoreMine] = useState(false);
   const [loadingMoreTeam, setLoadingMoreTeam] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const PAGE = 40;
 
   const reloadOrg = async () => {
@@ -185,6 +186,17 @@ export function AccountScreen({
     })();
   }, [kind, teamReqFilter, mineReqFilter]);
 
+  const onPullRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await reloadOrg();
+      await refreshSuggestedAmount();
+      await reloadRequests();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const onPassword = async () => {
     if (busy) return;
     if (!current || next.length < 6) {
@@ -290,7 +302,7 @@ export function AccountScreen({
   };
 
   return (
-    <Screen scroll>
+    <Screen scroll refreshing={refreshing} onRefresh={() => void onPullRefresh()}>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Account</Label>
       <Sub>

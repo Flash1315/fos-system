@@ -143,7 +143,7 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll refreshing={refreshingPeriod} onRefresh={() => void reload()}>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Text style={styles.title}>My stats</Text>
       <View style={styles.kinds}>

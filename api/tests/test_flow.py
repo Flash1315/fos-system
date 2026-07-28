@@ -2639,12 +2639,12 @@ def test_photo_url_media_token_and_invite_expiry(client):
     token = inv.json()["invite_token"]
     from app.db import SessionLocal
     from app.models import User
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
     db = SessionLocal()
     try:
         u = db.query(User).filter(User.email == "sec-emp@example.com").one()
-        u.invite_token_expires_at = datetime.utcnow() - timedelta(days=1)
+        u.invite_token_expires_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
         db.commit()
     finally:
         db.close()

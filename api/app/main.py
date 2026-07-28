@@ -19,7 +19,7 @@ Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.7.3")
+app = FastAPI(title=settings.app_name, version="0.7.4")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
@@ -46,7 +46,7 @@ def health():
     return {
         "ok": True,
         "app": settings.app_name,
-        "version": "0.7.3",
+        "version": "0.7.4",
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }
 

@@ -34,7 +34,7 @@ Open docs: http://127.0.0.1:8000/docs
 ```bash
 cd api
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 PYTHONPATH=. pytest -q
 # or: bash scripts/smoke.sh
 ```

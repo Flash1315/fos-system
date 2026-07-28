@@ -454,16 +454,13 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
           res.headers.get("X-Request-Id"),
         );
       } catch {
-        detail =
-          res.status === 429
-            ? formatApiError(
-                null,
-                res.statusText || `HTTP ${res.status}`,
-                429,
-                res.headers.get("Retry-After"),
-                res.headers.get("X-Request-Id"),
-              )
-            : text || res.statusText || `HTTP ${res.status}`;
+        detail = formatApiError(
+          null,
+          text || res.statusText || `HTTP ${res.status}`,
+          res.status,
+          res.headers.get("Retry-After"),
+          res.headers.get("X-Request-Id") || headers["X-Request-Id"],
+        );
       }
       throw new Error(detail);
     }
@@ -498,7 +495,7 @@ function formatApiError(
     const sec =
       retryAfter && /^\d+$/.test(retryAfter.trim()) ? Number(retryAfter.trim()) : null;
     if (sec != null && sec > 0) base = `${base} (retry in ~${sec}s)`;
-    return base;
+    return reqId ? `${base} (ref ${reqId})` : base;
   }
   if (status === 413) {
     let base = "Request too large — try a smaller photo or fewer fields";

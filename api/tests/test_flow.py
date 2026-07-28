@@ -9586,3 +9586,120 @@ def test_v07131_140_billing_idempotency(client, monkeypatch):
     assert first.status_code == replay.status_code == 200
     assert replay.json() == {"ok": True}
     assert sent["count"] == 1
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://app.example.com",
+        "https://*.example.com",
+        "https://user@app.example.com",
+        "https://app.example.com/path",
+        "https://app.example.com?debug=1",
+        "https://app.example.com#fragment",
+        "app.example.com",
+    ],
+)
+def test_v07181_190_rejects_bad_production_cors(monkeypatch, origin):
+    from app.config import settings
+    from app.main import _validate_runtime_settings
+
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "secret_key", "a" * 40)
+    monkeypatch.setattr(settings, "cors_origins", origin)
+    monkeypatch.setattr(
+        settings,
+        "database_url",
+        "postgresql+psycopg2://fos:fos@db.example.com:5432/fos?sslmode=require",
+    )
+    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token")
+    monkeypatch.setattr(settings, "rate_limit_enabled", True)
+
+    with pytest.raises(RuntimeError, match="CORS_ORIGINS"):
+        _validate_runtime_settings()
+
+
+def test_v07181_190_runtime_tls_guards(client, monkeypatch):
+    from app.config import settings
+    from app.main import _validate_runtime_settings
+
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "secret_key", "a" * 40)
+    monkeypatch.setattr(settings, "cors_origins", "https://app.example.com")
+    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token")
+    monkeypatch.setattr(settings, "rate_limit_enabled", True)
+    monkeypatch.setattr(
+        settings,
+        "database_url",
+        "postgresql+psycopg2://fos:fos@db.example.com:5432/fos?sslmode=require",
+    )
+    assert _validate_runtime_settings() == "production"
+
+    monkeypatch.setattr(settings, "enable_hsts", True)
+    monkeypatch.setattr(settings, "hsts_max_age", 0)
+    with pytest.raises(RuntimeError, match="HSTS_MAX_AGE"):
+        _validate_runtime_settings()
+    monkeypatch.setattr(settings, "enable_hsts", False)
+    monkeypatch.setattr(settings, "hsts_max_age", 31_536_000)
+
+    monkeypatch.setattr(
+        settings,
+        "database_url",
+        "postgresql+psycopg2://fos:fos@db.example.com:5432/fos",
+    )
+    with pytest.raises(RuntimeError, match="sslmode"):
+        _validate_runtime_settings()
+    monkeypatch.setattr(
+        settings,
+        "database_url",
+        "postgresql+psycopg2://fos:fos@db.example.com:5432/fos?ssl=true",
+    )
+    assert _validate_runtime_settings() == "production"
+
+    monkeypatch.setattr(settings, "smtp_host", "smtp.example.com")
+    monkeypatch.setattr(settings, "smtp_use_tls", False)
+    with pytest.raises(RuntimeError, match="SMTP_USE_TLS"):
+        _validate_runtime_settings()
+    monkeypatch.setattr(settings, "smtp_host", "")
+    monkeypatch.setattr(settings, "smtp_use_tls", True)
+
+    monkeypatch.setattr(settings, "s3_endpoint_url", "http://s3.example.com")
+    with pytest.raises(RuntimeError, match="S3_ENDPOINT_URL"):
+        _validate_runtime_settings()
+
+
+def test_v07181_190_hsts_early_error_and_metrics_tokens(client, monkeypatch):
+    from app.config import settings
+    from app.main import _tok_ok
+    from app.services.rate_limit import reset_limiter_for_tests
+
+    monkeypatch.setattr(settings, "environment", "development")
+    monkeypatch.setattr(settings, "enable_hsts", True)
+    monkeypatch.setattr(settings, "hsts_max_age", 60)
+    huge = client.post(
+        "/auth/login",
+        headers={"Content-Length": str(20 * 1024 * 1024)},
+        content=b"{}",
+    )
+    assert huge.status_code == 413
+    assert huge.headers["Strict-Transport-Security"] == "max-age=60; includeSubDomains"
+
+    assert _tok_ok("metrics-secret", "metrics-secret")
+    assert not _tok_ok("short", "metrics-secret")
+    monkeypatch.setattr(settings, "metrics_token", "metrics-secret")
+    monkeypatch.setattr(settings, "rate_limit_enabled", True)
+    reset_limiter_for_tests()
+    assert client.get("/metrics", headers={"X-Metrics-Token": "short"}).status_code == 401
+    assert (
+        client.get(
+            "/metrics", headers={"X-Metrics-Token": "metrics-secret"}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            "/metrics", headers={"Authorization": "Bearer metrics-secret"}
+        ).status_code
+        == 200
+    )
+    reset_limiter_for_tests()

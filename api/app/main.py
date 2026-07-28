@@ -4,7 +4,9 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 import re
+import secrets
 import uuid
+from urllib.parse import parse_qsl, urlparse
 
 from app.config import settings
 from app.version import APP_VERSION
@@ -38,6 +40,8 @@ def _validate_runtime_settings() -> str:
     hsts = int(settings.hsts_max_age or 0)
     if hsts < 0 or hsts > 63_072_000:
         raise RuntimeError("HSTS_MAX_AGE must be between 0 and 63072000")
+    if settings.enable_hsts and hsts <= 0:
+        raise RuntimeError("HSTS_MAX_AGE must be > 0 when ENABLE_HSTS is true")
     algo = (settings.algorithm or "").strip()
     if algo != "HS256":
         raise RuntimeError(f"ALGORITHM must be HS256 (got {settings.algorithm!r})")
@@ -64,6 +68,34 @@ def _validate_runtime_settings() -> str:
             raise RuntimeError(
                 "CORS_ORIGINS must list at least one origin in production"
             )
+        for origin in cors_list:
+            try:
+                parsed = urlparse(origin)
+                parsed.port
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"CORS_ORIGINS contains an invalid origin: {origin!r}"
+                ) from exc
+            if (
+                "*" in origin
+                or "?" in origin
+                or "#" in origin
+                or "\\" in origin
+                or any(ch.isspace() for ch in origin)
+                or parsed.scheme.lower() != "https"
+                or not parsed.netloc
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.path not in ("", "/")
+                or parsed.params
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise RuntimeError(
+                    "CORS_ORIGINS entries must be absolute HTTPS origins without "
+                    f"path, query, fragment, userinfo, or wildcards (got {origin!r})"
+                )
         if settings.trust_x_forwarded_for:
             cidrs = (settings.trusted_proxy_cidrs or "").strip()
             if not cidrs:
@@ -95,6 +127,37 @@ def _validate_runtime_settings() -> str:
             raise RuntimeError(
                 "METRICS_TOKEN is required in production (protect GET /metrics)"
             )
+        try:
+            parsed_db = urlparse((settings.database_url or "").strip())
+        except ValueError as exc:
+            raise RuntimeError("DATABASE_URL is invalid") from exc
+        if parsed_db.scheme.lower().startswith("postgres"):
+            query = {
+                key.lower(): value.lower()
+                for key, value in parse_qsl(parsed_db.query, keep_blank_values=True)
+            }
+            sslmode = query.get("sslmode", "")
+            if sslmode not in ("require", "verify-ca", "verify-full") and query.get(
+                "ssl"
+            ) != "true":
+                raise RuntimeError(
+                    "Production PostgreSQL DATABASE_URL must include "
+                    "sslmode=require, verify-ca, or verify-full (or ssl=true)"
+                )
+        if (settings.smtp_host or "").strip() and not settings.smtp_use_tls:
+            raise RuntimeError(
+                "SMTP_USE_TLS must be true when SMTP_HOST is configured in production"
+            )
+        endpoint = (settings.s3_endpoint_url or "").strip()
+        if endpoint:
+            try:
+                parsed_endpoint = urlparse(endpoint)
+            except ValueError as exc:
+                raise RuntimeError("S3_ENDPOINT_URL is invalid") from exc
+            if parsed_endpoint.scheme.lower() != "https" or not parsed_endpoint.netloc:
+                raise RuntimeError(
+                    "S3_ENDPOINT_URL must be an absolute HTTPS URL in production"
+                )
     elif not secret or secret in _INSECURE_SECRETS:
         logger.warning("SECRET_KEY is insecure — set a strong SECRET_KEY in production")
     elif media == "s3" and not (settings.s3_bucket or "").strip():
@@ -226,6 +289,12 @@ def _json_error(
     }
     if headers:
         out.update(headers)
+    if settings.enable_hsts:
+        max_age = max(0, int(settings.hsts_max_age or 0))
+        out.setdefault(
+            "Strict-Transport-Security",
+            f"max-age={max_age}; includeSubDomains",
+        )
     return JSONResponse(status_code=status_code, content={"detail": detail}, headers=out)
 
 
@@ -445,6 +514,12 @@ def _db_ping() -> str:
         return "error"
 
 
+def _tok_ok(got: str, expected: str) -> bool:
+    if not expected or len(got) != len(expected):
+        return False
+    return secrets.compare_digest(got.encode(), expected.encode())
+
+
 @app.get("/health/live")
 def health_live():
     """Liveness — no DB, no rate limit (safe for orchestrator probes)."""
@@ -491,7 +566,7 @@ def metrics(request: Request):
     from fastapi.responses import PlainTextResponse
 
     from app.services.metrics import render_prometheus
-    from app.services.rate_limit import limiter_health
+    from app.services.rate_limit import client_ip, enforce_rate_limit, limiter_health
     from app.services.storage import media_health
 
     expected = (settings.metrics_token or "").strip()
@@ -501,8 +576,11 @@ def metrics(request: Request):
         bearer = ""
         if auth.lower().startswith("bearer "):
             bearer = auth[7:].strip()
-        if got != expected and bearer != expected:
+        if not (_tok_ok(got, expected) or _tok_ok(bearer, expected)):
             raise HTTPException(401, "Metrics token required")
+    enforce_rate_limit(f"metrics:ip:{client_ip(request)}", limit=30, window_sec=60)
+    if expected:
+        enforce_rate_limit("metrics:token", limit=60, window_sec=60)
     limiter_status = limiter_health()
     redis_configured = bool((settings.rate_limit_redis_url or "").strip())
     body = render_prometheus(

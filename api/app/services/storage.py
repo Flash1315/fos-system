@@ -1,8 +1,11 @@
 """Local disk or S3-compatible object storage for receipt photos."""
 
+import logging
 from pathlib import Path
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 UPLOAD_ROOT = Path(__file__).resolve().parents[2] / "uploads"
 UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
@@ -43,13 +46,13 @@ def store_photo(org_id: int, filename: str, data: bytes, content_type: str = "im
             Body=data,
             ContentType=content_type,
         )
-        print(f"photo uploaded s3 bucket={settings.s3_bucket}")
+        logger.info("photo uploaded s3 bucket=%s", settings.s3_bucket)
         return f"/media/files/{org_id}/{filename}"
     org_dir = UPLOAD_ROOT / str(org_id)
     org_dir.mkdir(parents=True, exist_ok=True)
     dest = org_dir / filename
     dest.write_bytes(data)
-    print(f"photo uploaded local org={org_id}")
+    logger.info("photo uploaded local org=%s", org_id)
     return f"/media/files/{org_id}/{filename}"
 
 
@@ -67,7 +70,7 @@ def load_photo(org_id: int, filename: str) -> tuple[bytes | None, str | None]:
             ctype = obj.get("ContentType") or "application/octet-stream"
             return body, ctype
         except Exception as exc:  # noqa: BLE001
-            print(f"s3 get failed org={org_id} err={type(exc).__name__}")
+            logger.warning("s3 get failed org=%s err=%s", org_id, type(exc).__name__)
             return None, None
     path = UPLOAD_ROOT / str(org_id) / filename
     if not path.is_file():

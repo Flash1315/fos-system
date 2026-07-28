@@ -2598,7 +2598,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.9"
+    assert health.json()["version"] == "0.7.10"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -3386,4 +3386,98 @@ def test_void_adjustment_blocks_negative_cash(client):
         json={"note": "undo spendings opening"},
     )
     assert ok.status_code == 200, ok.text
+
+
+def test_decide_void_idempotency_keys_and_upload_rate_limit(client, monkeypatch):
+    owner = _register(client, "flow-0710", "v0710-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rid = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 55,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    ).json()["id"]
+    dkey = "decide-once-0710"
+    first = client.post(
+        f"/records/{rid}/decide",
+        headers={**h, "Idempotency-Key": dkey},
+        json={"approve": True},
+    )
+    assert first.status_code == 200, first.text
+    second = client.post(
+        f"/records/{rid}/decide",
+        headers={**h, "Idempotency-Key": dkey},
+        json={"approve": True},
+    )
+    assert second.status_code == 200
+    assert second.json()["id"] == rid
+    assert second.json()["status"] == "approved"
+
+    vkey = "void-rec-once-0710"
+    void1 = client.post(
+        f"/records/{rid}/void",
+        headers={**h, "Idempotency-Key": vkey},
+        json={"note": "mistake"},
+    )
+    assert void1.status_code == 200, void1.text
+    void2 = client.post(
+        f"/records/{rid}/void",
+        headers={**h, "Idempotency-Key": vkey},
+        json={"note": "retry"},
+    )
+    assert void2.status_code == 200
+    assert void2.json()["is_voided"] is True
+
+    adj = client.post(
+        "/adjustments",
+        headers=h,
+        json={
+            "user_id": owner["user"]["id"],
+            "track": "spendings",
+            "amount": 250,
+            "note": "opening",
+        },
+    )
+    assert adj.status_code == 200
+    aid = adj.json()["id"]
+    avkey = "void-adj-once-0710"
+    a1 = client.post(
+        f"/adjustments/{aid}/void",
+        headers={**h, "Idempotency-Key": avkey},
+        json={"note": "undo"},
+    )
+    assert a1.status_code == 200, a1.text
+    a2 = client.post(
+        f"/adjustments/{aid}/void",
+        headers={**h, "Idempotency-Key": avkey},
+        json={"note": "retry"},
+    )
+    assert a2.status_code == 200
+    assert a2.json()["is_voided"] is True
+
+    from app.config import settings
+    from app.services.rate_limit import reset_limiter_for_tests
+
+    monkeypatch.setattr(settings, "rate_limit_enabled", True)
+    reset_limiter_for_tests()
+    jpeg = b"\xff\xd8\xff" + b"0" * 64
+    last = None
+    for _ in range(40):
+        last = client.post(
+            "/media/photo",
+            headers=h,
+            files={"file": ("r.jpg", jpeg, "image/jpeg")},
+        )
+        if last.status_code == 429:
+            break
+    assert last is not None
+    assert last.status_code == 429
+    assert "Retry-After" in last.headers
+    reset_limiter_for_tests()
+    monkeypatch.setattr(settings, "rate_limit_enabled", False)
 

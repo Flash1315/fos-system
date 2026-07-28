@@ -1,9 +1,12 @@
 """Optional SMTP email delivery."""
 
+import logging
 import smtplib
 from email.message import EmailMessage
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def email_configured() -> bool:
@@ -13,7 +16,7 @@ def email_configured() -> bool:
 def send_email(to: str, subject: str, body: str) -> bool:
     """Send plain-text email. Returns True if sent, False if skipped/failed."""
     if not email_configured():
-        print(f"email skipped (no SMTP): subject={subject}")
+        logger.info("email skipped (no SMTP): subject=%s", subject)
         return False
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -27,10 +30,10 @@ def send_email(to: str, subject: str, body: str) -> bool:
             if settings.smtp_user:
                 server.login(settings.smtp_user, settings.smtp_password)
             server.send_message(msg)
-        print(f"email sent subject={subject}")
+        logger.info("email sent subject=%s", subject)
         return True
     except Exception as exc:  # noqa: BLE001 — never fail the API path on mail
-        print(f"email failed subject={subject} err={type(exc).__name__}")
+        logger.warning("email failed subject=%s err=%s", subject, type(exc).__name__)
         return False
 
 

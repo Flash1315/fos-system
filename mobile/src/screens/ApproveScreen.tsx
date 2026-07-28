@@ -40,6 +40,8 @@ export function ApproveScreen({
   const reloadGen = useRef(0);
   const approveBatchIdemRef = useRef<string | null>(null);
   const rejectBatchIdemRef = useRef<string | null>(null);
+  const decideIdemRef = useRef<string | null>(null);
+  const decideSlotRef = useRef<string | null>(null);
   const PAGE = 40;
 
   const reload = async () => {
@@ -135,9 +137,17 @@ export function ApproveScreen({
 
   const doDecide = async (id: number, approve: boolean, note = "") => {
     if (busy) return;
+    const slot = `${id}:${approve ? "a" : "r"}`;
+    if (decideSlotRef.current !== slot) {
+      decideSlotRef.current = slot;
+      decideIdemRef.current = null;
+    }
+    if (!decideIdemRef.current) decideIdemRef.current = makeIdempotencyKey("decide");
     setBusy(true);
     try {
-      await decideRecord(id, approve, note);
+      await decideRecord(id, approve, note, { idempotencyKey: decideIdemRef.current });
+      decideIdemRef.current = null;
+      decideSlotRef.current = null;
       await reload();
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");

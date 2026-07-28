@@ -44,6 +44,8 @@ export function BalancesScreen({
   const payoutIdemRef = useRef<string | null>(null);
   const payoutSlotRef = useRef<string | null>(null);
   const adjustIdemRef = useRef<string | null>(null);
+  const voidAdjIdemRef = useRef<string | null>(null);
+  const voidAdjSlotRef = useRef<number | null>(null);
   const PAGE = 40;
 
   const [userId, setUserId] = useState<number | null>(null);
@@ -457,9 +459,16 @@ export function BalancesScreen({
           const id = voidId;
           setVoidId(null);
           if (id == null) return;
+          if (voidAdjSlotRef.current !== id) {
+            voidAdjSlotRef.current = id;
+            voidAdjIdemRef.current = null;
+          }
+          if (!voidAdjIdemRef.current) voidAdjIdemRef.current = makeIdempotencyKey("avoid");
           markBusy(true);
           try {
-            await voidAdjustment(id, voidNote);
+            await voidAdjustment(id, voidNote, { idempotencyKey: voidAdjIdemRef.current });
+            voidAdjIdemRef.current = null;
+            voidAdjSlotRef.current = null;
             await reload();
           } catch (e) {
             Alert.alert("Fos", e instanceof Error ? e.message : "Failed");

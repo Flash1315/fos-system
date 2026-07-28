@@ -1,11 +1,14 @@
 """Optional Telegram notifications (bot token from env, chat per org)."""
 
 import json
+import logging
 import urllib.error
 import urllib.request
 
 from app.config import settings
 from app.models import Organization
+
+logger = logging.getLogger(__name__)
 
 
 def telegram_configured() -> bool:
@@ -25,10 +28,10 @@ def send_telegram(chat_id: str, text: str) -> bool:
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             ok = 200 <= resp.status < 300
-            print(f"telegram notify ok={ok}")
+            logger.info("telegram notify ok=%s", ok)
             return ok
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        print(f"telegram notify failed err={type(exc).__name__}")
+        logger.warning("telegram notify failed err=%s", type(exc).__name__)
         return False
 
 

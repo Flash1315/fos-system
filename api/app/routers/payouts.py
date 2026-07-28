@@ -313,7 +313,24 @@ def void_payout(
     body: VoidIn,
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="payouts.void",
+            key=key,
+        )
+        if hit:
+            existing = db.get(Payout, hit.resource_id)
+            if existing and existing.organization_id == manager.organization_id:
+                u = db.get(User, existing.user_id)
+                return _payout_out(db, existing, u.full_name if u else "")
     row = db.get(Payout, payout_id)
     if not row or row.organization_id != manager.organization_id:
         raise HTTPException(404, "Payout not found")
@@ -380,6 +397,15 @@ def void_payout(
                 (linked.note or "")
                 + f"\n[cancelled after payout void — amount no longer fits available] {body.note}"
             ).strip()
+    if key:
+        store_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="payouts.void",
+            key=key,
+            resource_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     target = db.get(User, row.user_id)

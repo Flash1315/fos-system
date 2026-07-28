@@ -628,9 +628,15 @@ export function myPendingSettlementCount() {
   return request<{ count: number }>("/payouts/requests/mine/pending/count");
 }
 
-export function decideRecord(id: number, approve: boolean, note = "") {
+export function decideRecord(
+  id: number,
+  approve: boolean,
+  note = "",
+  opts?: { idempotencyKey?: string },
+) {
   return request<MoneyRecord>(`/records/${id}/decide`, {
     method: "POST",
+    headers: { "Idempotency-Key": opts?.idempotencyKey || newIdemKey("decide") },
     body: JSON.stringify({ approve, note }),
   });
 }
@@ -703,9 +709,10 @@ export function cancelRecord(id: number, opts?: { idempotencyKey?: string }) {
   });
 }
 
-export function voidRecord(id: number, note: string) {
+export function voidRecord(id: number, note: string, opts?: { idempotencyKey?: string }) {
   return request<MoneyRecord>(`/records/${id}/void`, {
     method: "POST",
+    headers: { "Idempotency-Key": opts?.idempotencyKey || newIdemKey("void") },
     body: JSON.stringify({ note }),
   });
 }
@@ -778,9 +785,10 @@ export function listOrgPayouts(params?: {
   >(`/payouts/org${suffix}`);
 }
 
-export function voidPayout(id: number, note: string) {
+export function voidPayout(id: number, note: string, opts?: { idempotencyKey?: string }) {
   return request(`/payouts/${id}/void`, {
     method: "POST",
+    headers: { "Idempotency-Key": opts?.idempotencyKey || newIdemKey("pvoid") },
     body: JSON.stringify({ note }),
   });
 }
@@ -973,9 +981,10 @@ export function createAdjustment(
   });
 }
 
-export function voidAdjustment(id: number, note: string) {
+export function voidAdjustment(id: number, note: string, opts?: { idempotencyKey?: string }) {
   return request<BalanceAdjustment>(`/adjustments/${id}/void`, {
     method: "POST",
+    headers: { "Idempotency-Key": opts?.idempotencyKey || newIdemKey("avoid") },
     body: JSON.stringify({ note }),
   });
 }

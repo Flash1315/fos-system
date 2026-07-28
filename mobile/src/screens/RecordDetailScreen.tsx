@@ -57,6 +57,9 @@ export function RecordDetailScreen({
   const [refreshing, setRefreshing] = useState(false);
   const cancelIdemRef = useRef<string | null>(null);
   const commentIdemRef = useRef<string | null>(null);
+  const decideIdemRef = useRef<string | null>(null);
+  const decideSlotRef = useRef<string | null>(null);
+  const voidIdemRef = useRef<string | null>(null);
   const isManager = user.role === "owner" || user.role === "manager";
 
   const applyEditFields = (row: MoneyRecord) => {
@@ -142,9 +145,17 @@ export function RecordDetailScreen({
 
   const doDecide = async (approve: boolean, note = "") => {
     if (busy) return;
+    const slot = approve ? "a" : "r";
+    if (decideSlotRef.current !== slot) {
+      decideSlotRef.current = slot;
+      decideIdemRef.current = null;
+    }
+    if (!decideIdemRef.current) decideIdemRef.current = makeIdempotencyKey("decide");
     setBusy(true);
     try {
-      setRec(await decideRecord(id, approve, note));
+      setRec(await decideRecord(id, approve, note, { idempotencyKey: decideIdemRef.current }));
+      decideIdemRef.current = null;
+      decideSlotRef.current = null;
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
@@ -198,7 +209,9 @@ export function RecordDetailScreen({
         Alert.alert("Fos", fresh.void_blocked_reason || "This record cannot be voided now");
         return;
       }
-      setRec(await voidRecord(id, note));
+      if (!voidIdemRef.current) voidIdemRef.current = makeIdempotencyKey("void");
+      setRec(await voidRecord(id, note, { idempotencyKey: voidIdemRef.current }));
+      voidIdemRef.current = null;
       Alert.alert("Fos", "Record voided");
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");

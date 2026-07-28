@@ -185,7 +185,24 @@ def void_adjustment(
     body: VoidIn,
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="adjustments.void",
+            key=key,
+        )
+        if hit:
+            existing = db.get(BalanceAdjustment, hit.resource_id)
+            if existing and existing.organization_id == manager.organization_id:
+                u = db.get(User, existing.user_id)
+                return _out(existing, u.full_name if u else "", db)
     row = db.get(BalanceAdjustment, adjustment_id)
     if not row or row.organization_id != manager.organization_id:
         raise HTTPException(404, "Adjustment not found")
@@ -217,6 +234,15 @@ def void_adjustment(
     row.voided_at = _utcnow()
     row.voided_by = manager.id
     row.note = (row.note + f"\n[voided] {body.note}").strip()
+    if key:
+        store_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="adjustments.void",
+            key=key,
+            resource_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     return _out(row, target.full_name, db)

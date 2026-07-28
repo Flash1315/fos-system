@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -11,8 +12,10 @@ from app.models import User
 from app.schemas import PhotoOut
 from app.services import storage
 from app.services.images import detect_image, read_upload_capped
+from app.services.rate_limit import enforce_rate_limit
 
 router = APIRouter(tags=["media"])
+logger = logging.getLogger(__name__)
 
 _optional_bearer = HTTPBearer(auto_error=False)
 
@@ -22,13 +25,22 @@ async def upload_photo(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
 ):
+    enforce_rate_limit(
+        f"upload:{user.organization_id}:{user.id}",
+        limit=30,
+        window_sec=60,
+    )
     data = await read_upload_capped(file)
     suffix, content_type = detect_image(data)
     name = f"{uuid.uuid4().hex}{suffix}"
     try:
         url = storage.store_photo(user.organization_id, name, data, content_type)
     except Exception as exc:  # noqa: BLE001
-        print(f"photo upload failed org={user.organization_id}: {type(exc).__name__}")
+        logger.exception(
+            "photo upload failed org=%s err=%s",
+            user.organization_id,
+            type(exc).__name__,
+        )
         raise HTTPException(500, "Upload failed") from exc
     return PhotoOut(photo_url=url)
 

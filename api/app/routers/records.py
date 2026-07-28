@@ -715,7 +715,23 @@ def decide_record(
     body: DecideIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.decide",
+            key=key,
+        )
+        if hit:
+            existing = db.get(MoneyRecord, hit.resource_id)
+            if existing and existing.organization_id == user.organization_id:
+                return _record_out(db, existing)
     rec = db.get(MoneyRecord, record_id)
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
@@ -749,6 +765,15 @@ def decide_record(
     rec.decided_by = user.id
     if body.note:
         rec.comment = (rec.comment + f"\n[review] {body.note}").strip()
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.decide",
+            key=key,
+            resource_id=rec.id,
+        )
     db.commit()
     db.refresh(rec)
     return _record_out(db, rec)
@@ -802,6 +827,7 @@ def void_approved_record(
     body: CommentIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Manager voids an approved record; kept for audit, excluded from balances.
 
@@ -810,7 +836,21 @@ def void_approved_record(
     that payout is voided first.
     """
     from app.services.balances import can_void_record
+    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
 
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.void",
+            key=key,
+        )
+        if hit:
+            existing = db.get(MoneyRecord, hit.resource_id)
+            if existing and existing.organization_id == user.organization_id:
+                return _record_out(db, existing)
     rec = db.get(MoneyRecord, record_id)
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
@@ -843,6 +883,15 @@ def void_approved_record(
         row.voided_at = now
         row.voided_by = user.id
         row.comment = (row.comment + "\n" + note).strip()
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.void",
+            key=key,
+            resource_id=rec.id,
+        )
     db.commit()
     db.refresh(rec)
     return _record_out(db, rec)

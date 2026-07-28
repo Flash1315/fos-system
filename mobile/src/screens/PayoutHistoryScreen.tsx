@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
-import { listMembers, listMyPayouts, listOrgPayouts, voidPayout, type User } from "../api";
+import { listMembers, listMyPayouts, listOrgPayouts, makeIdempotencyKey, voidPayout, type User } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
@@ -47,6 +47,8 @@ export function PayoutHistoryScreen({
   const [loadError, setLoadError] = useState("");
   const [membersError, setMembersError] = useState("");
   const reloadGen = useRef(0);
+  const voidIdemRef = useRef<string | null>(null);
+  const voidSlotRef = useRef<number | null>(null);
   const PAGE = 40;
 
   const loadMembers = async () => {
@@ -281,9 +283,16 @@ export function PayoutHistoryScreen({
           const id = voidId;
           setVoidId(null);
           if (id == null) return;
+          if (voidSlotRef.current !== id) {
+            voidSlotRef.current = id;
+            voidIdemRef.current = null;
+          }
+          if (!voidIdemRef.current) voidIdemRef.current = makeIdempotencyKey("pvoid");
           setBusy(true);
           try {
-            await voidPayout(id, note);
+            await voidPayout(id, note, { idempotencyKey: voidIdemRef.current });
+            voidIdemRef.current = null;
+            voidSlotRef.current = null;
             await reload();
           } catch (e) {
             Alert.alert("Fos", e instanceof Error ? e.message : "Failed");

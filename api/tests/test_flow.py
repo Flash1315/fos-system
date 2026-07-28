@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.21"
+    assert health.json()["version"] == "0.7.22"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -2829,7 +2829,7 @@ def test_media_query_rejects_access_token(client, tmp_path, monkeypatch):
     from app.services import storage
 
     monkeypatch.setattr(storage, "UPLOAD_ROOT", tmp_path)
-    name = "receipt.jpg"
+    name = "a" * 32 + ".jpg"
     path = storage.local_path(oid, name)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"\xff\xd8\xff" + b"0" * 64)
@@ -2837,7 +2837,10 @@ def test_media_query_rejects_access_token(client, tmp_path, monkeypatch):
     # Access JWT must not work via ?token=
     denied = client.get(f"/media/files/{oid}/{name}?token={access}")
     assert denied.status_code == 401
-    # Bearer access still works
+    # Arbitrary legacy names are rejected
+    bad_name = client.get(f"/media/files/{oid}/receipt.jpg", headers=h)
+    assert bad_name.status_code == 400
+    # Bearer access still works for generated names
     ok_bearer = client.get(f"/media/files/{oid}/{name}", headers=h)
     assert ok_bearer.status_code == 200
     media_tok = client.get("/records/media-token", headers=h).json()["access_token"]
@@ -3076,6 +3079,7 @@ def test_auth_login_rate_limit(client, monkeypatch):
     from app.services.rate_limit import reset_limiter_for_tests
 
     monkeypatch.setattr(settings, "rate_limit_enabled", True)
+    monkeypatch.setattr(settings, "trust_x_forwarded_for", True)
     reset_limiter_for_tests()
     # Isolated IP so earlier suite logins do not count against this window
     ip = {"X-Forwarded-For": "203.0.113.77"}
@@ -3098,6 +3102,7 @@ def test_auth_login_rate_limit(client, monkeypatch):
     assert "Retry-After" in last.headers
     reset_limiter_for_tests()
     monkeypatch.setattr(settings, "rate_limit_enabled", False)
+    monkeypatch.setattr(settings, "trust_x_forwarded_for", False)
 
 
 def test_cannot_deactivate_with_pending_and_org_name_trim(client):
@@ -4718,3 +4723,191 @@ def test_row_locks_note_trim_and_expired_reactivate(client):
         json={"is_active": True},
     )
     assert react.status_code == 200, react.text
+
+
+def test_adjustment_reserves_search_escape_and_inactive_approve(client):
+    owner = _register(client, "flow-0722", "v0722-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 100,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+            "place": "100%_literal",
+        },
+    )
+    req = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 60, "note": "hold"},
+    )
+    assert req.status_code == 200, req.text
+
+    # Negative adjustment must not eat pending reserves (available 40)
+    bad_adj = client.post(
+        "/adjustments",
+        headers=h,
+        json={
+            "user_id": uid,
+            "track": "spendings",
+            "amount": -50,
+            "note": "too deep",
+        },
+    )
+    assert bad_adj.status_code == 400
+    assert "reserves" in bad_adj.json()["detail"].lower()
+    ok_adj = client.post(
+        "/adjustments",
+        headers=h,
+        json={
+            "user_id": uid,
+            "track": "spendings",
+            "amount": -30,
+            "note": "within available",
+        },
+    )
+    assert ok_adj.status_code == 200, ok_adj.text
+
+    # Search wildcards are literal
+    hit = client.get("/records/mine?q=100%_literal", headers=h)
+    assert hit.status_code == 200
+    assert any(r["place"] == "100%_literal" for r in hit.json())
+    miss = client.get("/records/mine?q=100Xliteral", headers=h)
+    assert miss.status_code == 200
+    assert all(r.get("place") != "100%_literal" for r in miss.json())
+    too_long = client.get("/records/mine?q=" + ("a" * 81), headers=h)
+    assert too_long.status_code == 400
+
+    # Malformed photo path rejected
+    bad_photo = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 1,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "photo_url": "/media/files/1/not-a-uuid.jpg",
+        },
+    )
+    assert bad_photo.status_code == 400
+
+    # Inactive teammate cannot get settlement approved
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0722-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+            "password_confirm": "secret12",
+        },
+    )
+    assert inv.status_code == 200, inv.text
+    emp_id = inv.json()["id"]
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "v0722-emp@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-0722",
+        },
+    )
+    assert login.status_code == 200
+    eh = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    client.post(
+        "/records",
+        headers=eh,
+        json={
+            "kind": "expense",
+            "amount": 20,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": False,
+        },
+    )
+    # Owner approves then employee requests; deactivate before approve request
+    pending = client.get("/records/pending", headers=h).json()
+    emp_rec = next(r for r in pending if r["created_by"] == emp_id)
+    assert (
+        client.post(
+            f"/records/{emp_rec['id']}/decide",
+            headers=h,
+            json={"approve": True},
+        ).status_code
+        == 200
+    )
+    sreq = client.post(
+        "/payouts/requests",
+        headers=eh,
+        json={"kind": "expense_payout", "amount": 20, "note": "pay"},
+    )
+    assert sreq.status_code == 200, sreq.text
+    # Settle to zero then deactivate
+    assert (
+        client.post(
+            f"/payouts/requests/{sreq.json()['id']}/approve",
+            headers=h,
+            json={"payment_method": "cash"},
+        ).status_code
+        == 200
+    )
+    # New spend + request, then deactivate before approve
+    assert (
+        client.post(
+            "/records",
+            headers=eh,
+            json={
+                "kind": "expense",
+                "amount": 12,
+                "category": "Taxi",
+                "purpose": "Office",
+                "payment_source": "my_pocket",
+            },
+        ).status_code
+        == 200
+    )
+    pending2 = client.get("/records/pending", headers=h).json()
+    emp_rec2 = next(r for r in pending2 if r["created_by"] == emp_id)
+    assert (
+        client.post(
+            f"/records/{emp_rec2['id']}/decide",
+            headers=h,
+            json={"approve": True},
+        ).status_code
+        == 200
+    )
+    sreq2 = client.post(
+        "/payouts/requests",
+        headers=eh,
+        json={"kind": "expense_payout", "amount": 12, "note": "again"},
+    )
+    assert sreq2.status_code == 200, sreq2.text
+    from app.db import SessionLocal
+    from app.models import User
+
+    db = SessionLocal()
+    try:
+        u = db.get(User, emp_id)
+        assert u is not None
+        u.is_active = False
+        db.commit()
+    finally:
+        db.close()
+    blocked = client.post(
+        f"/payouts/requests/{sreq2.json()['id']}/approve",
+        headers=h,
+        json={"payment_method": "cash"},
+    )
+    assert blocked.status_code == 400
+    assert "inactive" in blocked.json()["detail"].lower()

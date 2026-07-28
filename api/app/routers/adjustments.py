@@ -8,9 +8,14 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_roles
 from app.db import get_db
-from app.models import AdjustmentTrack, BalanceAdjustment, User, UserRole
+from app.models import AdjustmentTrack, BalanceAdjustment, PayoutKind, User, UserRole
 from app.routers.records import _utcnow, _validate_occurred_at
-from app.services.balances import adjustment_void_blocked_reason, can_void_adjustment, user_balance
+from app.services.balances import (
+    adjustment_void_blocked_reason,
+    can_void_adjustment,
+    pending_reserved,
+    user_balance,
+)
 
 router = APIRouter(prefix="/adjustments", tags=["adjustments"])
 
@@ -166,6 +171,18 @@ def create_adjustment(
             f"Adjustment would make {body.track.value} negative "
             f"(current {current}, delta {amount})",
         )
+    reserve_kind = (
+        PayoutKind.income_handover
+        if body.track == AdjustmentTrack.cash_on_hand
+        else PayoutKind.expense_payout
+    )
+    reserved = pending_reserved(db, target.id, manager.organization_id, reserve_kind)
+    if current + amount + 1e-6 < reserved:
+        raise HTTPException(
+            400,
+            f"Adjustment would leave {body.track.value} below pending settlement "
+            f"reserves ({reserved}; balance would be {current + amount})",
+        )
     occurred_at = _validate_occurred_at(body.occurred_at) or _utcnow()
     row = BalanceAdjustment(
         organization_id=manager.organization_id,
@@ -292,6 +309,19 @@ def void_adjustment(
             400,
             f"Voiding would make {row.track.value} negative "
             f"(current {current}, adjustment {float(row.amount)})",
+        )
+    reserve_kind = (
+        PayoutKind.income_handover
+        if row.track == AdjustmentTrack.cash_on_hand
+        else PayoutKind.expense_payout
+    )
+    reserved = pending_reserved(db, target.id, manager.organization_id, reserve_kind)
+    after = current - float(row.amount)
+    if after + 1e-6 < reserved:
+        raise HTTPException(
+            400,
+            f"Voiding would leave {row.track.value} below pending settlement "
+            f"reserves ({reserved}; balance would be {after})",
         )
     row.is_voided = True
     row.voided_at = _utcnow()

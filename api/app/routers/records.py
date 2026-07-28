@@ -24,11 +24,22 @@ from app.services.balances import user_balance
 
 router = APIRouter(prefix="/records", tags=["records"])
 
-_PHOTO_RE = re.compile(r"^/media/files/(\d+)/[A-Za-z0-9._-]+$")
+_PHOTO_RE = re.compile(r"^/media/files/(\d+)/([0-9a-f]{32}\.(?:jpg|png|webp))$")
+_SEARCH_MAX = 80
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _search_like(q: str | None) -> str | None:
+    raw = (q or "").strip()
+    if not raw:
+        return None
+    if len(raw) > _SEARCH_MAX:
+        raise HTTPException(400, f"Search query too long (max {_SEARCH_MAX} characters)")
+    escaped = raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 def _validate_photo_url(photo_url: str, org_id: int) -> str:
@@ -37,7 +48,10 @@ def _validate_photo_url(photo_url: str, org_id: int) -> str:
         return ""
     m = _PHOTO_RE.match(url)
     if not m:
-        raise HTTPException(400, "photo_url must be an uploaded /media/files/{org}/{file} path")
+        raise HTTPException(
+            400,
+            "photo_url must be an uploaded /media/files/{org}/{uuid}.{jpg|png|webp} path",
+        )
     if int(m.group(1)) != org_id:
         raise HTTPException(400, "photo_url does not belong to this organization")
     return url
@@ -449,14 +463,14 @@ def my_records(
         query = query.filter(MoneyRecord.is_voided.is_(False))
     if purpose:
         query = query.filter(MoneyRecord.purpose == purpose)
-    if q:
-        like = f"%{q}%"
+    like = _search_like(q)
+    if like:
         query = query.filter(
-            (MoneyRecord.category.ilike(like))
-            | (MoneyRecord.comment.ilike(like))
-            | (MoneyRecord.place.ilike(like))
-            | (MoneyRecord.bike.ilike(like))
-            | (MoneyRecord.client_name.ilike(like))
+            (MoneyRecord.category.ilike(like, escape="\\"))
+            | (MoneyRecord.comment.ilike(like, escape="\\"))
+            | (MoneyRecord.place.ilike(like, escape="\\"))
+            | (MoneyRecord.bike.ilike(like, escape="\\"))
+            | (MoneyRecord.client_name.ilike(like, escape="\\"))
         )
     rows = (
         query.order_by(MoneyRecord.created_at.desc())
@@ -493,14 +507,14 @@ def org_records(
         query = query.filter(MoneyRecord.purpose == purpose)
     if created_by is not None:
         query = query.filter(MoneyRecord.created_by == created_by)
-    if q:
-        like = f"%{q}%"
+    like = _search_like(q)
+    if like:
         query = query.filter(
-            (MoneyRecord.category.ilike(like))
-            | (MoneyRecord.comment.ilike(like))
-            | (MoneyRecord.place.ilike(like))
-            | (MoneyRecord.bike.ilike(like))
-            | (MoneyRecord.client_name.ilike(like))
+            (MoneyRecord.category.ilike(like, escape="\\"))
+            | (MoneyRecord.comment.ilike(like, escape="\\"))
+            | (MoneyRecord.place.ilike(like, escape="\\"))
+            | (MoneyRecord.bike.ilike(like, escape="\\"))
+            | (MoneyRecord.client_name.ilike(like, escape="\\"))
         )
     rows = (
         query.order_by(MoneyRecord.created_at.desc())

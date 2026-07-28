@@ -40,9 +40,10 @@ _limiter = FixedWindowLimiter()
 def client_ip(request: Request | None) -> str:
     if request is None:
         return "unknown"
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip() or "unknown"
+    if settings.trust_x_forwarded_for:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip() or "unknown"
     if request.client and request.client.host:
         return request.client.host
     return "unknown"

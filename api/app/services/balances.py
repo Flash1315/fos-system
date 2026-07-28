@@ -31,7 +31,7 @@ def last_payout(db: Session, org_id: int, user_id: int, kind: PayoutKind) -> Pay
             Payout.kind == kind,
             Payout.is_voided.is_(False),
         )
-        .order_by(Payout.created_at.desc())
+        .order_by(Payout.created_at.desc(), Payout.id.desc())
         .first()
     )
 

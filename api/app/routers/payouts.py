@@ -445,8 +445,8 @@ def void_payout(
     if linked is not None:
         db.flush()
         target = db.get(User, row.user_id)
-        reopen = True
-        if target:
+        reopen = bool(target and target.is_active)
+        if reopen and target:
             bal = user_balance(db, target)
             if row.kind == PayoutKind.expense_payout:
                 track = float(bal.get("spendings") or 0)
@@ -476,6 +476,11 @@ def void_payout(
                 (linked.note or "") + f"\n[reopened after payout void] {body.note}"
             ).strip()
         else:
+            reason = (
+                "teammate inactive or missing"
+                if not target or not target.is_active
+                else "amount no longer fits available"
+            )
             linked.status = SettlementRequestStatus.cancelled
             linked.decided_at = _utcnow()
             linked.decided_by = manager.id
@@ -483,7 +488,7 @@ def void_payout(
             linked.payout_id = None
             linked.note = (
                 (linked.note or "")
-                + f"\n[cancelled after payout void — amount no longer fits available] {body.note}"
+                + f"\n[cancelled after payout void — {reason}] {body.note}"
             ).strip()
     if key:
         store_idem(
@@ -983,6 +988,8 @@ def approve_settlement_request(
     target = db.get(User, req.user_id)
     if not target:
         raise HTTPException(404, "User not found")
+    if not target.is_active:
+        raise HTTPException(400, "Cannot approve — teammate is inactive")
     if method not in PAYMENT_METHODS:
         raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
     from app.services.locks import lock_users

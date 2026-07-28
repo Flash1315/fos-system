@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -18,6 +19,7 @@ router = APIRouter(tags=["media"])
 logger = logging.getLogger(__name__)
 
 _optional_bearer = HTTPBearer(auto_error=False)
+_MEDIA_NAME_RE = re.compile(r"^[0-9a-f]{32}\.(?:jpg|png|webp)$")
 
 
 @router.post("/media/photo", response_model=PhotoOut)
@@ -63,7 +65,7 @@ def get_photo(
         raise HTTPException(401, "Could not validate credentials")
     if org_id != user.organization_id:
         raise HTTPException(403, "Forbidden")
-    if "/" in filename or ".." in filename:
+    if "/" in filename or ".." in filename or not _MEDIA_NAME_RE.match(filename):
         raise HTTPException(400, "Invalid filename")
     if storage.media_backend() == "local":
         path = storage.local_path(org_id, filename)

@@ -66,7 +66,7 @@ export function HomeScreen({
   const PAGE = 40;
 
   useEffect(() => {
-    const t = setTimeout(() => setSearchDebounced(search.trim()), 350);
+    const t = setTimeout(() => setSearchDebounced(search.trim().slice(0, 80)), 350);
     return () => clearTimeout(t);
   }, [search]);
 

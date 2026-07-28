@@ -37,6 +37,8 @@ class Settings(BaseSettings):
 
     # Process-local auth rate limits (disable in pytest)
     rate_limit_enabled: bool = True
+    # Only honor X-Forwarded-For when the app sits behind a trusted reverse proxy
+    trust_x_forwarded_for: bool = False
 
 
 settings = Settings()

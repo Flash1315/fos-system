@@ -610,6 +610,7 @@ export function AccountScreen({
         visible={cancelId != null}
         title="Cancel teammate request"
         required
+        maxLength={2000}
         onCancel={() => setCancelId(null)}
         onSubmit={async (cancelNote) => {
           const id = cancelId;

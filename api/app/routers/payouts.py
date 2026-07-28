@@ -419,6 +419,13 @@ def void_payout(
         require_idem_match,
         store_idem,
     )
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"payout-void:{manager.organization_id}:{manager.id}",
+        limit=30,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     fp = (
@@ -1004,6 +1011,13 @@ def approve_settlement_request(
         require_idem_match,
         store_idem,
     )
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"settle-approve:{manager.organization_id}:{manager.id}",
+        limit=60,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     method = ((body.payment_method if body else None) or "cash").strip().lower()
@@ -1152,6 +1166,13 @@ def cancel_settlement_request(
         normalize_idem_key,
         require_idem_match,
         store_idem,
+    )
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"settle-cancel:{user.organization_id}:{user.id}",
+        limit=60,
+        window_sec=60,
     )
 
     key = normalize_idem_key(idempotency_key)

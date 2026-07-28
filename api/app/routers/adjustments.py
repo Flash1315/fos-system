@@ -266,6 +266,13 @@ def void_adjustment(
         require_idem_match,
         store_idem,
     )
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"adjustment-void:{manager.organization_id}:{manager.id}",
+        limit=30,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     fp = (

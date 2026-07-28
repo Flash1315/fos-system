@@ -466,6 +466,7 @@ export function BalancesScreen({
         title="Void adjustment"
         label="Reason (required). Void reverses this opening/correction."
         required
+        maxLength={2000}
         confirmTitle="Void"
         confirmVariant="danger"
         onCancel={() => setVoidId(null)}

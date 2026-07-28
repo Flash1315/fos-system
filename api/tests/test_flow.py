@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.30"
+    assert health.json()["version"] == "0.7.31"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -5160,7 +5160,7 @@ def test_login_slug_norm_telegram_and_security_headers(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.30"
+    assert health.json()["version"] == "0.7.31"
     assert health.headers.get("x-content-type-options") == "nosniff"
     assert health.headers.get("x-frame-options") == "DENY"
     assert health.headers.get("referrer-policy") == "no-referrer"
@@ -5227,7 +5227,7 @@ def test_login_bounds_password_same_and_transfer_email(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.30"
+    assert health.json()["version"] == "0.7.31"
     assert health.headers.get("cache-control") == "no-store"
 
     # Seed cash via income then transfer with mixed-case email
@@ -5330,7 +5330,7 @@ def test_idem_charset_invite_email_and_org_patch(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.30"
+    assert health.json()["version"] == "0.7.31"
 
 
 def test_logout_bike_normalize_and_register_slug(client):
@@ -5340,7 +5340,7 @@ def test_logout_bike_normalize_and_register_slug(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.30"
+    assert health.json()["version"] == "0.7.31"
     assert health.json()["db"] == "ok"
     assert health.json()["ok"] is True
 
@@ -5407,7 +5407,7 @@ def test_place_client_normalize_and_coop_header(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.30"
+    assert health.json()["version"] == "0.7.31"
     assert health.headers.get("cross-origin-opener-policy") == "same-origin"
 
     rec = client.post(
@@ -5428,3 +5428,62 @@ def test_place_client_normalize_and_coop_header(client):
     body = rec.json()
     assert body["place"] == "Beach Club"
     assert body["client_name"] == "John Doe"
+
+
+def test_slug_shape_category_collapse(client):
+    bad = client.post(
+        "/orgs/register",
+        json={
+            "name": "Bad  Slug",
+            "slug": "flow--0731",
+            "currency": "IDR",
+            "owner_email": "badslug@example.com",
+            "owner_name": "Boss  Name",
+            "owner_password": "secret12",
+            "owner_password_confirm": "secret12",
+        },
+    )
+    assert bad.status_code == 422
+
+    edge = client.post(
+        "/orgs/register",
+        json={
+            "name": "Edge",
+            "slug": "-flow0731",
+            "currency": "IDR",
+            "owner_email": "edge@example.com",
+            "owner_name": "Boss",
+            "owner_password": "secret12",
+            "owner_password_confirm": "secret12",
+        },
+    )
+    assert edge.status_code == 422
+
+    owner = _register(client, "flow-0731", "v0731-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    health = client.get("/health")
+    assert health.json()["version"] == "0.7.31"
+
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 25,
+            "category": "  Bike   service  ",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert rec.status_code == 200, rec.text
+    assert rec.json()["category"] == "Bike service"
+
+    login_bad = client.post(
+        "/auth/login",
+        json={
+            "email": "v0731-owner@example.com",
+            "password": "secret12",
+            "organization_slug": "flow--0731",
+        },
+    )
+    assert login_bad.status_code == 422

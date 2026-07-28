@@ -44,10 +44,17 @@ class OrgCreate(BaseModel):
     @field_validator("name", "owner_name")
     @classmethod
     def strip_required_name(cls, v: str) -> str:
-        cleaned = (v or "").strip()
+        cleaned = re.sub(r"\s+", " ", (v or "").strip())
         if len(cleaned) < 2:
             raise ValueError("must be at least 2 characters")
         return cleaned
+
+    @field_validator("slug")
+    @classmethod
+    def slug_shape(cls, v: str) -> str:
+        if v.startswith("-") or v.endswith("-") or "--" in v:
+            raise ValueError("slug cannot start/end with a hyphen or contain --")
+        return v
 
     @field_validator("currency")
     @classmethod
@@ -83,7 +90,7 @@ class OrgUpdate(BaseModel):
     def strip_name(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        cleaned = v.strip()
+        cleaned = re.sub(r"\s+", " ", v.strip())
         if len(cleaned) < 2:
             raise ValueError("must be at least 2 characters")
         return cleaned
@@ -134,6 +141,8 @@ class LoginIn(BaseModel):
             raise ValueError("organization_slug must be 2–80 characters")
         if not re.fullmatch(r"[a-z0-9-]+", slug):
             raise ValueError("organization_slug: lowercase letters, numbers, hyphens only")
+        if slug.startswith("-") or slug.endswith("-") or "--" in slug:
+            raise ValueError("organization_slug cannot start/end with a hyphen or contain --")
         return slug
 
 
@@ -153,7 +162,7 @@ class InviteIn(BaseModel):
     @field_validator("full_name")
     @classmethod
     def strip_full_name(cls, v: str) -> str:
-        cleaned = (v or "").strip()
+        cleaned = re.sub(r"\s+", " ", (v or "").strip())
         if len(cleaned) < 2:
             raise ValueError("must be at least 2 characters")
         return cleaned

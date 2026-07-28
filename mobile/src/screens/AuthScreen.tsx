@@ -125,8 +125,8 @@ export function AuthScreen({
         Alert.alert("Fos", "Your name must be at least 2 characters");
         return;
       }
-      if (!/^[a-z0-9-]+$/.test(orgSlug.toLowerCase().trim())) {
-        Alert.alert("Fos", "Slug: lowercase letters, numbers, hyphens only");
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(orgSlug.toLowerCase().trim())) {
+        Alert.alert("Fos", "Slug: lowercase letters, numbers, hyphens only (no -- or leading/trailing -)");
         return;
       }
       if (password !== passwordConfirm) {

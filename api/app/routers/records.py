@@ -99,9 +99,11 @@ def _validate_occurred_at(value: datetime | None) -> datetime | None:
 
 
 def _normalize_category_purpose(kind: RecordKind, category: str, purpose: str) -> tuple[str, str]:
-    cat = (category or "").strip()
+    cat = re.sub(r"\s+", " ", (category or "").strip())
     if not cat:
         raise HTTPException(400, "category is required")
+    if len(cat) > 120:
+        raise HTTPException(400, "category too long (max 120)")
     pur = (purpose or "").strip()
     if kind in (RecordKind.expense, RecordKind.fuel):
         if not pur:
@@ -736,6 +738,13 @@ def decide_batch(
         require_idem_match,
         store_idem,
     )
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"record-decide-batch:{user.organization_id}:{user.id}",
+        limit=20,
+        window_sec=60,
+    )
 
     if not body.approve and not (body.note or "").strip():
         raise HTTPException(400, "Reject requires a note")
@@ -938,6 +947,13 @@ def update_pending_record(
         store_idem,
         commit_or_replay,
     )
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"record-update:{user.organization_id}:{user.id}",
+        limit=60,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     fp = (
@@ -1079,6 +1095,13 @@ def decide_record(
         require_idem_match,
         store_idem,
     )
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"record-decide:{user.organization_id}:{user.id}",
+        limit=60,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     fp = (
@@ -1191,6 +1214,13 @@ def comment_record(
         require_idem_match,
         store_idem,
     )
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"record-comment:{user.organization_id}:{user.id}",
+        limit=60,
+        window_sec=60,
+    )
 
     key = normalize_idem_key(idempotency_key)
     fp = (
@@ -1277,6 +1307,13 @@ def void_approved_record(
         normalize_idem_key,
         require_idem_match,
         store_idem,
+    )
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"record-void:{user.organization_id}:{user.id}",
+        limit=30,
+        window_sec=60,
     )
 
     key = normalize_idem_key(idempotency_key)
@@ -1396,6 +1433,13 @@ def cancel_pending_record(
         normalize_idem_key,
         require_idem_match,
         store_idem,
+    )
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"record-cancel:{user.organization_id}:{user.id}",
+        limit=60,
+        window_sec=60,
     )
 
     key = normalize_idem_key(idempotency_key)

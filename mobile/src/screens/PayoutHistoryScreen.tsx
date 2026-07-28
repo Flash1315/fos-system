@@ -276,6 +276,7 @@ export function PayoutHistoryScreen({
         title="Void settlement"
         label="Reason (required). Linked settlement request may reopen or cancel."
         required
+        maxLength={2000}
         confirmTitle="Void"
         confirmVariant="danger"
         onCancel={() => setVoidId(null)}

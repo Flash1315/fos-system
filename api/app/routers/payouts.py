@@ -737,6 +737,15 @@ def approve_settlement_request(
     if not req or req.organization_id != manager.organization_id:
         raise HTTPException(404, "Request not found")
     if req.status != SettlementRequestStatus.pending:
+        # Soft retry: already approved → return linked payout
+        if (
+            req.status == SettlementRequestStatus.approved
+            and req.payout_id is not None
+        ):
+            existing = db.get(Payout, req.payout_id)
+            if existing and existing.organization_id == manager.organization_id:
+                u = db.get(User, existing.user_id)
+                return _payout_out(db, existing, u.full_name if u else "")
         raise HTTPException(400, "Request already decided")
     target = db.get(User, req.user_id)
     if not target:
@@ -799,7 +808,24 @@ def cancel_settlement_request(
     body: CancelRequestIn = CancelRequestIn(),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="payouts.cancel_request",
+            key=key,
+        )
+        if hit:
+            existing = db.get(SettlementRequest, hit.resource_id)
+            if existing and existing.organization_id == user.organization_id:
+                u = db.get(User, existing.user_id)
+                return _request_out(existing, u.full_name if u else "")
     req = db.get(SettlementRequest, request_id)
     if not req or req.organization_id != user.organization_id:
         raise HTTPException(404, "Request not found")
@@ -807,6 +833,9 @@ def cancel_settlement_request(
     if req.user_id != user.id and not is_manager:
         raise HTTPException(403, "Insufficient role")
     if req.status != SettlementRequestStatus.pending:
+        if req.status == SettlementRequestStatus.cancelled:
+            u = db.get(User, req.user_id)
+            return _request_out(req, u.full_name if u else "")
         raise HTTPException(400, "Request already decided")
     # Manager cancelling someone else's request must leave a note
     if req.user_id != user.id and not (body.note or "").strip():
@@ -816,6 +845,15 @@ def cancel_settlement_request(
     req.decided_by = user.id
     if (body.note or "").strip():
         req.note = (req.note + f"\n[cancelled] {body.note.strip()}").strip()
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="payouts.cancel_request",
+            key=key,
+            resource_id=req.id,
+        )
     db.commit()
     db.refresh(req)
     u = db.get(User, req.user_id)

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Platform, View, StyleSheet } from "react-native";
+import { Alert, View, StyleSheet } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import {
   createRecord,
@@ -212,13 +212,12 @@ export function CreateScreen({
     const mime = (asset.mimeType || "").toLowerCase();
     const fname = (asset.fileName || asset.uri || "").toLowerCase();
     if (
-      Platform.OS === "web" &&
-      (mime.includes("heic") ||
-        mime.includes("heif") ||
-        fname.endsWith(".heic") ||
-        fname.endsWith(".heif"))
+      mime.includes("heic") ||
+      mime.includes("heif") ||
+      fname.endsWith(".heic") ||
+      fname.endsWith(".heif")
     ) {
-      Alert.alert("Fos", "HEIC is not supported in the browser. Choose JPEG, PNG, or WebP.");
+      Alert.alert("Fos", "HEIC/HEIF is not supported. Choose JPEG, PNG, or WebP.");
       return;
     }
     setBusy(true);

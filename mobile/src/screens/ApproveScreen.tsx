@@ -261,6 +261,16 @@ export function ApproveScreen({
           />
         ))}
       </View>
+      {(!!purpose || !!kind) && (
+        <Btn
+          title="Clear filters"
+          variant="ghost"
+          onPress={() => {
+            setPurpose("");
+            setKind("");
+          }}
+        />
+      )}
       {rows.length > 0 && (
         <Row>
           <Btn

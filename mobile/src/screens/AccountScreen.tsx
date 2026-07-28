@@ -76,6 +76,10 @@ export function AccountScreen({
   const [refreshing, setRefreshing] = useState(false);
   const PAGE = 40;
   const requestIdemRef = useRef<string | null>(null);
+  const approveIdemRef = useRef<string | null>(null);
+  const approveSlotRef = useRef<number | null>(null);
+  const cancelIdemRef = useRef<string | null>(null);
+  const cancelSlotRef = useRef<number | null>(null);
 
   const reloadOrg = async () => {
     try {
@@ -301,10 +305,19 @@ export function AccountScreen({
 
   const doApproveRequest = async (id: number, paymentMethod: "cash" | "transfer") => {
     if (busy) return;
+    if (approveSlotRef.current !== id) {
+      approveSlotRef.current = id;
+      approveIdemRef.current = null;
+    }
+    if (!approveIdemRef.current) approveIdemRef.current = makeIdempotencyKey("appr");
     setBusy(true);
     try {
       await reloadRequests();
-      await approveSettlementRequest(id, paymentMethod);
+      await approveSettlementRequest(id, paymentMethod, {
+        idempotencyKey: approveIdemRef.current,
+      });
+      approveIdemRef.current = null;
+      approveSlotRef.current = null;
       await reloadRequests();
       await refreshSuggestedAmount();
     } catch (e) {
@@ -470,9 +483,20 @@ export function AccountScreen({
                       text: "Cancel request",
                       style: "destructive",
                       onPress: async () => {
+                        if (cancelSlotRef.current !== r.id) {
+                          cancelSlotRef.current = r.id;
+                          cancelIdemRef.current = null;
+                        }
+                        if (!cancelIdemRef.current) {
+                          cancelIdemRef.current = makeIdempotencyKey("scancel");
+                        }
                         setBusy(true);
                         try {
-                          await cancelSettlementRequest(r.id);
+                          await cancelSettlementRequest(r.id, "", {
+                            idempotencyKey: cancelIdemRef.current,
+                          });
+                          cancelIdemRef.current = null;
+                          cancelSlotRef.current = null;
                           await refreshSuggestedAmount();
                           await reloadRequests();
                         } catch (e) {
@@ -578,9 +602,18 @@ export function AccountScreen({
           const id = cancelId;
           setCancelId(null);
           if (id == null) return;
+          if (cancelSlotRef.current !== id) {
+            cancelSlotRef.current = id;
+            cancelIdemRef.current = null;
+          }
+          if (!cancelIdemRef.current) cancelIdemRef.current = makeIdempotencyKey("scancel");
           setBusy(true);
           try {
-            await cancelSettlementRequest(id, cancelNote);
+            await cancelSettlementRequest(id, cancelNote, {
+              idempotencyKey: cancelIdemRef.current,
+            });
+            cancelIdemRef.current = null;
+            cancelSlotRef.current = null;
             await reloadRequests();
           } catch (e) {
             Alert.alert("Fos", e instanceof Error ? e.message : "Failed");

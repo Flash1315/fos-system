@@ -47,5 +47,8 @@ def detect_image(data: bytes) -> tuple[str, str]:
         if brand in heic_brands or any(
             b in data[8:24].lower() for b in (b"heic", b"heif", b"heix")
         ):
-            return ".heic", "image/heic"
+            raise HTTPException(
+                400,
+                "HEIC/HEIF is not supported. Upload JPEG, PNG, or WebP.",
+            )
     raise HTTPException(400, "Only image uploads allowed")

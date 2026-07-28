@@ -184,6 +184,17 @@ export function PayoutHistoryScreen({
           ))}
         </View>
       )}
+      {(voidFilter !== "active" || !!kindFilter || userFilter != null) && (
+        <Btn
+          title="Clear filters"
+          variant="ghost"
+          onPress={() => {
+            setVoidFilter("active");
+            setKindFilter("");
+            setUserFilter(null);
+          }}
+        />
+      )}
       <FlatList
         data={rows}
         keyExtractor={(item) => String(item.id)}

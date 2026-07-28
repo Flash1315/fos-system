@@ -197,11 +197,26 @@ def void_adjustment(
             400,
             "Adjustment is locked by a later settlement. Void that payout first.",
         )
+    target = db.get(User, row.user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    bal = user_balance(db, target)
+    current = (
+        float(bal.get("cash_on_hand") or 0)
+        if row.track == AdjustmentTrack.cash_on_hand
+        else float(bal.get("spendings") or 0)
+    )
+    # Void reverses the delta: balance becomes current - amount
+    if current - float(row.amount) < -1e-6:
+        raise HTTPException(
+            400,
+            f"Voiding would make {row.track.value} negative "
+            f"(current {current}, adjustment {float(row.amount)})",
+        )
     row.is_voided = True
     row.voided_at = _utcnow()
     row.voided_by = manager.id
     row.note = (row.note + f"\n[voided] {body.note}").strip()
     db.commit()
     db.refresh(row)
-    u = db.get(User, row.user_id)
-    return _out(row, u.full_name if u else "", db)
+    return _out(row, target.full_name, db)

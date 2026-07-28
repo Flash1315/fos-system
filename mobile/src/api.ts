@@ -902,11 +902,9 @@ export function listSettlementRequests(params?: {
 export function approveSettlementRequest(
   id: number,
   paymentMethod: "cash" | "transfer" = "cash",
+  opts?: { idempotencyKey?: string },
 ) {
-  const idem =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `appr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const idem = opts?.idempotencyKey || newIdemKey("appr");
   return request(`/payouts/requests/${id}/approve`, {
     method: "POST",
     headers: { "Idempotency-Key": idem },
@@ -914,9 +912,14 @@ export function approveSettlementRequest(
   });
 }
 
-export function cancelSettlementRequest(id: number, note = "") {
+export function cancelSettlementRequest(
+  id: number,
+  note = "",
+  opts?: { idempotencyKey?: string },
+) {
   return request(`/payouts/requests/${id}/cancel`, {
     method: "POST",
+    headers: { "Idempotency-Key": opts?.idempotencyKey || newIdemKey("scancel") },
     body: JSON.stringify({ note }),
   });
 }

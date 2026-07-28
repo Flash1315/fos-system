@@ -345,6 +345,17 @@ export function BalancesScreen({
                 onPress={() => setAdjTrackFilter("cash_on_hand")}
               />
             </View>
+            {(adjFilter !== "active" || adjUserFilter != null || !!adjTrackFilter) && (
+              <Btn
+                title="Clear filters"
+                variant="ghost"
+                onPress={() => {
+                  setAdjFilter("active");
+                  setAdjUserFilter(null);
+                  setAdjTrackFilter("");
+                }}
+              />
+            )}
             {adjustments.length === 0 ? (
               <Sub>{emptyAdjLabel}</Sub>
             ) : (

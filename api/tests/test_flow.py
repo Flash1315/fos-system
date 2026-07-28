@@ -2598,7 +2598,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.8"
+    assert health.json()["version"] == "0.7.9"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -3225,4 +3225,165 @@ def test_decide_batch_skips_inactive_creator(client):
     )
     assert only_inactive.status_code == 400
     assert "inactive" in only_inactive.json()["detail"].lower()
+
+
+def test_settlement_approve_cancel_soft_retry_and_heic_reject(client):
+    owner = _register(client, "flow-079", "v079-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 5000,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    req = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 5000, "note": "reimburse"},
+    )
+    assert req.status_code == 200, req.text
+    rid = req.json()["id"]
+    key = "approve-req-once-079"
+    first = client.post(
+        f"/payouts/requests/{rid}/approve",
+        headers={**h, "Idempotency-Key": key},
+        json={"payment_method": "cash"},
+    )
+    assert first.status_code == 200, first.text
+    payout_id = first.json()["id"]
+    # Soft retry without key after already approved
+    again = client.post(
+        f"/payouts/requests/{rid}/approve",
+        headers=h,
+        json={"payment_method": "cash"},
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["id"] == payout_id
+    # Idempotency key replay
+    replay = client.post(
+        f"/payouts/requests/{rid}/approve",
+        headers={**h, "Idempotency-Key": key},
+        json={"payment_method": "cash"},
+    )
+    assert replay.status_code == 200
+    assert replay.json()["id"] == payout_id
+    # Cannot cancel an approved request
+    bad_cancel = client.post(
+        f"/payouts/requests/{rid}/cancel",
+        headers=h,
+        json={"note": "too late"},
+    )
+    assert bad_cancel.status_code == 400
+
+    req2 = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 1, "note": "tiny"},
+    )
+    # amount may fail if no spendings left — use leftover 0 path: create another expense first
+    if req2.status_code != 200:
+        client.post(
+            "/records",
+            headers=h,
+            json={
+                "kind": "expense",
+                "amount": 1200,
+                "category": "Food",
+                "purpose": "Office",
+                "payment_source": "my_pocket",
+                "approve_now": True,
+            },
+        )
+        req2 = client.post(
+            "/payouts/requests",
+            headers=h,
+            json={"kind": "expense_payout", "amount": 1200, "note": "tiny"},
+        )
+    assert req2.status_code == 200, req2.text
+    rid2 = req2.json()["id"]
+    ckey = "cancel-req-once-079"
+    c1 = client.post(
+        f"/payouts/requests/{rid2}/cancel",
+        headers={**h, "Idempotency-Key": ckey},
+        json={"note": ""},
+    )
+    assert c1.status_code == 200, c1.text
+    assert c1.json()["status"] == "cancelled"
+    c2 = client.post(
+        f"/payouts/requests/{rid2}/cancel",
+        headers={**h, "Idempotency-Key": ckey},
+        json={"note": ""},
+    )
+    assert c2.status_code == 200
+    assert c2.json()["id"] == rid2
+    c3 = client.post(f"/payouts/requests/{rid2}/cancel", headers=h, json={"note": ""})
+    assert c3.status_code == 200
+    assert c3.json()["status"] == "cancelled"
+
+    heic = b"\x00\x00\x00\x18ftypheic" + b"\x00" * 32
+    rejected = client.post(
+        "/media/photo",
+        headers=h,
+        files={"file": ("shot.heic", heic, "image/heic")},
+    )
+    assert rejected.status_code == 400
+    assert "heic" in rejected.json()["detail"].lower()
+
+
+def test_void_adjustment_blocks_negative_cash(client):
+    owner = _register(client, "flow-adj-void-neg", "adjvoidneg@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    adj = client.post(
+        "/adjustments",
+        headers=h,
+        json={
+            "user_id": uid,
+            "track": "cash_on_hand",
+            "amount": 10000,
+            "note": "opening cash",
+        },
+    )
+    assert adj.status_code == 200, adj.text
+    aid = adj.json()["id"]
+    spend = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 8000,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "cash_on_hand",
+            "approve_now": True,
+        },
+    )
+    assert spend.status_code == 200, spend.text
+    bad = client.post(f"/adjustments/{aid}/void", headers=h, json={"note": "undo opening"})
+    assert bad.status_code == 400
+    assert "negative" in bad.json()["detail"].lower()
+    # Spendings void with room still works
+    adj2 = client.post(
+        "/adjustments",
+        headers=h,
+        json={
+            "user_id": uid,
+            "track": "spendings",
+            "amount": 500,
+            "note": "opening spendings",
+        },
+    )
+    assert adj2.status_code == 200
+    ok = client.post(
+        f"/adjustments/{adj2.json()['id']}/void",
+        headers=h,
+        json={"note": "undo spendings opening"},
+    )
+    assert ok.status_code == 200, ok.text
 

@@ -2596,7 +2596,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.7"
+    assert health.json()["version"] == "0.7.8"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -3052,4 +3052,175 @@ def test_cannot_approve_inactive_creator_record(client):
         json={"approve": False, "note": "inactive teammate"},
     )
     assert ok.status_code == 200
+
+
+def test_decide_batch_comment_cancel_idempotency_and_currency(client):
+    owner = _register(client, "flow-078", "v078-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    bad_cur = client.patch("/orgs/me", headers=h, json={"currency": "EURO"})
+    assert bad_cur.status_code == 422
+    bad_cur2 = client.patch("/orgs/me", headers=h, json={"currency": "US"})
+    assert bad_cur2.status_code == 422
+
+    a = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 15,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    ).json()
+    assert a["created_by_active"] is True
+    b = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 25,
+            "category": "Food",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    ).json()["id"]
+
+    batch_headers = {**h, "Idempotency-Key": "decide-batch-once-078"}
+    first = client.post(
+        "/records/decide-batch",
+        headers=batch_headers,
+        json={"ids": [a["id"], b], "approve": True},
+    )
+    assert first.status_code == 200, first.text
+    assert len(first.json()["decided"]) == 2
+    assert first.json().get("skipped_inactive", 0) == 0
+    second = client.post(
+        "/records/decide-batch",
+        headers=batch_headers,
+        json={"ids": [a["id"], b], "approve": True},
+    )
+    assert second.status_code == 200
+    assert [r["id"] for r in second.json()["decided"]] == [
+        r["id"] for r in first.json()["decided"]
+    ]
+
+    c = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 8,
+            "category": "Supplies",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    ).json()["id"]
+    cmt_headers = {**h, "Idempotency-Key": "comment-once-078"}
+    c1 = client.post(f"/records/{c}/comment", headers=cmt_headers, json={"note": "first note"})
+    assert c1.status_code == 200
+    assert "first note" in c1.json()["comment"]
+    c2 = client.post(f"/records/{c}/comment", headers=cmt_headers, json={"note": "retry note"})
+    assert c2.status_code == 200
+    assert c2.json()["comment"] == c1.json()["comment"]
+    assert "retry note" not in c2.json()["comment"]
+
+    d = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 9,
+            "category": "Supplies",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    ).json()["id"]
+    cancel_headers = {**h, "Idempotency-Key": "cancel-once-078"}
+    x1 = client.delete(f"/records/{d}", headers=cancel_headers)
+    assert x1.status_code == 200
+    assert x1.json()["status"] == "rejected"
+    x2 = client.delete(f"/records/{d}", headers=cancel_headers)
+    assert x2.status_code == 200
+    assert x2.json()["id"] == d
+    # Already-cancelled without key also succeeds
+    x3 = client.delete(f"/records/{d}", headers=h)
+    assert x3.status_code == 200
+
+
+def test_decide_batch_skips_inactive_creator(client):
+    owner = _register(client, "flow-batch-inact", "batchinact-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "batchinact-emp@example.com",
+            "full_name": "Emp",
+            "role": "employee",
+            "password": "secret12",
+        },
+    )
+    emp_id = inv.json()["id"]
+    emp_h = {
+        "Authorization": f"Bearer {client.post('/auth/login', json={'email': 'batchinact-emp@example.com', 'password': 'secret12', 'organization_slug': 'flow-batch-inact'}).json()['access_token']}"
+    }
+    inactive_rid = client.post(
+        "/records",
+        headers=emp_h,
+        json={
+            "kind": "expense",
+            "amount": 30,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    ).json()["id"]
+    active_rid = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 12,
+            "category": "Food",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    ).json()["id"]
+
+    from app.db import SessionLocal
+    from app.models import User
+
+    db = SessionLocal()
+    try:
+        u = db.get(User, emp_id)
+        u.is_active = False
+        db.commit()
+    finally:
+        db.close()
+
+    pending = client.get(f"/records/{inactive_rid}", headers=h)
+    assert pending.status_code == 200
+    assert pending.json()["created_by_active"] is False
+
+    res = client.post(
+        "/records/decide-batch",
+        headers=h,
+        json={"ids": [inactive_rid, active_rid], "approve": True},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert len(body["decided"]) == 1
+    assert body["decided"][0]["id"] == active_rid
+    assert body["skipped_inactive"] == 1
+    assert body["skipped"] >= 1
+
+    only_inactive = client.post(
+        "/records/decide-batch",
+        headers=h,
+        json={"ids": [inactive_rid], "approve": True},
+    )
+    assert only_inactive.status_code == 400
+    assert "inactive" in only_inactive.json()["detail"].lower()
 

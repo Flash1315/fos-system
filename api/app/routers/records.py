@@ -106,6 +106,7 @@ def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
     return data.model_copy(
         update={
             "created_by_name": creator.full_name if creator else "",
+            "created_by_active": bool(creator.is_active) if creator else False,
             "decided_by_name": decider.full_name if decider else "",
             "can_void": can_void_record(db, rec),
             "void_blocked_reason": void_blocked_reason(db, rec),
@@ -523,13 +524,36 @@ def decide_batch(
     body: DecideBatchIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Approve/reject many pending records in one call."""
+    from app.services.idempotency import (
+        dumps_json,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        store_idem,
+    )
+
     if not body.approve and not (body.note or "").strip():
         raise HTTPException(400, "Reject requires a note")
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.decide_batch",
+            key=key,
+        )
+        if hit and hit.response_json:
+            cached = loads_json(hit.response_json)
+            if isinstance(cached, dict):
+                return DecideBatchOut.model_validate(cached)
     out = []
     skipped = 0
     skipped_cash = 0
+    skipped_inactive = 0
     # Track cash_on_hand spend approved in this batch (session autoflush is off).
     extra_cash_spent: dict[int, float] = {}
     for rid in body.ids:
@@ -544,6 +568,7 @@ def decide_batch(
             creator = db.get(User, rec.created_by)
             if creator is not None and not creator.is_active:
                 skipped += 1
+                skipped_inactive += 1
                 continue
             spent = extra_cash_spent.get(rec.created_by, 0.0)
             if rec.kind == RecordKind.fuel:
@@ -579,14 +604,37 @@ def decide_batch(
                 400,
                 "No records approved — insufficient cash on hand for the selected spend",
             )
+        if skipped_inactive > 0:
+            raise HTTPException(
+                400,
+                "No records approved — selected records belong to inactive teammates",
+            )
         raise HTTPException(400, "No pending records matched the given ids")
+    payload = DecideBatchOut(
+        decided=[_record_out(db, r) for r in out],
+        skipped=skipped,
+        skipped_insufficient_cash=skipped_cash,
+        skipped_inactive=skipped_inactive,
+    )
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.decide_batch",
+            key=key,
+            resource_id=out[0].id,
+            response_json=dumps_json(payload.model_dump(mode="json")),
+        )
     db.commit()
     for rec in out:
         db.refresh(rec)
+    # Rebuild after refresh so timestamps/ids are current
     return DecideBatchOut(
         decided=[_record_out(db, r) for r in out],
         skipped=skipped,
         skipped_insufficient_cash=skipped_cash,
+        skipped_inactive=skipped_inactive,
     )
 
 
@@ -712,12 +760,37 @@ def comment_record(
     body: CommentIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.comment",
+            key=key,
+        )
+        if hit:
+            existing = db.get(MoneyRecord, hit.resource_id)
+            if existing and existing.organization_id == user.organization_id:
+                return _record_out(db, existing)
     rec = db.get(MoneyRecord, record_id)
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
     stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
     rec.comment = (rec.comment + f"\n[mgr {user.full_name} {stamp}] {body.note}").strip()
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.comment",
+            key=key,
+            resource_id=rec.id,
+        )
     db.commit()
     db.refresh(rec)
     return _record_out(db, rec)
@@ -780,8 +853,24 @@ def cancel_pending_record(
     record_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Creator (or manager) can cancel a still-pending record by rejecting it."""
+    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.cancel",
+            key=key,
+        )
+        if hit:
+            existing = db.get(MoneyRecord, hit.resource_id)
+            if existing and existing.organization_id == user.organization_id:
+                return _record_out(db, existing)
     rec = db.get(MoneyRecord, record_id)
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
@@ -789,11 +878,22 @@ def cancel_pending_record(
     if rec.created_by != user.id and not is_manager:
         raise HTTPException(403, "Insufficient role")
     if rec.status != RecordStatus.pending:
+        if rec.status == RecordStatus.rejected and "[cancelled]" in (rec.comment or ""):
+            return _record_out(db, rec)
         raise HTTPException(400, "Only pending records can be cancelled")
     rec.status = RecordStatus.rejected
     rec.decided_at = _utcnow()
     rec.decided_by = user.id
     rec.comment = (rec.comment + "\n[cancelled]").strip()
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="records.cancel",
+            key=key,
+            resource_id=rec.id,
+        )
     db.commit()
     db.refresh(rec)
     return _record_out(db, rec)

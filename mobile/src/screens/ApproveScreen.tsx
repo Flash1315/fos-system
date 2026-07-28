@@ -3,6 +3,7 @@ import { Alert, FlatList, RefreshControl, Text, View, StyleSheet } from "react-n
 import {
   decideBatch,
   decideRecord,
+  makeIdempotencyKey,
   pendingRecords,
   pendingSettlementCount,
   type MoneyRecord,
@@ -37,6 +38,8 @@ export function ApproveScreen({
   const [kind, setKind] = useState<"" | "expense" | "fuel" | "income">("");
   const [settlementPending, setSettlementPending] = useState(0);
   const reloadGen = useRef(0);
+  const approveBatchIdemRef = useRef<string | null>(null);
+  const rejectBatchIdemRef = useRef<string | null>(null);
   const PAGE = 40;
 
   const reload = async () => {
@@ -101,6 +104,10 @@ export function ApproveScreen({
     if (busy) return;
     if (approve) {
       const row = rows.find((r) => r.id === id);
+      if (row?.created_by_active === false) {
+        Alert.alert("Fos", "Cannot approve — teammate is inactive. Reject instead.");
+        return;
+      }
       if (row?.is_in_closed_cycle) {
         Alert.alert(
           "Fos",
@@ -146,15 +153,23 @@ export function ApproveScreen({
       if (busy) return;
       setBusy(true);
       try {
+        if (!approveBatchIdemRef.current) {
+          approveBatchIdemRef.current = makeIdempotencyKey("dbatch-a");
+        }
         const res = await decideBatch(
           rows.map((r) => r.id),
           true,
+          "",
+          { idempotencyKey: approveBatchIdemRef.current },
         );
+        approveBatchIdemRef.current = null;
         if (res.skipped > 0) {
           const cash = res.skipped_insufficient_cash || 0;
-          const other = res.skipped - cash;
+          const inactive = res.skipped_inactive || 0;
+          const other = res.skipped - cash - inactive;
           const parts = [`Approved ${res.decided.length}`];
           if (cash > 0) parts.push(`skipped ${cash} (insufficient cash)`);
+          if (inactive > 0) parts.push(`skipped ${inactive} (inactive teammate)`);
           if (other > 0) parts.push(`skipped ${other} (already decided or missing)`);
           Alert.alert("Fos", parts.join("; "));
         }
@@ -186,16 +201,23 @@ export function ApproveScreen({
     if (busy || !rows.length) return;
     setBusy(true);
     try {
+      if (!rejectBatchIdemRef.current) {
+        rejectBatchIdemRef.current = makeIdempotencyKey("dbatch-r");
+      }
       const res = await decideBatch(
         rows.map((r) => r.id),
         false,
         note || "batch reject",
+        { idempotencyKey: rejectBatchIdemRef.current },
       );
+      rejectBatchIdemRef.current = null;
       if (res.skipped > 0) {
         const cash = res.skipped_insufficient_cash || 0;
-        const other = res.skipped - cash;
+        const inactive = res.skipped_inactive || 0;
+        const other = res.skipped - cash - inactive;
         const parts = [`Rejected ${res.decided.length}`];
         if (cash > 0) parts.push(`skipped ${cash} (insufficient cash)`);
+        if (inactive > 0) parts.push(`skipped ${inactive} (inactive teammate)`);
         if (other > 0) parts.push(`skipped ${other} (already decided or missing)`);
         Alert.alert("Fos", parts.join("; "));
       }
@@ -300,6 +322,7 @@ export function ApproveScreen({
                 : item.payment_source === "cash_on_hand"
                   ? " · cash"
                   : ""}
+              {item.created_by_active === false ? " · Inactive teammate" : ""}
             </Text>
             <Text style={styles.rowMeta}>{formatWhen(item.created_at)}</Text>
             {!!item.is_in_closed_cycle && (
@@ -312,7 +335,11 @@ export function ApproveScreen({
               </Text>
             )}
             <Row>
-              <Btn title="Approve" disabled={busy} onPress={() => runDecide(item.id, true)} />
+              <Btn
+                title={item.created_by_active === false ? "Inactive" : "Approve"}
+                disabled={busy || item.created_by_active === false}
+                onPress={() => runDecide(item.id, true)}
+              />
               <Btn
                 title="Reject"
                 variant="danger"

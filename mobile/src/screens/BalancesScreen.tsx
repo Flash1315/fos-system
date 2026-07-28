@@ -4,6 +4,7 @@ import {
   createAdjustment,
   createPayout,
   listAdjustments,
+  makeIdempotencyKey,
   myOrg,
   teamBalances,
   voidAdjustment,
@@ -40,6 +41,9 @@ export function BalancesScreen({
   const [adjHasMore, setAdjHasMore] = useState(false);
   const [loadingMoreAdj, setLoadingMoreAdj] = useState(false);
   const reloadGen = useRef(0);
+  const payoutIdemRef = useRef<string | null>(null);
+  const payoutSlotRef = useRef<string | null>(null);
+  const adjustIdemRef = useRef<string | null>(null);
   const PAGE = 40;
 
   const [userId, setUserId] = useState<number | null>(null);
@@ -107,6 +111,10 @@ export function BalancesScreen({
     void reload();
   }, [adjFilter, adjUserFilter, adjTrackFilter]);
 
+  React.useEffect(() => {
+    adjustIdemRef.current = null;
+  }, [userId, track]);
+
   const settle = async (
     item: TeamBalance,
     kind: "expense_payout" | "income_handover",
@@ -129,6 +137,15 @@ export function BalancesScreen({
       kind === "expense_payout"
         ? `Pay ${item.full_name} expense reimbursement ${formatMoney(value, currency)}?`
         : `Take cash handover ${formatMoney(value, currency)} from ${item.full_name}?`;
+    const slot = `${item.user_id}:${kind}`;
+    if (payoutSlotRef.current !== slot) {
+      payoutSlotRef.current = slot;
+      payoutIdemRef.current = null;
+    }
+    if (!payoutIdemRef.current) {
+      payoutIdemRef.current = makeIdempotencyKey(kind === "expense_payout" ? "pay" : "cash");
+    }
+    const settleKey = payoutIdemRef.current;
     Alert.alert("Fos", label, [
       { text: "Cancel", style: "cancel" },
       {
@@ -151,16 +168,21 @@ export function BalancesScreen({
               );
               return;
             }
-            await createPayout({
-              user_id: item.user_id,
-              kind,
-              amount: Math.min(value, available),
-              payment_method: "cash",
-              note:
-                kind === "expense_payout"
-                  ? "quick pay from balances"
-                  : "quick take from balances",
-            });
+            await createPayout(
+              {
+                user_id: item.user_id,
+                kind,
+                amount: Math.min(value, available),
+                payment_method: "cash",
+                note:
+                  kind === "expense_payout"
+                    ? "quick pay from balances"
+                    : "quick take from balances",
+              },
+              { idempotencyKey: settleKey },
+            );
+            payoutIdemRef.current = null;
+            payoutSlotRef.current = null;
             await reload();
           } catch (e) {
             Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -191,12 +213,17 @@ export function BalancesScreen({
             if (isBusy) return;
             markBusy(true);
             try {
-              await createAdjustment({
-                user_id: userId,
-                track,
-                amount: value,
-                note: note.trim(),
-              });
+              if (!adjustIdemRef.current) adjustIdemRef.current = makeIdempotencyKey("adj");
+              await createAdjustment(
+                {
+                  user_id: userId,
+                  track,
+                  amount: value,
+                  note: note.trim(),
+                },
+                { idempotencyKey: adjustIdemRef.current },
+              );
+              adjustIdemRef.current = null;
               setAmount("");
               setNote("");
               await reload();

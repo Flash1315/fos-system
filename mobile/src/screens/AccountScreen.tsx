@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import {
   billingMe,
   changePassword,
   listSettlementRequests,
   listMySettlementRequests,
+  makeIdempotencyKey,
   myBalance,
   myOrg,
   requestSettlement,
@@ -74,6 +75,7 @@ export function AccountScreen({
   const [loadingMoreTeam, setLoadingMoreTeam] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const PAGE = 40;
+  const requestIdemRef = useRef<string | null>(null);
 
   const reloadOrg = async () => {
     try {
@@ -275,9 +277,14 @@ export function AccountScreen({
         text: "Send",
         onPress: async () => {
           if (busy) return;
+          if (!requestIdemRef.current) requestIdemRef.current = makeIdempotencyKey("sreq");
           setBusy(true);
           try {
-            await requestSettlement({ kind, amount: value, note });
+            await requestSettlement(
+              { kind, amount: value, note },
+              { idempotencyKey: requestIdemRef.current },
+            );
+            requestIdemRef.current = null;
             Alert.alert("Fos", "Settlement request sent to managers");
             setNote("");
             await refreshSuggestedAmount();

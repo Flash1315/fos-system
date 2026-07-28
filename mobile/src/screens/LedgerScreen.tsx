@@ -109,6 +109,19 @@ export function LedgerScreen({
         placeholder="Search category, place, bike, comment…"
         autoCapitalize="none"
       />
+      {(!!status || !!kind || !!purpose || memberId != null || !!search) && (
+        <Btn
+          title="Clear filters"
+          variant="ghost"
+          onPress={() => {
+            setStatus("");
+            setKind("");
+            setPurpose("");
+            setMemberId(null);
+            setSearch("");
+          }}
+        />
+      )}
       <View style={styles.kinds}>
         {(["", "pending", "approved", "rejected", "voided"] as const).map((s) => (
           <Chip key={s || "all"} label={s || "all"} on={status === s} onPress={() => setStatus(s)} />

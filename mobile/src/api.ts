@@ -79,6 +79,7 @@ export type MoneyRecord = {
   payment_source?: string;
   created_by?: number;
   created_by_name?: string;
+  created_by_active?: boolean;
   created_at: string;
   occurred_at?: string | null;
   decided_at?: string | null;
@@ -634,13 +635,20 @@ export function decideRecord(id: number, approve: boolean, note = "") {
   });
 }
 
-export function decideBatch(ids: number[], approve: boolean, note = "") {
+export function decideBatch(
+  ids: number[],
+  approve: boolean,
+  note = "",
+  opts?: { idempotencyKey?: string },
+) {
   return request<{
     decided: MoneyRecord[];
     skipped: number;
     skipped_insufficient_cash?: number;
+    skipped_inactive?: number;
   }>("/records/decide-batch", {
     method: "POST",
+    headers: { "Idempotency-Key": opts?.idempotencyKey || newIdemKey("dbatch") },
     body: JSON.stringify({ ids, approve, note }),
   });
 }
@@ -680,15 +688,19 @@ export function downloadReportCsv(period?: ReportPeriod | number) {
   return requestText(`/reports/export.csv${reportQuery(period)}`);
 }
 
-export function commentRecord(id: number, note: string) {
+export function commentRecord(id: number, note: string, opts?: { idempotencyKey?: string }) {
   return request<MoneyRecord>(`/records/${id}/comment`, {
     method: "POST",
+    headers: { "Idempotency-Key": opts?.idempotencyKey || newIdemKey("cmt") },
     body: JSON.stringify({ note }),
   });
 }
 
-export function cancelRecord(id: number) {
-  return request<MoneyRecord>(`/records/${id}`, { method: "DELETE" });
+export function cancelRecord(id: number, opts?: { idempotencyKey?: string }) {
+  return request<MoneyRecord>(`/records/${id}`, {
+    method: "DELETE",
+    headers: { "Idempotency-Key": opts?.idempotencyKey || newIdemKey("cancel") },
+  });
 }
 
 export function voidRecord(id: number, note: string) {

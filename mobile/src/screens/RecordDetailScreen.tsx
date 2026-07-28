@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Alert, Image, Text, StyleSheet } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import {
@@ -6,6 +6,7 @@ import {
   commentRecord,
   decideRecord,
   getRecord,
+  makeIdempotencyKey,
   mediaUrlWithMediaToken,
   updateRecord,
   voidRecord,
@@ -54,6 +55,8 @@ export function RecordDetailScreen({
   const [loadError, setLoadError] = useState("");
   const [photoUri, setPhotoUri] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const cancelIdemRef = useRef<string | null>(null);
+  const commentIdemRef = useRef<string | null>(null);
   const isManager = user.role === "owner" || user.role === "manager";
 
   const applyEditFields = (row: MoneyRecord) => {
@@ -107,6 +110,10 @@ export function RecordDetailScreen({
   };
 
   const decide = async (approve: boolean, note = "") => {
+    if (approve && rec?.created_by_active === false) {
+      Alert.alert("Fos", "Cannot approve — teammate is inactive. Reject instead.");
+      return;
+    }
     if (approve && rec?.is_in_closed_cycle) {
       Alert.alert(
         "Fos",
@@ -162,7 +169,9 @@ export function RecordDetailScreen({
               Alert.alert("Fos", `Record is already ${fresh.is_voided ? "voided" : fresh.status}`);
               return;
             }
-            setRec(await cancelRecord(id));
+            if (!cancelIdemRef.current) cancelIdemRef.current = makeIdempotencyKey("cancel");
+            setRec(await cancelRecord(id, { idempotencyKey: cancelIdemRef.current }));
+            cancelIdemRef.current = null;
             Alert.alert("Fos", "Record cancelled");
           } catch (e) {
             Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -201,7 +210,9 @@ export function RecordDetailScreen({
   const onComment = async (note: string) => {
     setBusy(true);
     try {
-      setRec(await commentRecord(id, note));
+      if (!commentIdemRef.current) commentIdemRef.current = makeIdempotencyKey("cmt");
+      setRec(await commentRecord(id, note, { idempotencyKey: commentIdemRef.current }));
+      commentIdemRef.current = null;
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
@@ -323,7 +334,9 @@ export function RecordDetailScreen({
             )}
             <Label>By</Label>
             <Text style={styles.line}>
-              {rec.created_by_name || rec.created_by} · {formatWhen(rec.created_at)}
+              {rec.created_by_name || rec.created_by}
+              {rec.created_by_active === false ? " · Inactive" : ""} ·{" "}
+              {formatWhen(rec.created_at)}
             </Text>
             {!!rec.occurred_at && (
               <>
@@ -393,7 +406,11 @@ export function RecordDetailScreen({
           )}
           {isManager && rec.status === "pending" && (
             <Row>
-              <Btn title="Approve" disabled={busy} onPress={() => decide(true)} />
+              <Btn
+                title={rec.created_by_active === false ? "Inactive" : "Approve"}
+                disabled={busy || rec.created_by_active === false}
+                onPress={() => decide(true)}
+              />
               <Btn title="Reject" variant="danger" disabled={busy} onPress={() => setRejectOpen(true)} />
             </Row>
           )}

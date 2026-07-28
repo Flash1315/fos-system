@@ -151,10 +151,6 @@ def create_transfer(
     db.commit()
     db.refresh(sender_rec)
     db.refresh(recipient_rec)
-    print(
-        f"transfer org={user.organization_id} from={user.id} to={recipient.id} "
-        f"amount={amount} group={group_id}"
-    )
     return TransferOut(
         sender_record=_record_out(db, sender_rec),
         recipient_record=_record_out(db, recipient_rec),

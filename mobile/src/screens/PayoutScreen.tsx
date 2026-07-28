@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import {
   batchPaySpendings,
   batchTakeCash,
   createPayout,
   listMembers,
+  makeIdempotencyKey,
   teamBalances,
   type TeamBalance,
   type User,
@@ -31,6 +32,9 @@ export function PayoutScreen({
   const [note, setNote] = useState("");
   const [booting, setBooting] = useState(true);
   const [bootError, setBootError] = useState("");
+  const payoutIdemRef = useRef<string | null>(null);
+  const batchSpendIdemRef = useRef<string | null>(null);
+  const batchCashIdemRef = useRef<string | null>(null);
 
   const reloadBalances = async () => {
     setBalances(await teamBalances());
@@ -82,6 +86,15 @@ export function PayoutScreen({
     if (suggested > 0) setAmount(String(suggested));
     else setAmount("");
   }, [userId, kind, suggested]);
+
+  useEffect(() => {
+    payoutIdemRef.current = null;
+  }, [userId, kind, method]);
+
+  useEffect(() => {
+    batchSpendIdemRef.current = null;
+    batchCashIdemRef.current = null;
+  }, [method]);
 
   const submit = async () => {
     if (busy) return;
@@ -171,13 +184,18 @@ export function PayoutScreen({
         );
         return;
       }
-      await createPayout({
-        user_id: userId!,
-        kind,
-        amount: value,
-        payment_method: method,
-        note,
-      });
+      if (!payoutIdemRef.current) payoutIdemRef.current = makeIdempotencyKey("pay");
+      await createPayout(
+        {
+          user_id: userId!,
+          kind,
+          amount: value,
+          payment_method: method,
+          note,
+        },
+        { idempotencyKey: payoutIdemRef.current },
+      );
+      payoutIdemRef.current = null;
       Alert.alert(
         "Fos",
         kind === "expense_payout" ? "Expense reimbursement recorded" : "Cash handover recorded",
@@ -215,7 +233,13 @@ export function PayoutScreen({
             text: "Pay all",
             onPress: async () => {
               try {
-                const rows = (await batchPaySpendings(method)) as unknown[];
+                if (!batchSpendIdemRef.current) {
+                  batchSpendIdemRef.current = makeIdempotencyKey("bpay");
+                }
+                const rows = (await batchPaySpendings(method, {
+                  idempotencyKey: batchSpendIdemRef.current,
+                })) as unknown[];
+                batchSpendIdemRef.current = null;
                 Alert.alert(
                   "Fos",
                   `Paid spendings for ${Array.isArray(rows) ? rows.length : 0} teammate(s)`,
@@ -262,7 +286,13 @@ export function PayoutScreen({
             text: "Take all",
             onPress: async () => {
               try {
-                const rows = (await batchTakeCash(method)) as unknown[];
+                if (!batchCashIdemRef.current) {
+                  batchCashIdemRef.current = makeIdempotencyKey("bcash");
+                }
+                const rows = (await batchTakeCash(method, {
+                  idempotencyKey: batchCashIdemRef.current,
+                })) as unknown[];
+                batchCashIdemRef.current = null;
                 Alert.alert(
                   "Fos",
                   `Took cash from ${Array.isArray(rows) ? rows.length : 0} teammate(s)`,

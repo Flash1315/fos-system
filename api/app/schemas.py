@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+import re
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
@@ -21,6 +22,14 @@ class OrgCreate(BaseModel):
         if len(cleaned) < 2:
             raise ValueError("must be at least 2 characters")
         return cleaned
+
+    @field_validator("currency")
+    @classmethod
+    def currency_code(cls, v: str) -> str:
+        code = (v or "IDR").strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", code):
+            raise ValueError("currency must be a 3-letter code (e.g. IDR)")
+        return code
 
 
 class OrgOut(BaseModel):
@@ -46,6 +55,16 @@ class OrgUpdate(BaseModel):
         if len(cleaned) < 2:
             raise ValueError("must be at least 2 characters")
         return cleaned
+
+    @field_validator("currency")
+    @classmethod
+    def currency_code(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        code = v.strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", code):
+            raise ValueError("currency must be a 3-letter code (e.g. IDR)")
+        return code
 
 
 class UserOut(BaseModel):
@@ -188,6 +207,7 @@ class RecordOut(BaseModel):
     payment_source: str = ""
     created_by: int
     created_by_name: str = ""
+    created_by_active: bool = True
     created_at: datetime
     occurred_at: Optional[datetime] = None
     decided_at: Optional[datetime]
@@ -232,6 +252,7 @@ class DecideBatchOut(BaseModel):
     decided: list[RecordOut]
     skipped: int = 0
     skipped_insufficient_cash: int = 0
+    skipped_inactive: int = 0
 
 
 class CommentIn(BaseModel):

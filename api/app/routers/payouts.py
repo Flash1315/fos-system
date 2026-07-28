@@ -217,10 +217,6 @@ def _create_payout_row(
     )
     db.add(row)
     db.flush()
-    print(
-        f"payout org={manager.organization_id} kind={body.kind.value} "
-        f"user={target.id} amount={amount} overpay={overpayment} after={balance_after}"
-    )
     return row, target
 
 

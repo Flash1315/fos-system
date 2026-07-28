@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
-import { myBalance, myOrg, myPendingSettlementCount, myRecords, pendingCount as fetchPendingCount, pendingRecords, pendingSettlementCount, requestSettlement, type MoneyRecord, type User } from "../api";
+import { makeIdempotencyKey, myBalance, myOrg, myPendingSettlementCount, myRecords, pendingCount as fetchPendingCount, pendingRecords, pendingSettlementCount, requestSettlement, type MoneyRecord, type User } from "../api";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
@@ -60,6 +60,7 @@ export function HomeScreen({
   const [hasMore, setHasMore] = useState(false);
   const [loadError, setLoadError] = useState("");
   const reloadGen = useRef(0);
+  const requestIdemRef = useRef<string | null>(null);
   const PAGE = 40;
 
   useEffect(() => {
@@ -195,16 +196,21 @@ export function HomeScreen({
         text: "Send",
         onPress: async () => {
           if (requestBusy) return;
+          if (!requestIdemRef.current) requestIdemRef.current = makeIdempotencyKey("sreq");
           setRequestBusy(true);
           try {
-            await requestSettlement({
-              kind,
-              amount,
-              note:
-                kind === "expense_payout"
-                  ? "quick request from home"
-                  : "quick cash handover request",
-            });
+            await requestSettlement(
+              {
+                kind,
+                amount,
+                note:
+                  kind === "expense_payout"
+                    ? "quick request from home"
+                    : "quick cash handover request",
+              },
+              { idempotencyKey: requestIdemRef.current },
+            );
+            requestIdemRef.current = null;
             Alert.alert("Fos", "Settlement request sent");
             await reload();
           } catch (e) {
@@ -298,6 +304,17 @@ export function HomeScreen({
         placeholder="Search my records…"
         autoCapitalize="none"
       />
+      {(!!status || !!purpose || !!search) && (
+        <Btn
+          title="Clear filters"
+          variant="ghost"
+          onPress={() => {
+            setStatus("");
+            setPurpose("");
+            setSearch("");
+          }}
+        />
+      )}
       <View style={styles.filters}>
         {(["", "pending", "approved", "rejected", "voided"] as const).map((s) => (
           <Chip key={s || "all"} label={s || "all"} on={status === s} onPress={() => setStatus(s)} />

@@ -4,6 +4,7 @@ import {
   getToken,
   me,
   saveToken,
+  setUnauthorizedHandler,
   type User,
 } from "./src/api";
 import { Loading } from "./src/components/ui";
@@ -53,6 +54,15 @@ export default function App() {
     setRecordReturnTo(from);
     setScreen("record");
   };
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setUser(null);
+      setRecordId(null);
+      setScreen("auth");
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   useEffect(() => {
     (async () => {

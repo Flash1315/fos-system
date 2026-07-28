@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { listMySettlementRequests, listSettlementRequests, myBalance, myOrg, myRecords, pendingRecords, requestSettlement, type MoneyRecord, type User } from "../api";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
@@ -57,6 +57,7 @@ export function HomeScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const reloadGen = useRef(0);
 
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounced(search.trim()), 350);
@@ -64,6 +65,8 @@ export function HomeScreen({
   }, [search]);
 
   const reload = async () => {
+    const gen = ++reloadGen.current;
+    setLoading(true);
     try {
       setLoadError("");
       const [b, org, list] = await Promise.all([
@@ -76,6 +79,7 @@ export function HomeScreen({
           voided: status === "voided" ? true : status === "approved" ? false : undefined,
         }),
       ]);
+      if (gen !== reloadGen.current) return;
       setBalance(formatMoney(b.cash_on_hand, b.currency));
       setSpendings(formatMoney(b.spendings ?? 0, b.currency));
       setAvailableSpend(b.available_spendings ?? b.spendings ?? 0);
@@ -107,31 +111,39 @@ export function HomeScreen({
       if (user?.role === "owner" || user?.role === "manager") {
         try {
           const pend = await pendingRecords();
+          if (gen !== reloadGen.current) return;
           setPendingCount(pend.length);
         } catch {
+          if (gen !== reloadGen.current) return;
           setPendingCount(b.pending_count);
         }
         try {
           const reqs = await listSettlementRequests();
+          if (gen !== reloadGen.current) return;
           setSettlementCount(reqs.length);
         } catch {
+          if (gen !== reloadGen.current) return;
           setSettlementCount(0);
         }
       } else {
         setPendingCount(b.pending_count);
         try {
           const mine = await listMySettlementRequests();
+          if (gen !== reloadGen.current) return;
           setSettlementCount(mine.filter((r) => r.status === "pending").length);
         } catch {
+          if (gen !== reloadGen.current) return;
           setSettlementCount(0);
         }
       }
       setRows(list);
     } catch (e) {
+      if (gen !== reloadGen.current) return;
+      setRows([]);
       setLoadError(e instanceof Error ? e.message : "Load failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Load failed");
     } finally {
-      setLoading(false);
+      if (gen === reloadGen.current) setLoading(false);
     }
   };
 

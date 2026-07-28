@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
   link: { color: colors.link, marginTop: 14, textAlign: "center" },
   linkLeft: { color: colors.link, marginTop: 14, textAlign: "left" },
   topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  rowBtns: { flexDirection: "row", gap: 10, marginBottom: 8 },
+  rowBtns: { flexDirection: "row", gap: 10, marginBottom: 8, flexWrap: "wrap" },
   chip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, backgroundColor: colors.card },
   chipOn: { backgroundColor: colors.accent },
   chipText: { color: colors.text, fontWeight: "600", textTransform: "capitalize" },

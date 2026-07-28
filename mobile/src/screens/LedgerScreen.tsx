@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, StyleSheet, View } from "react-native";
 import { listMembers, orgRecords, type MoneyRecord, type User } from "../api";
-import { Chip, Field, Screen, Sub, TopBar } from "../components/ui";
+import { Btn, Chip, Field, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
 
@@ -23,40 +23,50 @@ export function LedgerScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [membersError, setMembersError] = useState("");
+  const reloadGen = useRef(0);
 
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounced(search.trim()), 350);
     return () => clearTimeout(t);
   }, [search]);
 
+  const loadMembers = async () => {
+    try {
+      setMembersError("");
+      setMembers(await listMembers());
+    } catch (e) {
+      setMembers([]);
+      setMembersError(e instanceof Error ? e.message : "Failed to load teammates");
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        setMembers(await listMembers());
-      } catch {
-        /* ignore — ledger still works without member chips */
-      }
-    })();
+    void loadMembers();
   }, []);
 
   const reload = async () => {
+    const gen = ++reloadGen.current;
+    setLoading(true);
     try {
       setLoadError("");
-      setRows(
-        await orgRecords({
-          status: status && status !== "voided" ? status : undefined,
-          kind: kind || undefined,
-          purpose: purpose || undefined,
-          created_by: memberId ?? undefined,
-          q: searchDebounced || undefined,
-          voided: status === "voided" ? true : status === "approved" ? false : undefined,
-        }),
-      );
+      const list = await orgRecords({
+        status: status && status !== "voided" ? status : undefined,
+        kind: kind || undefined,
+        purpose: purpose || undefined,
+        created_by: memberId ?? undefined,
+        q: searchDebounced || undefined,
+        voided: status === "voided" ? true : status === "approved" ? false : undefined,
+      });
+      if (gen !== reloadGen.current) return;
+      setRows(list);
     } catch (e) {
+      if (gen !== reloadGen.current) return;
+      setRows([]);
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
-      setLoading(false);
+      if (gen === reloadGen.current) setLoading(false);
     }
   };
 
@@ -94,6 +104,12 @@ export function LedgerScreen({
           />
         ))}
       </View>
+      {!!membersError && (
+        <>
+          <Sub>Teammate filter unavailable — {membersError}</Sub>
+          <Btn title="Retry teammates" variant="ghost" onPress={loadMembers} />
+        </>
+      )}
       {members.length > 0 && (
         <View style={styles.kinds}>
           <Chip label="anyone" on={memberId == null} onPress={() => setMemberId(null)} />

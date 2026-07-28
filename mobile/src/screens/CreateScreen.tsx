@@ -57,10 +57,12 @@ export function CreateScreen({
   const [categoriesError, setCategoriesError] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         setCategoriesError("");
         const res = await getCategories(kind);
+        if (cancelled) return;
         const list = res.categories[kind] || [];
         setCategories(list);
         setCategory(list[0] || "");
@@ -69,10 +71,15 @@ export function CreateScreen({
           setPurpose(res.purposes.includes("Other") ? "Other" : res.purposes[0]);
         }
       } catch (e) {
+        if (cancelled) return;
         setCategories([]);
+        setCategory("");
         setCategoriesError(e instanceof Error ? e.message : "Categories failed to load");
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [kind]);
 
   useEffect(() => {
@@ -208,6 +215,14 @@ export function CreateScreen({
     const value = Number(amount.replace(",", "."));
     if (!value || value <= 0) {
       Alert.alert("Fos", "Enter a valid amount");
+      return;
+    }
+    if (!category.trim()) {
+      Alert.alert("Fos", categoriesError ? `Categories failed — ${categoriesError}` : "Category is required");
+      return;
+    }
+    if ((kind === "expense" || kind === "fuel") && !purpose.trim()) {
+      Alert.alert("Fos", "Purpose is required");
       return;
     }
     if (occurredDate.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(occurredDate.trim())) {

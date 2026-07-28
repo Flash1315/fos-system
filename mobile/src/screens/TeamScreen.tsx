@@ -112,6 +112,11 @@ export function TeamScreen({
                 : "No members"}
           </Sub>
         }
+        ListHeaderComponent={
+          loadError && !loading ? (
+            <Btn title="Retry" variant="ghost" onPress={reload} />
+          ) : null
+        }
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Text style={styles.row}>

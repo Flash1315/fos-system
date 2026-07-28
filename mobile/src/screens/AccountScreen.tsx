@@ -50,6 +50,8 @@ export function AccountScreen({
   const [orgSlug, setOrgSlug] = useState("");
   const [currency, setCurrency] = useState("IDR");
   const [currencyLocked, setCurrencyLocked] = useState(false);
+  const [orgLoadError, setOrgLoadError] = useState("");
+  const [orgLoaded, setOrgLoaded] = useState(false);
   const [cancelId, setCancelId] = useState<number | null>(null);
   const [teamReqFilter, setTeamReqFilter] = useState<"pending" | "approved" | "cancelled" | "all">(
     "pending",
@@ -61,13 +63,16 @@ export function AccountScreen({
 
   const reloadOrg = async () => {
     try {
+      setOrgLoadError("");
       const org = await myOrg();
       setOrgName(org.name);
       setOrgSlug(org.slug);
       setCurrency(org.currency || "IDR");
       setCurrencyLocked(!!org.currency_locked);
-    } catch {
-      /* ignore */
+      setOrgLoaded(true);
+    } catch (e) {
+      setOrgLoaded(false);
+      setOrgLoadError(e instanceof Error ? e.message : "Failed to load company");
     }
   };
 
@@ -205,8 +210,14 @@ export function AccountScreen({
         {orgName || "…"}
         {orgSlug ? ` · /${orgSlug}` : ""}
       </Sub>
+      {!!orgLoadError && (
+        <>
+          <Sub>Could not load company — {orgLoadError}</Sub>
+          <Btn title="Retry" variant="ghost" onPress={reloadOrg} />
+        </>
+      )}
 
-      {isOwner && (
+      {isOwner && orgLoaded && (
         <>
           <Label>Company settings</Label>
           <Sub>

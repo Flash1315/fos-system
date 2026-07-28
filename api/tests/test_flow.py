@@ -2004,3 +2004,52 @@ def test_org_currency_locked_flag(client):
     org2 = client.get("/orgs/me", headers=h).json()
     assert org2["currency_locked"] is True
 
+def test_decide_batch_skips_insufficient_cash(client):
+    owner = _register(client, "flow-batch-cash2", "batch-cash2-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    income = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 10000,
+            "category": "Cash",
+            "payment_method": "cash",
+            "approve_now": True,
+        },
+    )
+    assert income.status_code == 200, income.text
+    a = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 7000,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "cash_on_hand",
+        },
+    ).json()["id"]
+    b = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 7000,
+            "category": "Food",
+            "purpose": "Office",
+            "payment_source": "cash_on_hand",
+        },
+    ).json()["id"]
+    res = client.post(
+        "/records/decide-batch",
+        headers=h,
+        json={"ids": [a, b], "approve": True},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert len(body["decided"]) == 1
+    assert body["skipped"] == 1
+    bal = client.get("/records/balance/me", headers=h).json()
+    assert bal["cash_on_hand"] == 3000
+

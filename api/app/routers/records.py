@@ -86,7 +86,12 @@ def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
     )
 
 
-def _assert_cash_for_approve(db: Session, rec: MoneyRecord) -> None:
+def _assert_cash_for_approve(
+    db: Session,
+    rec: MoneyRecord,
+    *,
+    extra_spent: float = 0.0,
+) -> None:
     """Block approving spend from cash_on_hand when available cash is insufficient."""
     if rec.kind not in (RecordKind.expense, RecordKind.fuel):
         return
@@ -102,6 +107,7 @@ def _assert_cash_for_approve(db: Session, rec: MoneyRecord) -> None:
     available = float(
         bal.get("available_cash") if bal.get("available_cash") is not None else max(0.0, held - reserved)
     )
+    available = max(0.0, available - float(extra_spent or 0))
     if float(rec.amount) > available + 1e-6:
         raise HTTPException(
             400,
@@ -109,6 +115,12 @@ def _assert_cash_for_approve(db: Session, rec: MoneyRecord) -> None:
             f"({held} held, {reserved} reserved by pending requests). "
             f"Cannot approve {rec.amount} from cash.",
         )
+
+
+def _is_cash_on_hand_spend(rec: MoneyRecord) -> bool:
+    if rec.kind not in (RecordKind.expense, RecordKind.fuel):
+        return False
+    return (rec.payment_source or "cash_on_hand") == "cash_on_hand"
 
 
 def _last_fuel_odometer(
@@ -406,6 +418,8 @@ def decide_batch(
         raise HTTPException(400, "Reject requires a note")
     out = []
     skipped = 0
+    # Track cash_on_hand spend approved in this batch (session autoflush is off).
+    extra_cash_spent: dict[int, float] = {}
     for rid in body.ids:
         rec = db.get(MoneyRecord, rid)
         if not rec or rec.organization_id != user.organization_id:
@@ -415,7 +429,14 @@ def decide_batch(
             skipped += 1
             continue
         if body.approve:
-            _assert_cash_for_approve(db, rec)
+            spent = extra_cash_spent.get(rec.created_by, 0.0)
+            try:
+                _assert_cash_for_approve(db, rec, extra_spent=spent)
+            except HTTPException:
+                skipped += 1
+                continue
+            if _is_cash_on_hand_spend(rec):
+                extra_cash_spent[rec.created_by] = spent + float(rec.amount)
         rec.status = RecordStatus.approved if body.approve else RecordStatus.rejected
         rec.decided_at = _utcnow()
         rec.decided_by = user.id

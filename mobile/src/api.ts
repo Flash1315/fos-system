@@ -6,6 +6,32 @@ export const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000
 const TOKEN_KEY = "fos_token";
 let cachedToken: string | null = null;
 const REQUEST_TIMEOUT_MS = 30000;
+const UPLOAD_TIMEOUT_MS = 120000;
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
+  unauthorizedHandler = handler;
+}
+
+function isFormDataBody(body: BodyInit | null | undefined): boolean {
+  if (!body || typeof body !== "object") return false;
+  if (typeof FormData !== "undefined" && body instanceof FormData) return true;
+  return typeof (body as { append?: unknown }).append === "function";
+}
+
+async function notifyUnauthorized() {
+  try {
+    await clearToken();
+  } catch {
+    /* ignore */
+  }
+  try {
+    unauthorizedHandler?.();
+  } catch {
+    /* ignore */
+  }
+}
 
 export type User = {
   id: number;
@@ -101,14 +127,19 @@ export async function getToken() {
   return cachedToken;
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  init: RequestInit = {},
+  opts?: { timeoutMs?: number },
+): Promise<T> {
   const headers: Record<string, string> = {
-    ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+    ...(isFormDataBody(init.body) ? {} : { "Content-Type": "application/json" }),
     ...(await authHeaders()),
     ...((init.headers as Record<string, string>) || {}),
   };
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutMs = opts?.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
@@ -133,11 +164,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     if (res.status === 401) {
-      try {
-        await clearToken();
-      } catch {
-        /* ignore */
-      }
+      await notifyUnauthorized();
     }
     throw new Error(formatApiError(data, res.statusText || `HTTP ${res.status}`));
   }
@@ -169,11 +196,7 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
   const text = await res.text();
   if (!res.ok) {
     if (res.status === 401) {
-      try {
-        await clearToken();
-      } catch {
-        /* ignore */
-      }
+      await notifyUnauthorized();
     }
     let detail = text;
     try {
@@ -757,10 +780,14 @@ export async function uploadPhoto(uri: string, name = "receipt.jpg") {
     name,
     type: "image/jpeg",
   } as unknown as Blob);
-  return request<{ photo_url: string }>("/media/photo", {
-    method: "POST",
-    body: form,
-  });
+  return request<{ photo_url: string }>(
+    "/media/photo",
+    {
+      method: "POST",
+      body: form,
+    },
+    { timeoutMs: UPLOAD_TIMEOUT_MS },
+  );
 }
 
 export function mediaUrl(path: string, token?: string | null): string {

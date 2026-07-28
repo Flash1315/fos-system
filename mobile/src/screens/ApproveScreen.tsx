@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { decideBatch, decideRecord, pendingRecords, type MoneyRecord } from "../api";
 import { NoteModal } from "../components/NoteModal";
@@ -25,21 +25,26 @@ export function ApproveScreen({
   const [rejectAllOpen, setRejectAllOpen] = useState(false);
   const [purpose, setPurpose] = useState("");
   const [kind, setKind] = useState<"" | "expense" | "fuel" | "income">("");
+  const reloadGen = useRef(0);
 
   const reload = async () => {
+    const gen = ++reloadGen.current;
+    setLoading(true);
     try {
       setLoadError("");
-      setRows(
-        await pendingRecords({
-          purpose: purpose || undefined,
-          kind: kind || undefined,
-        }),
-      );
+      const list = await pendingRecords({
+        purpose: purpose || undefined,
+        kind: kind || undefined,
+      });
+      if (gen !== reloadGen.current) return;
+      setRows(list);
     } catch (e) {
+      if (gen !== reloadGen.current) return;
+      setRows([]);
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
-      setLoading(false);
+      if (gen === reloadGen.current) setLoading(false);
     }
   };
 

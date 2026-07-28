@@ -308,12 +308,48 @@ def void_payout(
         .first()
     )
     if linked is not None:
-        linked.status = SettlementRequestStatus.pending
-        linked.decided_at = None
-        linked.decided_by = None
-        linked.settled_amount = None
-        linked.payout_id = None
-        linked.note = ((linked.note or "") + f"\n[reopened after payout void] {body.note}").strip()
+        db.flush()
+        target = db.get(User, row.user_id)
+        reopen = True
+        if target:
+            bal = user_balance(db, target)
+            if row.kind == PayoutKind.expense_payout:
+                track = float(bal.get("spendings") or 0)
+                reserved = float(bal.get("reserved_spendings") or 0)
+                available = float(
+                    bal.get("available_spendings")
+                    if bal.get("available_spendings") is not None
+                    else max(0.0, track - reserved)
+                )
+            else:
+                track = float(bal.get("cash_on_hand") or 0)
+                reserved = float(bal.get("reserved_cash") or 0)
+                available = float(
+                    bal.get("available_cash")
+                    if bal.get("available_cash") is not None
+                    else max(0.0, track - reserved)
+                )
+            if float(linked.amount) > available + 1e-6:
+                reopen = False
+        if reopen:
+            linked.status = SettlementRequestStatus.pending
+            linked.decided_at = None
+            linked.decided_by = None
+            linked.settled_amount = None
+            linked.payout_id = None
+            linked.note = (
+                (linked.note or "") + f"\n[reopened after payout void] {body.note}"
+            ).strip()
+        else:
+            linked.status = SettlementRequestStatus.cancelled
+            linked.decided_at = _utcnow()
+            linked.decided_by = manager.id
+            linked.settled_amount = None
+            linked.payout_id = None
+            linked.note = (
+                (linked.note or "")
+                + f"\n[cancelled after payout void — amount no longer fits available] {body.note}"
+            ).strip()
     db.commit()
     db.refresh(row)
     target = db.get(User, row.user_id)

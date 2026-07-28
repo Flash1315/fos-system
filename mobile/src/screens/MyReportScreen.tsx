@@ -20,6 +20,7 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
   const [dateToDebounced, setDateToDebounced] = useState("");
   const [custom, setCustom] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [refreshingPeriod, setRefreshingPeriod] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDateFromDebounced(dateFrom.trim()), 400);
@@ -45,6 +46,11 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
       if (custom) {
         const from = dateFromDebounced;
         const to = dateToDebounced;
+        if (!from && !to) {
+          setLoadError("Enter from and/or to date (YYYY-MM-DD)");
+          setReport(null);
+          return;
+        }
         if (from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) {
           setLoadError("From date must be YYYY-MM-DD");
           return;
@@ -59,10 +65,13 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
         }
       }
       setLoadError("");
+      setRefreshingPeriod(true);
       setReport(await myReport(period()));
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setRefreshingPeriod(false);
     }
   };
 
@@ -89,6 +98,7 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
             <Btn title="Retry" variant="ghost" onPress={reload} />
           </>
         )}
+        {refreshingPeriod && <Sub>Updating for selected period…</Sub>}
         <Card>
           <Label>Cash on hand</Label>
           <Text style={styles.big}>

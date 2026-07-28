@@ -409,6 +409,9 @@ export function AccountScreen({
               {billing.telegram_configured ? " · telegram bot on" : " · telegram bot off"}
             </Sub>
           )}
+          {billing?.billing_status === "canceled" ? (
+            <Sub>Billing canceled — money writes are blocked until status is restored.</Sub>
+          ) : null}
           <Label>Telegram chat id</Label>
           <Field value={tgChat} onChangeText={setTgChat} placeholder="-100…" autoCapitalize="none" maxLength={64} />
           <Btn

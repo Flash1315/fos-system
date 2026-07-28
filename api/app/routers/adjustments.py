@@ -285,6 +285,9 @@ def void_adjustment(
         limit=30,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, manager.organization_id)
 
     key = normalize_idem_key(idempotency_key)
     fp = (

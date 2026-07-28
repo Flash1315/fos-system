@@ -56,6 +56,17 @@ def store_photo(org_id: int, filename: str, data: bytes, content_type: str = "im
     return f"/media/files/{org_id}/{filename}"
 
 
+def content_type_for(filename: str) -> str:
+    lower = (filename or "").lower()
+    if lower.endswith(".jpg") or lower.endswith(".jpeg"):
+        return "image/jpeg"
+    if lower.endswith(".png"):
+        return "image/png"
+    if lower.endswith(".webp"):
+        return "image/webp"
+    return "application/octet-stream"
+
+
 def local_path(org_id: int, filename: str) -> Path:
     org_root = (UPLOAD_ROOT / str(org_id)).resolve()
     path = (UPLOAD_ROOT / str(org_id) / filename).resolve()
@@ -86,4 +97,4 @@ def load_photo(org_id: int, filename: str) -> tuple[bytes | None, str | None]:
         return None, None
     if not path.is_file():
         return None, None
-    return path.read_bytes(), "application/octet-stream"
+    return path.read_bytes(), content_type_for(filename)

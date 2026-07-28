@@ -26,12 +26,16 @@ _MEDIA_NAME_RE = re.compile(r"^[0-9a-f]{32}\.(?:jpg|png|webp)$")
 async def upload_photo(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
+    from app.services.org_gates import require_org_writable
+
     enforce_rate_limit(
         f"upload:{user.organization_id}:{user.id}",
         limit=30,
         window_sec=60,
     )
+    require_org_writable(db, user.organization_id)
     data = await read_upload_capped(file)
     suffix, content_type = detect_image(data)
     name = f"{uuid.uuid4().hex}{suffix}"
@@ -79,10 +83,10 @@ def get_photo(
             raise HTTPException(400, "Invalid filename") from None
         if not path.is_file():
             raise HTTPException(404, "Not found")
-        return FileResponse(path)
+        return FileResponse(path, media_type=storage.content_type_for(filename))
     data, meta = storage.load_photo(org_id, filename)
     if data is None and meta and meta.startswith("http"):
         return RedirectResponse(meta)
     if data is None:
         raise HTTPException(404, "Not found")
-    return Response(content=data, media_type=meta or "application/octet-stream")
+    return Response(content=data, media_type=meta or storage.content_type_for(filename))

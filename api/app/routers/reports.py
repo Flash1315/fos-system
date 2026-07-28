@@ -262,7 +262,11 @@ def org_report(
     pending = pending_q.scalar() or 0
     members = (
         db.query(User)
-        .filter(User.organization_id == oid, User.is_active.is_(True))
+        .filter(
+            User.organization_id == oid,
+            User.is_active.is_(True),
+            User.must_set_password.is_(False),
+        )
         .order_by(User.id.asc())
         .limit(org_member_limit())
         .all()

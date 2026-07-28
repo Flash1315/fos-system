@@ -245,6 +245,9 @@ def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(
     found = find_user_by_invite_token(db, token)
     if not found:
         raise HTTPException(400, "Invalid or expired invite token")
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, found.organization_id)
     # Lock row so concurrent accepts cannot both succeed
     user = (
         db.query(User)
@@ -344,6 +347,9 @@ def invite_user(
         window_sec=3600,
     )
     lock_organization(db, user.organization_id)
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
     require_org_can_add_member(db, user.organization_id)
     exists = (
         db.query(User)

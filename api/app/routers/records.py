@@ -734,7 +734,11 @@ def team_balances(
 
     members = (
         db.query(User)
-        .filter(User.organization_id == user.organization_id, User.is_active.is_(True))
+        .filter(
+            User.organization_id == user.organization_id,
+            User.is_active.is_(True),
+            User.must_set_password.is_(False),
+        )
         .order_by(User.full_name.asc(), User.id.asc())
         .limit(org_member_limit())
         .all()
@@ -840,6 +844,9 @@ def decide_batch(
         limit=20,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
 
     if not body.approve and len(body.note or "") < 2:
         raise HTTPException(400, "Reject requires a note (min 2 characters)")
@@ -1056,6 +1063,9 @@ def update_pending_record(
         limit=60,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
 
     key = normalize_idem_key(idempotency_key)
     fp = (
@@ -1204,6 +1214,9 @@ def decide_record(
         limit=60,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
 
     key = normalize_idem_key(idempotency_key)
     fp = (
@@ -1340,6 +1353,9 @@ def comment_record(
         limit=60,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
 
     key = normalize_idem_key(idempotency_key)
     fp = (
@@ -1434,6 +1450,9 @@ def void_approved_record(
         limit=30,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
 
     key = normalize_idem_key(idempotency_key)
     fp = (
@@ -1592,6 +1611,9 @@ def cancel_pending_record(
         limit=60,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint({"record_id": record_id}) if key else None

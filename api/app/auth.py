@@ -107,6 +107,9 @@ def user_from_token(
         raise credentials_exc
     if claim_org != int(user.organization_id):
         raise credentials_exc
+    # Access JWTs must belong to users who finished invite/password setup.
+    if typ == "access" and getattr(user, "must_set_password", False):
+        raise credentials_exc
     return user
 
 

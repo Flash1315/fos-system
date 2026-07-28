@@ -83,7 +83,7 @@ run_alembic_upgrade()
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.7.41",
+    version="0.7.42",
     docs_url=None if _IS_PROD else "/docs",
     redoc_url=None if _IS_PROD else "/redoc",
     openapi_url=None if _IS_PROD else "/openapi.json",
@@ -259,7 +259,13 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},
-        headers={"X-Request-Id": request_id},
+        headers={
+            "X-Request-Id": request_id,
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
+            "Referrer-Policy": "no-referrer",
+            "Cache-Control": "no-store",
+        },
     )
 
 
@@ -282,7 +288,7 @@ def health(request: Request):
     body = {
         "ok": db_status == "ok",
         "app": settings.app_name,
-        "version": "0.7.41",
+        "version": "0.7.42",
         "db": db_status,
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }

@@ -442,6 +442,9 @@ def void_payout(
         limit=30,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, manager.organization_id)
 
     key = normalize_idem_key(idempotency_key)
     fp = (
@@ -646,7 +649,11 @@ def batch_pay_all_spendings(
     require_org_member_capacity(db, manager.organization_id, active_only=True)
     members = (
         db.query(User)
-        .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
+        .filter(
+            User.organization_id == manager.organization_id,
+            User.is_active.is_(True),
+            User.must_set_password.is_(False),
+        )
         .all()
     )
     from app.services.locks import lock_users
@@ -759,7 +766,11 @@ def batch_take_all_cash(
     require_org_member_capacity(db, manager.organization_id, active_only=True)
     members = (
         db.query(User)
-        .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
+        .filter(
+            User.organization_id == manager.organization_id,
+            User.is_active.is_(True),
+            User.must_set_password.is_(False),
+        )
         .all()
     )
     from app.services.locks import lock_users
@@ -903,6 +914,9 @@ def request_settlement(
         limit=30,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None
@@ -1079,6 +1093,9 @@ def approve_settlement_request(
         limit=60,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, manager.organization_id)
 
     key = normalize_idem_key(idempotency_key)
     method = ((body.payment_method if body else None) or "cash").strip().lower()
@@ -1235,6 +1252,9 @@ def cancel_settlement_request(
         limit=60,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
 
     key = normalize_idem_key(idempotency_key)
     fp = (

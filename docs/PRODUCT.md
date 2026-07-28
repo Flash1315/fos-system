@@ -216,8 +216,8 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Logout bumps `token_version` and revokes **all** sessions for the account
 - Passwords: min 8 characters with at least one letter and one digit
 - Optional `ENABLE_HSTS` behind HTTPS terminators; OpenAPI/docs hidden when `ENVIRONMENT=production`
-- `billing_status=canceled` blocks login and money writes
-- Unsettled invitees (`must_set_password`) excluded from directory and money targets
+- `billing_status=canceled` blocks login, invite/accept, and all money mutations
+- Unsettled invitees (`must_set_password`) excluded from directory, balances, and money targets
 - Idempotency keys pruned after `IDEMPOTENCY_TTL_HOURS` (default 72)
 - CSV / report exports default to the last 365 days when no window is given; free-text cells truncated
 - Rate limits are process-local (not shared across workers)

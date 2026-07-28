@@ -89,6 +89,17 @@ def can_void_record(db: Session, rec: MoneyRecord) -> bool:
     return not record_locked_by_settlement(db, rec)
 
 
+def void_blocked_reason(db: Session, rec: MoneyRecord) -> str | None:
+    """Human-readable why an approved record cannot be voided right now."""
+    if rec.status != RecordStatus.approved or rec.is_voided:
+        return None
+    if can_void_record(db, rec):
+        return None
+    if rec.transfer_group_id:
+        return "Locked by a settlement on a linked transfer leg. Void the latest payout first."
+    return "Locked by a settlement. Void the latest payout first."
+
+
 def settlement_kind_for_adjustment(track: AdjustmentTrack) -> PayoutKind:
     if track == AdjustmentTrack.spendings:
         return PayoutKind.expense_payout

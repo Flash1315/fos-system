@@ -133,6 +133,7 @@ class RecordOut(BaseModel):
     voided_at: Optional[datetime] = None
     transfer_group_id: Optional[str] = None
     can_void: bool = False
+    void_blocked_reason: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

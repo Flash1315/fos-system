@@ -46,7 +46,7 @@ def _normalize_payment_fields(kind: RecordKind, source: str, method: str) -> tup
 
 
 def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
-    from app.services.balances import can_void_record
+    from app.services.balances import can_void_record, void_blocked_reason
 
     creator = db.get(User, rec.created_by)
     decider = db.get(User, rec.decided_by) if rec.decided_by else None
@@ -56,6 +56,7 @@ def _record_out(db: Session, rec: MoneyRecord) -> RecordOut:
             "created_by_name": creator.full_name if creator else "",
             "decided_by_name": decider.full_name if decider else "",
             "can_void": can_void_record(db, rec),
+            "void_blocked_reason": void_blocked_reason(db, rec),
         }
     )
 
@@ -424,6 +425,13 @@ def update_pending_record(
         )
     for key, value in data.items():
         setattr(rec, key, value)
+    # Re-normalize money fields after edit (create path already validates)
+    if "payment_source" in data or "payment_method" in data:
+        source, method = _normalize_payment_fields(
+            rec.kind, rec.payment_source or "", rec.payment_method or ""
+        )
+        rec.payment_source = source
+        rec.payment_method = method
     db.commit()
     db.refresh(rec)
     return _record_out(db, rec)

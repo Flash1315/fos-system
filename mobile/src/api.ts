@@ -42,6 +42,7 @@ export type MoneyRecord = {
   voided_at?: string | null;
   transfer_group_id?: string | null;
   can_void?: boolean;
+  void_blocked_reason?: string | null;
 };
 
 export type OrgReport = {

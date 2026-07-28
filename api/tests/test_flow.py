@@ -383,6 +383,21 @@ def test_create_on_behalf_edit_export_role(client):
     assert patched.json()["amount"] == 1600
     assert patched.json()["place"] == "Shop"
 
+    bad_pay = client.patch(
+        f"/records/{rid}",
+        headers=h,
+        json={"payment_source": "wallet"},
+    )
+    assert bad_pay.status_code == 400
+    ok_pay = client.patch(
+        f"/records/{rid}",
+        headers=h,
+        json={"payment_source": "cash_on_hand"},
+    )
+    assert ok_pay.status_code == 200
+    assert ok_pay.json()["payment_source"] == "cash_on_hand"
+    assert ok_pay.json()["payment_method"] == ""
+
     role = client.post(
         f"/orgs/members/{emp_id}/role",
         headers=h,
@@ -1281,12 +1296,14 @@ def test_settlement_reserve_and_record_lock(client):
     assert after["last_expense_payout_at"] is not None
     locked = client.get(f"/records/{rid}", headers=h).json()
     assert locked["can_void"] is False
+    assert locked["void_blocked_reason"]
     denied = client.post(f"/records/{rid}/void", headers=h, json={"note": "nope"})
     assert denied.status_code == 400
     # void payout unlocks
     client.post(f"/payouts/{pay.json()['id']}/void", headers=h, json={"note": "undo settle"})
     unlocked = client.get(f"/records/{rid}", headers=h).json()
     assert unlocked["can_void"] is True
+    assert unlocked["void_blocked_reason"] is None
 
 
 def test_transfer_excluded_from_operating_report(client):

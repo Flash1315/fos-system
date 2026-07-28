@@ -257,6 +257,12 @@ export function RecordDetailScreen({
           {canVoid && (
             <Btn title="Void approved" variant="danger" disabled={busy} onPress={() => setVoidOpen(true)} />
           )}
+          {isManager &&
+            !!rec &&
+            rec.status === "approved" &&
+            !rec.is_voided &&
+            !rec.can_void &&
+            !!rec.void_blocked_reason && <Sub>{rec.void_blocked_reason}</Sub>}
           {isManager && (
             <Btn
               title="Add manager note"

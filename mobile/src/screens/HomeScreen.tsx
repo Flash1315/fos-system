@@ -210,7 +210,10 @@ export function HomeScreen({
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => onRecord(item.id)}>
             <Text style={styles.rowTitle}>
-              {item.kind} · <Text style={{ color: statusColor(item.status) }}>{item.status}</Text>
+              {item.kind} ·{" "}
+              <Text style={{ color: statusColor(item.status, !!item.is_voided) }}>
+                {item.is_voided ? "voided" : item.status}
+              </Text>
             </Text>
             <Text style={styles.rowMeta}>
               {formatMoney(item.amount, item.currency)} · {item.category || "—"}

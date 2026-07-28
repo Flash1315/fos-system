@@ -6,7 +6,7 @@ from app.auth import (
     create_access_token, get_current_user, hash_password, require_roles, verify_password,
 )
 from app.db import get_db
-from app.models import MoneyRecord, Organization, Payout, User, UserRole
+from app.models import BalanceAdjustment, MoneyRecord, Organization, Payout, User, UserRole
 from app.schemas import InviteIn, LoginIn, OrgCreate, OrgOut, OrgUpdate, PasswordChangeIn, TokenOut, UserOut
 
 router = APIRouter(tags=["auth"])
@@ -112,7 +112,13 @@ def update_org(
             has_payouts = (
                 db.query(Payout.id).filter(Payout.organization_id == org.id).first() is not None
             )
-            if has_records or has_payouts:
+            has_adjustments = (
+                db.query(BalanceAdjustment.id)
+                .filter(BalanceAdjustment.organization_id == org.id)
+                .first()
+                is not None
+            )
+            if has_records or has_payouts or has_adjustments:
                 raise HTTPException(
                     400,
                     "Currency cannot change after money activity exists",

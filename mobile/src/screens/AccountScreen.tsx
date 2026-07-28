@@ -179,8 +179,8 @@ export function AccountScreen({
         <>
           <Label>Company settings</Label>
           <Sub>
-            Owners can rename the company. Currency can change only before the first money record or
-            settlement. Slug stays fixed for login.
+            Owners can rename the company. Currency can change only before the first money record,
+            settlement, or balance adjustment. Slug stays fixed for login.
           </Sub>
           <Field value={orgName} onChangeText={setOrgName} placeholder="Company name" />
           <Field
@@ -293,16 +293,35 @@ export function AccountScreen({
                     <Btn
                       title="Approve"
                       disabled={busy}
-                      onPress={async () => {
-                        setBusy(true);
-                        try {
-                          await approveSettlementRequest(r.id);
-                          await reloadRequests();
-                        } catch (e) {
-                          Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-                        } finally {
-                          setBusy(false);
-                        }
+                      onPress={() => {
+                        const label =
+                          r.kind === "expense_payout"
+                            ? "expense reimbursement"
+                            : "cash handover";
+                        Alert.alert(
+                          "Fos",
+                          `Approve ${label} ${r.amount.toLocaleString()} ${currency} for ${r.user_name}?`,
+                          [
+                            { text: "Cancel", style: "cancel" },
+                            {
+                              text: "Approve",
+                              onPress: async () => {
+                                setBusy(true);
+                                try {
+                                  await approveSettlementRequest(r.id);
+                                  await reloadRequests();
+                                } catch (e) {
+                                  Alert.alert(
+                                    "Fos",
+                                    e instanceof Error ? e.message : "Failed",
+                                  );
+                                } finally {
+                                  setBusy(false);
+                                }
+                              },
+                            },
+                          ],
+                        );
                       }}
                     />
                     <Btn

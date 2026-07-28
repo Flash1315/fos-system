@@ -1323,6 +1323,27 @@ def test_payment_fields_and_currency_lock(client):
     assert rename.status_code == 200
 
 
+def test_currency_lock_after_adjustment(client):
+    owner = _register(client, "flow-adjcur", "adjcur-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    ok = client.patch("/orgs/me", headers=h, json={"currency": "usd"})
+    assert ok.status_code == 200
+    adj = client.post(
+        "/adjustments",
+        headers=h,
+        json={
+            "user_id": uid,
+            "track": "spendings",
+            "amount": 5000,
+            "note": "opening",
+        },
+    )
+    assert adj.status_code == 200
+    locked = client.patch("/orgs/me", headers=h, json={"currency": "IDR"})
+    assert locked.status_code == 400
+
+
 def test_settlement_reserve_and_record_lock(client):
     owner = _register(client, "flow-reserve", "reserve-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}

@@ -47,29 +47,53 @@ export function TeamScreen({
       Alert.alert("Fos", "Only owner can activate/deactivate");
       return;
     }
-    setBusy(true);
-    try {
-      await setMemberActive(member.id, !member.is_active);
-      await reload();
-    } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
+    const nextActive = member.is_active === false;
+    Alert.alert(
+      "Fos",
+      nextActive
+        ? `Activate ${member.full_name}?`
+        : `Deactivate ${member.full_name}? They will not be able to log in.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: nextActive ? "Activate" : "Deactivate",
+          style: nextActive ? "default" : "destructive",
+          onPress: async () => {
+            setBusy(true);
+            try {
+              await setMemberActive(member.id, nextActive);
+              await reload();
+            } catch (e) {
+              Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const changeRole = async (member: User, role: "owner" | "manager" | "employee") => {
     if (currentUser.role !== "owner") return;
     if (member.role === role) return;
-    setBusy(true);
-    try {
-      await setMemberRole(member.id, role);
-      await reload();
-    } catch (e) {
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
+    Alert.alert("Fos", `Change ${member.full_name} role to ${role}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Change",
+        onPress: async () => {
+          setBusy(true);
+          try {
+            await setMemberRole(member.id, role);
+            await reload();
+          } catch (e) {
+            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
   };
 
   return (

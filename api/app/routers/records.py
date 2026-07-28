@@ -369,6 +369,8 @@ def decide_batch(
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
     """Approve/reject many pending records in one call."""
+    if not body.approve and not (body.note or "").strip():
+        raise HTTPException(400, "Reject requires a note")
     out = []
     for rid in body.ids:
         rec = db.get(MoneyRecord, rid)
@@ -461,6 +463,9 @@ def decide_record(
         raise HTTPException(400, "Already decided")
     if body.approve:
         _assert_cash_for_approve(db, rec)
+    else:
+        if not (body.note or "").strip():
+            raise HTTPException(400, "Reject requires a note")
     rec.status = RecordStatus.approved if body.approve else RecordStatus.rejected
     rec.decided_at = _utcnow()
     rec.decided_by = user.id

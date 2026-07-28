@@ -169,9 +169,13 @@ export function ApproveScreen({
         title="Reject record"
         onCancel={() => setRejectId(null)}
         onSubmit={async (note) => {
+          if (!note.trim()) {
+            Alert.alert("Fos", "Reject requires a note");
+            return;
+          }
           const id = rejectId;
           setRejectId(null);
-          if (id != null) await runDecide(id, false, note);
+          if (id != null) await runDecide(id, false, note.trim());
         }}
       />
       <NoteModal
@@ -179,8 +183,12 @@ export function ApproveScreen({
         title="Reject all pending"
         onCancel={() => setRejectAllOpen(false)}
         onSubmit={async (note) => {
+          if (!note.trim()) {
+            Alert.alert("Fos", "Reject requires a note");
+            return;
+          }
           setRejectAllOpen(false);
-          await rejectAll(note);
+          await rejectAll(note.trim());
         }}
       />
     </Screen>

@@ -1352,6 +1352,26 @@ def test_transfer_excluded_from_operating_report(client):
     assert report["net_result"] == 47000  # 50000 - 3000
 
 
+def test_reject_requires_note(client):
+    owner = _register(client, "flow-rejnote", "rejnote-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rid = client.post(
+        "/records",
+        headers=h,
+        json={"kind": "expense", "amount": 100, "category": "Taxi", "payment_source": "my_pocket"},
+    ).json()["id"]
+    bare = client.post(f"/records/{rid}/decide", headers=h, json={"approve": False, "note": ""})
+    assert bare.status_code == 400
+    ok = client.post(
+        f"/records/{rid}/decide",
+        headers=h,
+        json={"approve": False, "note": "duplicate"},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["status"] == "rejected"
+    assert "duplicate" in ok.json()["comment"]
+
+
 def test_voided_list_filter(client):
     owner = _register(client, "flow-voidfilter", "voidfilter-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}

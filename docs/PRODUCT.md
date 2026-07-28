@@ -122,27 +122,36 @@ OAuth2 form variant: username = `email@@organization-slug` → `/auth/login-form
 2. Creates user in **same** org with given role + password
 
 ### 8.4 Create money record
-1. Authenticated user `POST /records`
-2. Always starts as `pending`
-3. Currency taken from organization
+1. Authenticated user `POST /records` (`expense` / `fuel` / `income`)
+2. Starts as `pending` unless manager/owner uses `approve_now`
+3. Spend defaults to `payment_source=my_pocket`; income uses `payment_method=cash|transfer`
+4. Currency taken from organization (locked after first money activity)
 
 ### 8.5 Approval
 1. Owner/manager `GET /records/pending`
-2. `POST /records/{id}/decide` with `{ "approve": true|false, "note": "" }`
-3. Sets status, `decided_by`, `decided_at`; optional note appended to comment
+2. `POST /records/{id}/decide` with `{ "approve": true|false, "note": "…" }`
+3. Reject **requires** a non-empty note; note appended to comment
+4. Approving spend from `cash_on_hand` fails if held cash is insufficient
 
-### 8.6 Cash on hand (v1 formula)
-Per **current user**, inside their org:
+### 8.6 Dual balance (RJ-style cutoffs)
+Per user, inside their org, after last non-voided settlement:
 
 ```
+spendings =
+  approved expense/fuel with payment_source=my_pocket
+  + carry balance_after − overpayment + spendings adjustments
+  (since last expense_payout)
+
 cash_on_hand =
-  sum(approved income where payment_method == "cash")
-  - sum(approved expense)
-  - sum(approved fuel)
+  approved cash income − spend from cash_on_hand
+  + carry balance_after + cash adjustments
+  (since last income_handover)
 ```
 
-Also returns `pending_count` for that user.  
-**Note:** transfer income does not increase cash on hand in v1.
+Also returns `pending_count`, `reserved_*` / `available_*` from pending settlement requests,
+and `last_expense_payout_at` / `last_income_handover_at`.
+
+Related: `/payouts`, `/payouts/requests`, `/transfers`, `/adjustments`, `/reports/export.csv`.
 
 ## 9. API surface (v1)
 
@@ -162,10 +171,17 @@ Also returns `pending_count` for that user.
 | GET | `/records/mine` | yes | my records |
 | GET | `/records/org` | owner/manager | org ledger |
 | GET | `/records/pending` | owner/manager | approval queue |
-| GET | `/records/balance/me` | yes | cash on hand |
+| GET | `/records/balance/me` | yes | dual balance + reserved/available |
+| GET | `/records/balance/team` | owner/manager | team balances |
 | GET | `/records/{id}` | yes | record detail |
 | POST | `/records/{id}/decide` | owner/manager | approve/reject |
+| POST | `/records/{id}/void` | owner/manager | void approved (if unlocked) |
+| POST | `/payouts` | owner/manager | expense payout / income handover |
+| POST | `/payouts/requests` | yes | request settlement |
+| POST | `/adjustments` | owner/manager | opening / corrections |
+| POST | `/transfers` | yes | colleague cash transfer |
 | GET | `/reports/org` | owner/manager | org totals |
+| GET | `/reports/export.csv` | owner/manager | CSV export |
 | POST | `/media/photo` | yes | receipt image upload (local) |
 | GET | `/media/files/{org}/{file}` | yes | fetch uploaded image |
 
@@ -175,13 +191,13 @@ Interactive docs: `/docs` when API is running.
 
 Screens in `mobile/App.tsx` (+ `mobile/src/screens/`):
 1. **Auth** — org slug; login or register company; email/password
-2. **Home** — cash on hand, my records, New record, Approvals / Invite / Team / Reports (if manager/owner), Log out
-3. **Create** — kind + amount + category presets + fuel/income fields + optional receipt photo → POST `/records`
-4. **Approvals** — pending list → approve/reject
-5. **Invite** — owner/manager adds user via POST `/orgs/invite`
-6. **Team** — member list; owner can deactivate
-7. **Reports** — org cash position and category totals
-8. **Record detail** — full record + photo + decide if pending
+2. **Home** — dual balance + reserved hints, my records (incl. voided filter), actions
+3. **Create** — kind/amount/category/purpose + fuel odometer + on-behalf + optional photo
+4. **Approvals** — pending list → approve/reject (reject note required) / batch
+5. **Invite / Team / Account** — members, roles, settlement requests, org settings
+6. **Reports / My stats / Ledger** — totals, CSV share, org search
+7. **Settlements / Balances / Payout history** — pay/take, openings, voids
+8. **Transfer / Record detail** — cash transfer; void/comment/edit pending
 
 Config: `EXPO_PUBLIC_API_URL` (phone needs LAN IP, not `127.0.0.1`).  
 Brand in UI: **Fos** — “Field money. Clear books.”

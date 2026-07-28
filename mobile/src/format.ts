@@ -1,8 +1,18 @@
-export function parseFiniteMoney(raw: string, opts?: { min?: number }): number | null {
+export function parseFiniteMoney(
+  raw: string,
+  opts?: { min?: number; allowZero?: boolean },
+): number | null {
   const value = Number(String(raw ?? "").trim().replace(",", "."));
   if (!Number.isFinite(value)) return null;
-  const min = opts?.min ?? 0.01;
-  if (value < min) return null;
+  if (!opts?.allowZero && Math.abs(value) < 1e-9) return null;
+  if (opts?.min != null && value < opts.min) return null;
+  if (opts?.min == null && value < 0.01) return null;
+  return value;
+}
+
+export function parseFiniteSignedMoney(raw: string): number | null {
+  const value = Number(String(raw ?? "").trim().replace(",", "."));
+  if (!Number.isFinite(value) || value === 0) return null;
   return value;
 }
 

@@ -319,7 +319,7 @@ def export_csv(
         q = q.filter(eff >= since)
     if until is not None:
         q = q.filter(eff < until)
-    rows = q.order_by(MoneyRecord.created_at.asc()).limit(5001).all()
+    rows = q.order_by(MoneyRecord.created_at.asc(), MoneyRecord.id.asc()).limit(5001).all()
     if len(rows) > 5000:
         raise HTTPException(400, "Export too large — narrow the date range")
 
@@ -390,7 +390,7 @@ def export_csv(
         pq = pq.filter(Payout.created_at >= since)
     if until is not None:
         pq = pq.filter(Payout.created_at < until)
-    payouts = pq.order_by(Payout.created_at.asc()).limit(2001).all()
+    payouts = pq.order_by(Payout.created_at.asc(), Payout.id.asc()).limit(2001).all()
     if len(payouts) > 2000:
         raise HTTPException(400, "Export too large — narrow the date range")
     for p in payouts:
@@ -430,7 +430,7 @@ def export_csv(
         aq = aq.filter(BalanceAdjustment.occurred_at >= since)
     if until is not None:
         aq = aq.filter(BalanceAdjustment.occurred_at < until)
-    adjustments = aq.order_by(BalanceAdjustment.created_at.asc()).limit(2001).all()
+    adjustments = aq.order_by(BalanceAdjustment.created_at.asc(), BalanceAdjustment.id.asc()).limit(2001).all()
     if len(adjustments) > 2000:
         raise HTTPException(400, "Export too large — narrow the date range")
     for a in adjustments:
@@ -470,7 +470,7 @@ def export_csv(
         sq = sq.filter(SettlementRequest.created_at >= since)
     if until is not None:
         sq = sq.filter(SettlementRequest.created_at < until)
-    requests = sq.order_by(SettlementRequest.created_at.asc()).limit(2001).all()
+    requests = sq.order_by(SettlementRequest.created_at.asc(), SettlementRequest.id.asc()).limit(2001).all()
     if len(requests) > 2000:
         raise HTTPException(400, "Export too large — narrow the date range")
     for req in requests:

@@ -26,10 +26,23 @@ router = APIRouter(prefix="/records", tags=["records"])
 
 _PHOTO_RE = re.compile(r"^/media/files/(\d+)/([0-9a-f]{32}\.(?:jpg|png|webp))$")
 _SEARCH_MAX = 80
+_COMMENT_MAX = 4000
+_BIKE_MAX = 120
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _append_text(existing: str | None, addition: str, *, label: str = "Comment") -> str:
+    base = (existing or "").rstrip()
+    add = (addition or "").strip()
+    if not add:
+        return base
+    combined = f"{base}\n{add}".strip() if base else add
+    if len(combined) > _COMMENT_MAX:
+        raise HTTPException(400, f"{label} would exceed {_COMMENT_MAX} characters")
+    return combined
 
 
 def _search_like(q: str | None) -> str | None:
@@ -207,6 +220,8 @@ def _fuel_odometer_neighbors(
     exclude_id: int | None = None,
 ) -> tuple[MoneyRecord | None, MoneyRecord | None]:
     """Nearest prior/next fuel readings with odometer around effective time `at`."""
+    from sqlalchemy import and_, or_
+
     eff = func.coalesce(MoneyRecord.occurred_at, MoneyRecord.created_at)
     q = db.query(MoneyRecord).filter(
         MoneyRecord.organization_id == org_id,
@@ -225,18 +240,19 @@ def _fuel_odometer_neighbors(
         )
     if exclude_id is not None:
         q = q.filter(MoneyRecord.id != exclude_id)
-    rows = q.order_by(eff.asc(), MoneyRecord.id.asc()).all()
-    pred: MoneyRecord | None = None
-    succ: MoneyRecord | None = None
-    for row in rows:
-        row_at = row.occurred_at or row.created_at
-        if row_at is None:
-            continue
-        if row_at < at or (row_at == at and (exclude_id is None or row.id < (exclude_id or 0))):
-            pred = row
-        elif row_at > at or (row_at == at and exclude_id is not None and row.id > exclude_id):
-            succ = row
-            break
+        pred = (
+            q.filter(or_(eff < at, and_(eff == at, MoneyRecord.id < exclude_id)))
+            .order_by(eff.desc(), MoneyRecord.id.desc())
+            .first()
+        )
+        succ = (
+            q.filter(or_(eff > at, and_(eff == at, MoneyRecord.id > exclude_id)))
+            .order_by(eff.asc(), MoneyRecord.id.asc())
+            .first()
+        )
+    else:
+        pred = q.filter(eff <= at).order_by(eff.desc(), MoneyRecord.id.desc()).first()
+        succ = q.filter(eff > at).order_by(eff.asc(), MoneyRecord.id.asc()).first()
     return pred, succ
 
 
@@ -354,7 +370,7 @@ def create_record(
         owner_id = target.id
         stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
         note = f"[filed by {user.full_name} {stamp}]"
-        body_comment = (body.comment + "\n" + note).strip() if body.comment else note
+        body_comment = _append_text(body.comment, note)
     if body.kind == RecordKind.fuel:
         _assert_odometer(
             db,
@@ -405,7 +421,7 @@ def create_record(
         rec.decided_at = _utcnow()
         stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
         note = f"[auto-approved on create by {user.full_name} {stamp}]"
-        rec.comment = (rec.comment + "\n" + note).strip() if rec.comment else note
+        rec.comment = _append_text(rec.comment, note)
     db.flush()
     if key:
         store_idem(
@@ -473,7 +489,7 @@ def my_records(
             | (MoneyRecord.client_name.ilike(like, escape="\\"))
         )
     rows = (
-        query.order_by(MoneyRecord.created_at.desc())
+        query.order_by(MoneyRecord.created_at.desc(), MoneyRecord.id.desc())
         .offset(offset)
         .limit(limit)
         .all()
@@ -517,7 +533,7 @@ def org_records(
             | (MoneyRecord.client_name.ilike(like, escape="\\"))
         )
     rows = (
-        query.order_by(MoneyRecord.created_at.desc())
+        query.order_by(MoneyRecord.created_at.desc(), MoneyRecord.id.desc())
         .offset(offset)
         .limit(limit)
         .all()
@@ -542,7 +558,7 @@ def pending_records(
         q = q.filter(MoneyRecord.purpose == purpose)
     if kind:
         q = q.filter(MoneyRecord.kind == kind)
-    rows = q.order_by(MoneyRecord.created_at.asc()).offset(offset).limit(limit).all()
+    rows = q.order_by(MoneyRecord.created_at.asc(), MoneyRecord.id.asc()).offset(offset).limit(limit).all()
     return [_record_out(db, r) for r in rows]
 
 
@@ -632,6 +648,9 @@ def last_fuel_odometer(
         if not target or target.organization_id != user.organization_id:
             raise HTTPException(404, "User not found")
         owner_id = target.id
+    bike_key = (bike or "").strip()
+    if len(bike_key) > _BIKE_MAX:
+        raise HTTPException(400, f"bike too long (max {_BIKE_MAX} characters)")
     when: datetime | None = None
     if (at or "").strip():
         raw = at.strip()
@@ -644,15 +663,16 @@ def last_fuel_odometer(
                     when = when.astimezone(timezone.utc).replace(tzinfo=None)
         except ValueError as exc:
             raise HTTPException(400, "at must be YYYY-MM-DD or ISO datetime") from exc
+        when = _validate_occurred_at(when)
     last = _last_fuel_odometer(
-        db, user.organization_id, owner_id, bike, exclude_id=exclude_id
+        db, user.organization_id, owner_id, bike_key, exclude_id=exclude_id
     )
     if when is not None:
         pred, succ = _fuel_odometer_neighbors(
-            db, user.organization_id, owner_id, bike, at=when, exclude_id=exclude_id
+            db, user.organization_id, owner_id, bike_key, at=when, exclude_id=exclude_id
         )
         return {
-            "bike": (bike or "").strip(),
+            "bike": bike_key,
             "user_id": owner_id,
             "odometer": float(pred.odometer) if pred and pred.odometer is not None else None,
             "min_odometer": float(pred.odometer) if pred and pred.odometer is not None else None,
@@ -664,7 +684,7 @@ def last_fuel_odometer(
             "has_history": pred is not None or succ is not None or last is not None,
         }
     return {
-        "bike": (bike or "").strip(),
+        "bike": bike_key,
         "user_id": owner_id,
         "odometer": float(last.odometer) if last and last.odometer is not None else None,
         "min_odometer": float(last.odometer) if last and last.odometer is not None else None,
@@ -779,7 +799,7 @@ def decide_batch(
         rec.decided_at = _utcnow()
         rec.decided_by = user.id
         if body.note:
-            rec.comment = (rec.comment + f"\n[review] {body.note}").strip()
+            rec.comment = _append_text(rec.comment, f"[review] {body.note}")
         out.append(rec)
     if not out:
         if skipped_cash > 0:
@@ -1084,7 +1104,7 @@ def decide_record(
     rec.decided_at = _utcnow()
     rec.decided_by = user.id
     if body.note:
-        rec.comment = (rec.comment + f"\n[review] {body.note}").strip()
+        rec.comment = _append_text(rec.comment, f"[review] {body.note}")
     if key:
         store_idem(
             db,
@@ -1161,7 +1181,7 @@ def comment_record(
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
     stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
-    rec.comment = (rec.comment + f"\n[mgr {user.full_name} {stamp}] {body.note}").strip()
+    rec.comment = _append_text(rec.comment, f"[mgr {user.full_name} {stamp}] {body.note}")
     if key:
         store_idem(
             db,
@@ -1284,7 +1304,7 @@ def void_approved_record(
         row.is_voided = True
         row.voided_at = now
         row.voided_by = user.id
-        row.comment = (row.comment + "\n" + note).strip()
+        row.comment = _append_text(row.comment, note)
     if key:
         store_idem(
             db,
@@ -1366,7 +1386,7 @@ def cancel_pending_record(
     rec.status = RecordStatus.rejected
     rec.decided_at = _utcnow()
     rec.decided_by = user.id
-    rec.comment = (rec.comment + "\n[cancelled]").strip()
+    rec.comment = _append_text(rec.comment, "[cancelled]")
     if key:
         store_idem(
             db,

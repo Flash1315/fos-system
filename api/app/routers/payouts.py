@@ -16,7 +16,7 @@ from app.models import (
     User,
     UserRole,
 )
-from app.routers.records import _utcnow
+from app.routers.records import _append_text, _utcnow
 from app.services.balances import last_payout, pending_reserved, user_balance
 
 router = APIRouter(prefix="/payouts", tags=["payouts"])
@@ -39,6 +39,29 @@ class PayoutCreate(BaseModel):
     @classmethod
     def note_trim(cls, v: str) -> str:
         return (v or "").strip()[:2000]
+
+    @field_validator("amount")
+    @classmethod
+    def amount_finite(cls, v: float) -> float:
+        from app.services.money import require_positive_money
+
+        try:
+            return require_positive_money(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+
+    @field_validator("overpayment")
+    @classmethod
+    def overpayment_finite(cls, v: float) -> float:
+        from app.services.money import round_money
+
+        try:
+            amount = round_money(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        if amount < 0:
+            raise ValueError("Overpayment cannot be negative")
+        return amount
 
 
 class PayoutOut(BaseModel):
@@ -93,6 +116,16 @@ class SettlementRequestIn(BaseModel):
     @classmethod
     def note_trim(cls, v: str) -> str:
         return (v or "").strip()[:2000]
+
+    @field_validator("amount")
+    @classmethod
+    def amount_finite(cls, v: float) -> float:
+        from app.services.money import require_positive_money
+
+        try:
+            return require_positive_money(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 class SettlementRequestOut(BaseModel):
@@ -333,7 +366,7 @@ def my_payouts(
         q = q.filter(Payout.is_voided.is_(False))
     if kind is not None:
         q = q.filter(Payout.kind == kind)
-    rows = q.order_by(Payout.created_at.desc()).offset(offset).limit(limit).all()
+    rows = q.order_by(Payout.created_at.desc(), Payout.id.desc()).offset(offset).limit(limit).all()
     return [_payout_out(db, r, user.full_name) for r in rows]
 
 
@@ -356,7 +389,7 @@ def org_payouts(
         q = q.filter(Payout.user_id == user_id)
     if kind is not None:
         q = q.filter(Payout.kind == kind)
-    rows = q.order_by(Payout.created_at.desc()).offset(offset).limit(limit).all()
+    rows = q.order_by(Payout.created_at.desc(), Payout.id.desc()).offset(offset).limit(limit).all()
     out = []
     for r in rows:
         u = db.get(User, r.user_id)
@@ -472,9 +505,9 @@ def void_payout(
             linked.decided_by = None
             linked.settled_amount = None
             linked.payout_id = None
-            linked.note = (
-                (linked.note or "") + f"\n[reopened after payout void] {body.note}"
-            ).strip()
+            linked.note = _append_text(
+                linked.note, f"[reopened after payout void] {body.note}", label="Note"
+            )
         else:
             reason = (
                 "teammate inactive or missing"
@@ -486,10 +519,11 @@ def void_payout(
             linked.decided_by = manager.id
             linked.settled_amount = None
             linked.payout_id = None
-            linked.note = (
-                (linked.note or "")
-                + f"\n[cancelled after payout void — {reason}] {body.note}"
-            ).strip()
+            linked.note = _append_text(
+                linked.note,
+                f"[cancelled after payout void — {reason}] {body.note}",
+                label="Note",
+            )
     if key:
         store_idem(
             db,
@@ -742,7 +776,10 @@ def my_settlement_requests(
             raise HTTPException(400, "Invalid status") from exc
         q = q.filter(SettlementRequest.status == st)
     rows = (
-        q.order_by(SettlementRequest.created_at.desc()).offset(offset).limit(limit).all()
+        q.order_by(SettlementRequest.created_at.desc(), SettlementRequest.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
     )
     return [_request_out(r, user.full_name) for r in rows]
 
@@ -881,11 +918,11 @@ def list_settlement_requests(
             raise HTTPException(400, "Invalid status") from exc
         q = q.filter(SettlementRequest.status == st)
         if st == SettlementRequestStatus.pending:
-            q = q.order_by(SettlementRequest.created_at.asc())
+            q = q.order_by(SettlementRequest.created_at.asc(), SettlementRequest.id.asc())
         else:
-            q = q.order_by(SettlementRequest.created_at.desc())
+            q = q.order_by(SettlementRequest.created_at.desc(), SettlementRequest.id.desc())
     else:
-        q = q.order_by(SettlementRequest.created_at.desc())
+        q = q.order_by(SettlementRequest.created_at.desc(), SettlementRequest.id.desc())
     rows = q.offset(offset).limit(limit).all()
     out = []
     for r in rows:
@@ -1126,7 +1163,7 @@ def cancel_settlement_request(
     req.decided_at = _utcnow()
     req.decided_by = user.id
     if (body.note or "").strip():
-        req.note = (req.note + f"\n[cancelled] {body.note.strip()}").strip()
+        req.note = _append_text(req.note, f"[cancelled] {body.note.strip()}", label="Note")
     if key:
         store_idem(
             db,

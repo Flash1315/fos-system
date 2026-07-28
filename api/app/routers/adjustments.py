@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth import require_roles
 from app.db import get_db
 from app.models import AdjustmentTrack, BalanceAdjustment, PayoutKind, User, UserRole
-from app.routers.records import _utcnow, _validate_occurred_at
+from app.routers.records import _append_text, _utcnow, _validate_occurred_at
 from app.services.balances import (
     adjustment_void_blocked_reason,
     can_void_adjustment,
@@ -38,6 +38,19 @@ class AdjustmentIn(BaseModel):
     @classmethod
     def note_trimmed(cls, v: str) -> str:
         return _require_note(v)
+
+    @field_validator("amount")
+    @classmethod
+    def amount_finite(cls, v: float) -> float:
+        from app.services.money import round_money
+
+        try:
+            amount = round_money(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        if abs(amount) < 1e-9:
+            raise ValueError("Amount cannot be zero")
+        return amount
 
 
 class AdjustmentOut(BaseModel):
@@ -105,7 +118,10 @@ def list_adjustments(
     if track is not None:
         q = q.filter(BalanceAdjustment.track == track)
     rows = (
-        q.order_by(BalanceAdjustment.created_at.desc()).offset(offset).limit(limit).all()
+        q.order_by(BalanceAdjustment.created_at.desc(), BalanceAdjustment.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
     )
     out = []
     for r in rows:
@@ -326,7 +342,7 @@ def void_adjustment(
     row.is_voided = True
     row.voided_at = _utcnow()
     row.voided_by = manager.id
-    row.note = (row.note + f"\n[voided] {body.note}").strip()
+    row.note = _append_text(row.note, f"[voided] {body.note}", label="Note")
     if key:
         store_idem(
             db,

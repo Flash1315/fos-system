@@ -40,6 +40,14 @@ class TransferIn(BaseModel):
     def strip_comment(cls, v: str) -> str:
         return (v or "").strip()
 
+    @field_validator("amount")
+    @classmethod
+    def amount_finite(cls, v: float) -> float:
+        try:
+            return require_positive_money(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+
 
 class TransferOut(BaseModel):
     sender_record: RecordOut

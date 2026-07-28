@@ -1929,7 +1929,7 @@ def test_balance_adjustments_and_atomic_approve(client):
         headers=h,
         json={"user_id": uid, "track": "spendings", "amount": 0, "note": "noop"},
     )
-    assert zero.status_code == 400
+    assert zero.status_code in (400, 422)
 
     # Approve settlement request creates payout + marks request in one commit
     req = client.post(
@@ -2761,7 +2761,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.22"
+    assert health.json()["version"] == "0.7.23"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -3845,7 +3845,7 @@ def test_round_to_zero_rejected_and_csv_settlement_export(client):
         headers=h,
         json={"kind": "expense_payout", "amount": 0.004, "note": "tiny"},
     )
-    assert req.status_code == 400
+    assert req.status_code in (400, 422)
 
     ok_req = client.post(
         "/payouts/requests",
@@ -4911,3 +4911,85 @@ def test_adjustment_reserves_search_escape_and_inactive_approve(client):
     )
     assert blocked.status_code == 400
     assert "inactive" in blocked.json()["detail"].lower()
+
+
+def test_manager_invite_role_comment_cap_and_odo_bounds(client):
+    owner = _register(client, "flow-0723", "v0723-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    mgr = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={
+            "email": "v0723-mgr@example.com",
+            "full_name": "Mgr",
+            "role": "manager",
+            "password": "secret12",
+            "password_confirm": "secret12",
+        },
+    )
+    assert mgr.status_code == 200, mgr.text
+    login = client.post(
+        "/auth/login",
+        json={
+            "email": "v0723-mgr@example.com",
+            "password": "secret12",
+            "organization_slug": "flow-0723",
+        },
+    )
+    assert login.status_code == 200
+    mh = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    bad_role = client.post(
+        "/orgs/invite",
+        headers=mh,
+        json={"email": "v0723-other@example.com", "full_name": "Other Mgr", "role": "manager"},
+    )
+    assert bad_role.status_code == 403
+    ok_emp = client.post(
+        "/orgs/invite",
+        headers=mh,
+        json={"email": "v0723-emp@example.com", "full_name": "Emp", "role": "employee"},
+    )
+    assert ok_emp.status_code == 200, ok_emp.text
+
+    # Comment append cap
+    pending = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 3,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "comment": "x" * 3980,
+        },
+    )
+    assert pending.status_code == 200, pending.text
+    rid = pending.json()["id"]
+    huge = client.post(
+        f"/records/{rid}/comment",
+        headers=h,
+        json={"note": "this note is long enough to overflow the comment budget"},
+    )
+    assert huge.status_code == 400
+    assert "exceed" in huge.json()["detail"].lower()
+
+    # Odometer hint bike bound + at validation
+    long_bike = client.get("/records/fuel/last-odometer?bike=" + ("b" * 121), headers=h)
+    assert long_bike.status_code == 400
+    future = client.get("/records/fuel/last-odometer?at=2099-01-01", headers=h)
+    assert future.status_code == 400
+
+    # Non-finite payout amount rejected at schema edge
+    nan = client.post(
+        "/payouts",
+        headers=h,
+        json={
+            "user_id": owner["user"]["id"],
+            "kind": "expense_payout",
+            "amount": "NaN",
+            "payment_method": "cash",
+            "note": "bad",
+        },
+    )
+    assert nan.status_code == 422

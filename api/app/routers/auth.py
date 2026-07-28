@@ -272,6 +272,8 @@ def invite_user(
         raise HTTPException(400, "User already in organization")
     if body.role == UserRole.owner and user.role != UserRole.owner:
         raise HTTPException(403, "Only owner can invite owner")
+    if user.role == UserRole.manager and body.role != UserRole.employee:
+        raise HTTPException(403, "Managers can only invite employees")
     org = db.get(Organization, user.organization_id)
     invite_token: str | None = None
     raw_invite: str | None = None

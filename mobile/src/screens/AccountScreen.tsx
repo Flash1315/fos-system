@@ -82,6 +82,10 @@ export function AccountScreen({
   const cancelIdemRef = useRef<string | null>(null);
   const cancelSlotRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    requestIdemRef.current = null;
+  }, [kind, amount, note]);
+
   const reloadOrg = async () => {
     try {
       setOrgLoadError("");

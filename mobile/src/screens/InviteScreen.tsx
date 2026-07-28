@@ -28,7 +28,7 @@ export function InviteScreen({
   const roles =
     currentRole === "owner"
       ? (["employee", "manager", "owner"] as const)
-      : (["employee", "manager"] as const);
+      : (["employee"] as const);
 
   const loadSlug = async () => {
     try {

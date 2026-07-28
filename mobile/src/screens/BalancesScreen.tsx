@@ -13,7 +13,7 @@ import {
 } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
-import { formatMoney, formatWhen } from "../format";
+import { formatMoney, formatWhen, parseFiniteSignedMoney } from "../format";
 import { colors } from "../theme";
 
 export function BalancesScreen({
@@ -115,7 +115,7 @@ export function BalancesScreen({
 
   React.useEffect(() => {
     adjustIdemRef.current = null;
-  }, [userId, track]);
+  }, [userId, track, amount, note]);
 
   const settle = async (
     item: TeamBalance,
@@ -209,8 +209,8 @@ export function BalancesScreen({
 
   const postAdjustment = async () => {
     if (isBusy) return;
-    const value = Number(String(amount ?? "").trim().replace(",", "."));
-    if (!userId || !Number.isFinite(value) || value === 0 || !note.trim()) {
+    const value = parseFiniteSignedMoney(amount);
+    if (!userId || value == null || !note.trim()) {
       Alert.alert("Fos", "Pick teammate, signed amount, and note");
       return;
     }

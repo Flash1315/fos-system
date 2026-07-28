@@ -139,10 +139,6 @@ def _authenticate_login(body: LoginIn, db: Session) -> TokenOut:
     password_ok = verify_password(body.password, hashed)
     if not org or not user or not user.is_active or not password_ok:
         raise HTTPException(401, "Invalid credentials")
-    from app.services.org_gates import org_billing_blocks_login
-
-    if org_billing_blocks_login(org):
-        raise HTTPException(403, "Organization billing is canceled")
     if getattr(user, "must_set_password", False):
         raise HTTPException(
             401,

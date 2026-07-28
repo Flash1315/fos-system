@@ -219,15 +219,8 @@ async function request<T>(
   if (!res.ok) {
     if (res.status === 401) {
       await notifyUnauthorized(requestToken);
-    } else if (res.status === 403) {
-      const detail =
-        typeof data === "object" && data && "detail" in data
-          ? String((data as { detail: unknown }).detail || "")
-          : "";
-      if (/billing is canceled/i.test(detail)) {
-        await notifyUnauthorized(requestToken);
-      }
     }
+    // Billing freeze (403) keeps the session so read-only + cancel-pending still work.
     throw new Error(
       formatApiError(
         data,
@@ -271,8 +264,6 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
   const text = await res.text();
   if (!res.ok) {
     if (res.status === 401) {
-      await notifyUnauthorized(requestToken);
-    } else if (res.status === 403 && /billing is canceled/i.test(text)) {
       await notifyUnauthorized(requestToken);
     }
     let detail = text;

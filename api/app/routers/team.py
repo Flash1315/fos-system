@@ -323,6 +323,9 @@ def issue_member_reset_token(
         limit=3,
         window_sec=900,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, user.organization_id)
     member = (
         db.query(User)
         .filter(User.id == member_id, User.organization_id == user.organization_id)

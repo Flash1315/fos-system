@@ -622,6 +622,9 @@ def batch_pay_all_spendings(
         limit=10,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, manager.organization_id)
 
     method = (payment_method or "cash").strip().lower() or "cash"
     if method not in PAYMENT_METHODS:
@@ -739,6 +742,9 @@ def batch_take_all_cash(
         limit=10,
         window_sec=60,
     )
+    from app.services.org_gates import require_org_writable
+
+    require_org_writable(db, manager.organization_id)
 
     method = (payment_method or "cash").strip().lower() or "cash"
     if method not in PAYMENT_METHODS:
@@ -1252,9 +1258,7 @@ def cancel_settlement_request(
         limit=60,
         window_sec=60,
     )
-    from app.services.org_gates import require_org_writable
-
-    require_org_writable(db, user.organization_id)
+    # Cancel is allowed during billing freeze so reserved amounts can be released.
 
     key = normalize_idem_key(idempotency_key)
     fp = (

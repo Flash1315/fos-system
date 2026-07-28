@@ -1611,9 +1611,7 @@ def cancel_pending_record(
         limit=60,
         window_sec=60,
     )
-    from app.services.org_gates import require_org_writable
-
-    require_org_writable(db, user.organization_id)
+    # Cancel is allowed during billing freeze so pending work can be released.
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint({"record_id": record_id}) if key else None

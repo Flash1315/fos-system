@@ -27,10 +27,3 @@ def require_org_writable(db: Session, org_id: int) -> Organization:
     if status == "canceled":
         raise HTTPException(403, "Organization billing is canceled")
     return org
-
-
-def org_billing_blocks_login(org: Organization | None) -> bool:
-    if not org:
-        return False
-    status = (getattr(org, "billing_status", None) or "ok").strip().lower()
-    return status == "canceled"

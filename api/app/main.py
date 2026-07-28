@@ -31,6 +31,12 @@ def _validate_runtime_settings() -> str:
         logger.warning("%s — prefer shorter JWT lifetime", msg)
     if not (1 <= int(settings.max_org_members or 0) <= 10_000):
         raise RuntimeError("MAX_ORG_MEMBERS must be between 1 and 10000")
+    ttl = int(settings.idempotency_ttl_hours or 0)
+    if ttl < 1 or ttl > 168:
+        raise RuntimeError("IDEMPOTENCY_TTL_HOURS must be between 1 and 168")
+    hsts = int(settings.hsts_max_age or 0)
+    if hsts < 0 or hsts > 63_072_000:
+        raise RuntimeError("HSTS_MAX_AGE must be between 0 and 63072000")
     algo = (settings.algorithm or "").strip()
     if algo and algo != "HS256":
         raise RuntimeError(f"ALGORITHM must be HS256 (got {algo!r})")
@@ -83,7 +89,7 @@ run_alembic_upgrade()
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.7.42",
+    version="0.7.43",
     docs_url=None if _IS_PROD else "/docs",
     redoc_url=None if _IS_PROD else "/redoc",
     openapi_url=None if _IS_PROD else "/openapi.json",
@@ -288,7 +294,7 @@ def health(request: Request):
     body = {
         "ok": db_status == "ok",
         "app": settings.app_name,
-        "version": "0.7.42",
+        "version": "0.7.43",
         "db": db_status,
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }

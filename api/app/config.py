@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     s3_access_key: str = ""
     s3_secret_key: str = ""
     s3_endpoint_url: str = ""  # MinIO / R2 compatible
-    s3_public_base_url: str = ""  # optional CDN/public URL prefix
+    s3_public_base_url: str = ""  # reserved; media always streams via authenticated API
 
     # Optional Telegram bot for org notifications
     telegram_bot_token: str = ""

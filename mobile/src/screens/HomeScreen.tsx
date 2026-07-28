@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
-import { makeIdempotencyKey, me, myBalance, myOrg, myPendingSettlementCount, myRecords, pendingCount as fetchPendingCount, pendingRecords, pendingSettlementCount, requestSettlement, type MoneyRecord, type User } from "../api";
+import { makeIdempotencyKey, billingMe, me, myBalance, myOrg, myPendingSettlementCount, myRecords, pendingCount as fetchPendingCount, pendingSettlementCount, requestSettlement, type MoneyRecord, type User } from "../api";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
@@ -61,6 +61,7 @@ export function HomeScreen({
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [billingCanceled, setBillingCanceled] = useState(false);
   const reloadGen = useRef(0);
   const requestIdemRef = useRef<string | null>(null);
   const requestSlotRef = useRef<string | null>(null);
@@ -84,14 +85,16 @@ export function HomeScreen({
     setLoading(true);
     try {
       setLoadError("");
-      const [b, org, list, freshUser] = await Promise.all([
+      const [b, org, list, freshUser, billing] = await Promise.all([
         myBalance(),
         myOrg(),
         myRecords({ ...recordParams(), offset: 0 }),
         me().catch(() => null),
+        billingMe().catch(() => null),
       ]);
       if (gen !== reloadGen.current) return;
       if (freshUser && onUser) onUser(freshUser);
+      setBillingCanceled((billing?.billing_status || "").toLowerCase() === "canceled");
       setBalance(formatMoney(b.cash_on_hand, b.currency));
       setSpendings(formatMoney(b.spendings ?? 0, b.currency));
       setAvailableSpend(b.available_spendings ?? b.spendings ?? 0);
@@ -186,7 +189,7 @@ export function HomeScreen({
   const isManager = user?.role === "owner" || user?.role === "manager";
 
   const quickRequest = async (kind: "expense_payout" | "income_handover") => {
-    if (requestBusy) return;
+    if (requestBusy || billingCanceled) return;
     const amount = kind === "expense_payout" ? availableSpend : availableCash;
     if (amount <= 0) {
       Alert.alert("Fos", "Nothing available to request");
@@ -261,13 +264,19 @@ export function HomeScreen({
         </View>
         <LinkText onPress={onLogout}>Log out</LinkText>
       </View>
+      {billingCanceled ? (
+        <Sub>
+          Billing canceled — org is read-only. You can still view data and cancel pending items;
+          creates, approvals, and invites are blocked until billing is restored.
+        </Sub>
+      ) : null}
       <Card>
         <Label>Cash on hand</Label>
         <Text style={styles.balance}>{balance}</Text>
         <Label>Spendings (my pocket)</Label>
         <Text style={styles.spend}>{spendings}</Text>
         {!!cycleHint && <Sub>{cycleHint}</Sub>}
-        {(availableSpend > 0 || availableCash > 0) && (
+        {!billingCanceled && (availableSpend > 0 || availableCash > 0) && (
           <Row>
             {availableSpend > 0 && (
               <Btn
@@ -289,7 +298,7 @@ export function HomeScreen({
         )}
       </Card>
       <Row>
-        <Btn title="New record" onPress={onCreate} />
+        <Btn title="New record" onPress={onCreate} disabled={billingCanceled} />
         {isManager && (
           <Btn
             title={pendingCount > 0 ? `Approvals (${pendingCount})` : "Approvals"}
@@ -299,7 +308,7 @@ export function HomeScreen({
         )}
       </Row>
       <Row>
-        <Btn title="Transfer" onPress={onTransfer} variant="ghost" />
+        <Btn title="Transfer" onPress={onTransfer} variant="ghost" disabled={billingCanceled} />
         <Btn title="My stats" onPress={onMyReport} variant="ghost" />
         <Btn
           title={settlementCount > 0 ? `Account (${settlementCount})` : "Account"}
@@ -309,7 +318,7 @@ export function HomeScreen({
       </Row>
       {isManager && (
         <Row>
-          <Btn title="Invite" onPress={onInvite} variant="ghost" />
+          <Btn title="Invite" onPress={onInvite} variant="ghost" disabled={billingCanceled} />
           <Btn title="Team" onPress={onTeam} variant="ghost" />
           <Btn title="Reports" onPress={onReports} variant="ghost" />
         </Row>

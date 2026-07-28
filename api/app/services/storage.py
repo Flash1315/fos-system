@@ -76,12 +76,10 @@ def local_path(org_id: int, filename: str) -> Path:
 
 
 def load_photo(org_id: int, filename: str) -> tuple[bytes | None, str | None]:
-    """Return (bytes, content_type) or (None, None). For S3 may return redirect URL in second."""
+    """Return (bytes, content_type) or (None, None). Always stream S3 via API (auth + type)."""
     if media_backend() == "s3":
         key = f"{org_id}/{filename}"
-        if settings.s3_public_base_url.strip():
-            base = settings.s3_public_base_url.strip().rstrip("/")
-            return None, f"{base}/{key}"
+        # Never redirect to a naked public CDN URL — keep auth on the media endpoint.
         client = _s3_client()
         try:
             obj = client.get_object(Bucket=settings.s3_bucket, Key=key)

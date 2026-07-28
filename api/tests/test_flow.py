@@ -2595,7 +2595,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.3"
+    assert health.json()["version"] == "0.7.5"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -2782,4 +2782,96 @@ def test_settlement_request_idempotency_and_report_date_strict(client):
     csv = client.get("/reports/export.csv?days=30", headers=h)
     assert csv.status_code == 200
     assert "'=1+1" in csv.text or ",'=1+1" in csv.text
+
+
+def test_owner_cannot_self_reset_password(client):
+    owner = _register(client, "flow-noself", "noself-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    bad = client.post(
+        f"/orgs/members/{uid}/password",
+        headers=h,
+        json={"new_password": "otherpass1"},
+    )
+    assert bad.status_code == 400
+    bad_tok = client.post(f"/orgs/members/{uid}/reset-token", headers=h)
+    assert bad_tok.status_code == 400
+
+
+def test_invite_token_hashed_and_accept_returns_slug(client):
+    owner = _register(client, "flow-hash-inv", "hashinv-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    inv = client.post(
+        "/orgs/invite",
+        headers=h,
+        json={"email": "hash-emp@example.com", "full_name": "Hash Emp", "role": "employee"},
+    )
+    assert inv.status_code == 200, inv.text
+    raw = inv.json()["invite_token"]
+    assert raw
+    from app.db import SessionLocal
+    from app.models import User
+    from app.services.invite_tokens import hash_invite_token
+
+    db = SessionLocal()
+    try:
+        u = db.query(User).filter(User.email == "hash-emp@example.com").one()
+        assert u.invite_token == hash_invite_token(raw)
+        assert u.invite_token != raw
+    finally:
+        db.close()
+    mismatch = client.post(
+        "/auth/accept-invite",
+        json={"token": raw, "password": "chosen99", "password_confirm": "other99"},
+    )
+    assert mismatch.status_code == 422
+    ok = client.post(
+        "/auth/accept-invite",
+        json={"token": raw, "password": "chosen99", "password_confirm": "chosen99"},
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["organization_slug"] == "flow-hash-inv"
+    assert ok.json()["user"]["email"] == "hash-emp@example.com"
+
+
+def test_settlement_pending_counts_and_image_magic(client):
+    owner = _register(client, "flow-scount", "scount-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rid = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 2000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "purpose": "Office",
+        },
+    ).json()["id"]
+    client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
+    client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "expense_payout", "amount": 500, "note": "partial"},
+    )
+    org_c = client.get("/payouts/requests/pending/count", headers=h)
+    assert org_c.status_code == 200
+    assert org_c.json()["count"] >= 1
+    mine_c = client.get("/payouts/requests/mine/pending/count", headers=h)
+    assert mine_c.status_code == 200
+    assert mine_c.json()["count"] >= 1
+    # Reject spoofed extension / non-image payload
+    bad = client.post(
+        "/media/photo",
+        headers=h,
+        files={"file": ("evil.jpg", b"not-an-image-but-long-enough-xxxx", "image/jpeg")},
+    )
+    assert bad.status_code == 400
+    good = client.post(
+        "/media/photo",
+        headers=h,
+        files={"file": ("receipt.bin", b"\xff\xd8\xff" + b"0" * 64, "application/octet-stream")},
+    )
+    assert good.status_code == 200, good.text
+    assert good.json()["photo_url"].endswith(".jpg")
 

@@ -111,6 +111,7 @@ export function BalancesScreen({
     item: TeamBalance,
     kind: "expense_payout" | "income_handover",
   ) => {
+    if (isBusy) return;
     const value =
       kind === "expense_payout"
         ? item.available_spendings ?? item.spendings
@@ -133,6 +134,7 @@ export function BalancesScreen({
       {
         text: "Settle",
         onPress: async () => {
+          if (isBusy) return;
           markBusy(true);
           try {
             const list = await teamBalances();
@@ -171,6 +173,7 @@ export function BalancesScreen({
   };
 
   const postAdjustment = async () => {
+    if (isBusy) return;
     const value = Number(amount.replace(",", "."));
     if (!userId || !value || !note.trim()) {
       Alert.alert("Fos", "Pick teammate, signed amount, and note");
@@ -185,6 +188,7 @@ export function BalancesScreen({
         {
           text: "Post",
           onPress: async () => {
+            if (isBusy) return;
             markBusy(true);
             try {
               await createAdjustment({

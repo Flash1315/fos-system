@@ -1,5 +1,4 @@
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
@@ -11,10 +10,10 @@ from app.db import get_db
 from app.models import User
 from app.schemas import PhotoOut
 from app.services import storage
+from app.services.images import detect_image, read_upload_capped
 
 router = APIRouter(tags=["media"])
 
-ALLOWED = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
 _optional_bearer = HTTPBearer(auto_error=False)
 
 
@@ -23,20 +22,14 @@ async def upload_photo(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
 ):
-    suffix = Path(file.filename or "photo.jpg").suffix.lower() or ".jpg"
-    if suffix not in ALLOWED:
-        raise HTTPException(400, "Only image uploads allowed")
+    data = await read_upload_capped(file)
+    suffix, content_type = detect_image(data)
     name = f"{uuid.uuid4().hex}{suffix}"
-    data = await file.read()
-    if len(data) > 8 * 1024 * 1024:
-        raise HTTPException(400, "File too large (max 8MB)")
-    if len(data) < 24:
-        raise HTTPException(400, "File too small or empty")
-    content_type = file.content_type or "image/jpeg"
     try:
         url = storage.store_photo(user.organization_id, name, data, content_type)
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(500, f"Upload failed: {exc}") from exc
+        print(f"photo upload failed org={user.organization_id}: {type(exc).__name__}")
+        raise HTTPException(500, "Upload failed") from exc
     return PhotoOut(photo_url=url)
 
 

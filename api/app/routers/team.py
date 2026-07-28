@@ -127,6 +127,8 @@ def reset_member_password(
     member = db.get(User, member_id)
     if not member or member.organization_id != user.organization_id:
         raise HTTPException(404, "User not found")
+    if member.id == user.id:
+        raise HTTPException(400, "Use Account → Change password for your own password")
     member.hashed_password = hash_password(body.new_password)
     bump_token_version(member)
     member.must_set_password = False
@@ -144,15 +146,19 @@ def issue_member_reset_token(
     user: User = Depends(require_roles(UserRole.owner)),
 ):
     """Issue a one-time token; teammate sets a new password via /auth/accept-invite."""
+    from app.services.invite_tokens import store_invite_token
+
     member = db.get(User, member_id)
     if not member or member.organization_id != user.organization_id:
         raise HTTPException(404, "User not found")
+    if member.id == user.id:
+        raise HTTPException(400, "Use Account → Change password for your own password")
     if not member.is_active:
         raise HTTPException(400, "Member is inactive")
     org = db.get(Organization, user.organization_id)
-    token = secrets.token_urlsafe(24)
+    raw_token = secrets.token_urlsafe(24)
     member.hashed_password = hash_password(secrets.token_urlsafe(24))
-    member.invite_token = token
+    member.invite_token = store_invite_token(raw_token)
     member.invite_token_expires_at = _utcnow() + timedelta(days=RESET_TTL_DAYS)
     member.must_set_password = True
     bump_token_version(member)
@@ -168,7 +174,7 @@ def issue_member_reset_token(
             full_name=member.full_name,
             org_name=org.name,
             org_slug=org.slug,
-            reset_token=token,
+            reset_token=raw_token,
         )
         notify_org(org, f"Fos: password reset token issued for {member.full_name}")
     return MemberResetTokenOut(
@@ -176,7 +182,7 @@ def issue_member_reset_token(
         email=member.email,
         full_name=member.full_name,
         organization_slug=org.slug if org else "",
-        invite_token=token,
+        invite_token=raw_token,
         must_set_password=True,
         email_sent=emailed,
     )

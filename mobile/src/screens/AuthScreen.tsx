@@ -33,6 +33,7 @@ export function AuthScreen({
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [inviteToken, setInviteToken] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberedSlug, setRememberedSlug] = useState<string | null>(null);
@@ -72,11 +73,20 @@ export function AuthScreen({
         Alert.alert("Fos", "Password must be at least 6 characters");
         return;
       }
+      if (password !== passwordConfirm) {
+        Alert.alert("Fos", "Passwords do not match");
+        return;
+      }
       setBusy(true);
       try {
-        const res = await acceptInvite(inviteToken.trim(), password);
+        const res = await acceptInvite(inviteToken.trim(), password, passwordConfirm);
         if (res.user?.email) {
           await storageSet(LAST_EMAIL_KEY, res.user.email);
+        }
+        if (res.organization_slug) {
+          await storageSet(LAST_SLUG_KEY, res.organization_slug);
+          setOrgSlug(res.organization_slug);
+          setRememberedSlug(res.organization_slug);
         }
         onDone(res.access_token, res.user);
       } catch (e) {
@@ -184,6 +194,13 @@ export function AuthScreen({
               value={password}
               onChangeText={setPassword}
               placeholder="min 6 characters"
+            />
+            <Label>Confirm password</Label>
+            <Field
+              secureTextEntry={!showPassword}
+              value={passwordConfirm}
+              onChangeText={setPasswordConfirm}
+              placeholder="repeat password"
             />
             <LinkText onPress={() => setShowPassword((v) => !v)}>
               {showPassword ? "Hide password" : "Show password"}

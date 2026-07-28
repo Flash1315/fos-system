@@ -575,6 +575,25 @@ def my_settlement_requests(
     return [_request_out(r, user.full_name) for r in rows]
 
 
+@router.get("/requests/mine/pending/count")
+def my_pending_settlement_count(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from sqlalchemy import func
+
+    count = (
+        db.query(func.count(SettlementRequest.id))
+        .filter(
+            SettlementRequest.organization_id == user.organization_id,
+            SettlementRequest.user_id == user.id,
+            SettlementRequest.status == SettlementRequestStatus.pending,
+        )
+        .scalar()
+    )
+    return {"count": int(count or 0)}
+
+
 @router.post("/requests", response_model=SettlementRequestOut)
 def request_settlement(
     body: SettlementRequestIn,
@@ -669,6 +688,24 @@ def list_settlement_requests(
         u = db.get(User, r.user_id)
         out.append(_request_out(r, u.full_name if u else ""))
     return out
+
+
+@router.get("/requests/pending/count")
+def org_pending_settlement_count(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    from sqlalchemy import func
+
+    count = (
+        db.query(func.count(SettlementRequest.id))
+        .filter(
+            SettlementRequest.organization_id == user.organization_id,
+            SettlementRequest.status == SettlementRequestStatus.pending,
+        )
+        .scalar()
+    )
+    return {"count": int(count or 0)}
 
 
 class ApproveRequestIn(BaseModel):

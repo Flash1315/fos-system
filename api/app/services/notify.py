@@ -28,7 +28,7 @@ def send_telegram(chat_id: str, text: str) -> bool:
             print(f"telegram notify chat={chat} ok={ok}")
             return ok
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        print(f"telegram notify failed: {exc}")
+        print(f"telegram notify failed chat={chat} err={type(exc).__name__}")
         return False
 
 

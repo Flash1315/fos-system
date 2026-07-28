@@ -67,6 +67,15 @@ def _token_for(user: User) -> str:
     )
 
 
+def _token_out(db: Session, user: User) -> TokenOut:
+    org = db.get(Organization, user.organization_id)
+    return TokenOut(
+        access_token=_token_for(user),
+        user=UserOut.model_validate(user),
+        organization_slug=org.slug if org else "",
+    )
+
+
 @router.post("/orgs/register", response_model=TokenOut)
 def register_organization(body: OrgCreate, db: Session = Depends(get_db)):
     if db.query(Organization).filter(Organization.slug == body.slug).first():
@@ -85,7 +94,7 @@ def register_organization(body: OrgCreate, db: Session = Depends(get_db)):
     db.add(owner)
     db.commit()
     db.refresh(owner)
-    return TokenOut(access_token=_token_for(owner), user=UserOut.model_validate(owner))
+    return _token_out(db, owner)
 
 
 @router.post("/auth/login", response_model=TokenOut)
@@ -104,7 +113,7 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
         raise HTTPException(401, "Accept invite first — set your password with the invite token")
     if not verify_password(body.password, user.hashed_password):
         raise HTTPException(401, "Invalid credentials")
-    return TokenOut(access_token=_token_for(user), user=UserOut.model_validate(user))
+    return _token_out(db, user)
 
 
 @router.post("/auth/login-form", response_model=TokenOut)
@@ -140,13 +149,15 @@ def change_password(
     user.invite_token_expires_at = None
     db.commit()
     db.refresh(user)
-    return TokenOut(access_token=_token_for(user), user=UserOut.model_validate(user))
+    return _token_out(db, user)
 
 
 @router.post("/auth/accept-invite", response_model=TokenOut)
 def accept_invite(body: AcceptInviteIn, db: Session = Depends(get_db)):
+    from app.services.invite_tokens import find_user_by_invite_token
+
     token = body.token.strip()
-    user = db.query(User).filter(User.invite_token == token).first()
+    user = find_user_by_invite_token(db, token)
     if not user or not user.is_active:
         raise HTTPException(400, "Invalid or expired invite token")
     expires = getattr(user, "invite_token_expires_at", None)
@@ -162,7 +173,7 @@ def accept_invite(body: AcceptInviteIn, db: Session = Depends(get_db)):
     bump_token_version(user)
     db.commit()
     db.refresh(user)
-    return TokenOut(access_token=_token_for(user), user=UserOut.model_validate(user))
+    return _token_out(db, user)
 
 
 @router.get("/orgs/me", response_model=OrgOut)
@@ -218,14 +229,18 @@ def invite_user(
         raise HTTPException(403, "Only owner can invite owner")
     org = db.get(Organization, user.organization_id)
     invite_token: str | None = None
+    raw_invite: str | None = None
     must_set = False
     invite_expires = None
     if body.password:
         hashed = hash_password(body.password)
     else:
         # Unusable random hash; teammate sets password via accept-invite
+        from app.services.invite_tokens import store_invite_token
+
         hashed = hash_password(secrets.token_urlsafe(24))
-        invite_token = secrets.token_urlsafe(24)
+        raw_invite = secrets.token_urlsafe(24)
+        invite_token = store_invite_token(raw_invite)
         must_set = True
         invite_expires = _invite_expiry()
     invited = User(
@@ -251,7 +266,7 @@ def invite_user(
             full_name=invited.full_name,
             org_name=org.name,
             org_slug=org.slug,
-            invite_token=invite_token,
+            invite_token=raw_invite,
             temp_password=bool(body.password),
         )
         notify_org(
@@ -266,6 +281,6 @@ def invite_user(
         organization_id=invited.organization_id,
         organization_slug=org.slug if org else "",
         must_set_password=must_set,
-        invite_token=invite_token,
+        invite_token=raw_invite,
         email_sent=emailed,
     )

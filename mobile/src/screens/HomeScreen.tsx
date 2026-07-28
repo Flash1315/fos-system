@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
-import { listMySettlementRequests, listSettlementRequests, myBalance, myOrg, myRecords, pendingCount as fetchPendingCount, pendingRecords, requestSettlement, type MoneyRecord, type User } from "../api";
+import { myBalance, myOrg, myPendingSettlementCount, myRecords, pendingCount as fetchPendingCount, pendingRecords, pendingSettlementCount, requestSettlement, type MoneyRecord, type User } from "../api";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
@@ -124,9 +124,9 @@ export function HomeScreen({
           /* keep previous org pending count — do not substitute personal pending */
         }
         try {
-          const reqs = await listSettlementRequests({ status: "pending", limit: 100 });
+          const settle = await pendingSettlementCount();
           if (gen !== reloadGen.current) return;
-          setSettlementCount(reqs.length >= 100 ? 100 : reqs.length);
+          setSettlementCount(settle.count);
         } catch {
           if (gen !== reloadGen.current) return;
           /* keep previous settlement count */
@@ -134,9 +134,9 @@ export function HomeScreen({
       } else {
         setPendingCount(b.pending_count);
         try {
-          const mine = await listMySettlementRequests({ status: "pending" });
+          const mine = await myPendingSettlementCount();
           if (gen !== reloadGen.current) return;
-          setSettlementCount(mine.length);
+          setSettlementCount(mine.count);
         } catch {
           if (gen !== reloadGen.current) return;
           /* keep previous */
@@ -179,6 +179,7 @@ export function HomeScreen({
   const isManager = user?.role === "owner" || user?.role === "manager";
 
   const quickRequest = async (kind: "expense_payout" | "income_handover") => {
+    if (requestBusy) return;
     const amount = kind === "expense_payout" ? availableSpend : availableCash;
     if (amount <= 0) {
       Alert.alert("Fos", "Nothing available to request");
@@ -193,6 +194,7 @@ export function HomeScreen({
       {
         text: "Send",
         onPress: async () => {
+          if (requestBusy) return;
           setRequestBusy(true);
           try {
             await requestSettlement({

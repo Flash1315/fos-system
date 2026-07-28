@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.models import RecordKind, RecordStatus, UserRole
 
@@ -44,6 +44,7 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+    organization_slug: str = ""
 
 
 class LoginIn(BaseModel):
@@ -77,11 +78,25 @@ class InviteOut(BaseModel):
 class AcceptInviteIn(BaseModel):
     token: str = Field(min_length=16, max_length=128)
     password: str = Field(min_length=6, max_length=128)
+    password_confirm: Optional[str] = Field(default=None, max_length=128)
+
+    @model_validator(mode="after")
+    def confirm_matches(self):
+        if self.password_confirm is not None and self.password_confirm != self.password:
+            raise ValueError("Passwords do not match")
+        return self
 
 
 class PasswordChangeIn(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
     new_password: str = Field(min_length=6, max_length=128)
+    password_confirm: Optional[str] = Field(default=None, max_length=128)
+
+    @model_validator(mode="after")
+    def confirm_matches(self):
+        if self.password_confirm is not None and self.password_confirm != self.new_password:
+            raise ValueError("Passwords do not match")
+        return self
 
 
 class MemberPasswordResetIn(BaseModel):

@@ -282,18 +282,36 @@ export function me() {
   return request<User>("/auth/me");
 }
 
-export function changePassword(current_password: string, new_password: string) {
-  return request<{ access_token: string; user: User }>("/auth/password", {
-    method: "POST",
-    body: JSON.stringify({ current_password, new_password }),
-  });
+export function changePassword(
+  current_password: string,
+  new_password: string,
+  password_confirm?: string,
+) {
+  return request<{ access_token: string; user: User; organization_slug?: string }>(
+    "/auth/password",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        current_password,
+        new_password,
+        password_confirm: password_confirm ?? new_password,
+      }),
+    },
+  );
 }
 
-export function acceptInvite(token: string, password: string) {
-  return request<{ access_token: string; user: User }>("/auth/accept-invite", {
-    method: "POST",
-    body: JSON.stringify({ token, password }),
-  });
+export function acceptInvite(token: string, password: string, password_confirm?: string) {
+  return request<{ access_token: string; user: User; organization_slug?: string }>(
+    "/auth/accept-invite",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        token,
+        password,
+        password_confirm: password_confirm ?? password,
+      }),
+    },
+  );
 }
 
 export function myOrg() {
@@ -593,6 +611,14 @@ export function pendingCount(params?: { purpose?: string; kind?: string }) {
   if (params?.kind) q.set("kind", params.kind);
   const suffix = q.toString() ? `?${q}` : "";
   return request<{ count: number }>(`/records/pending/count${suffix}`);
+}
+
+export function pendingSettlementCount() {
+  return request<{ count: number }>("/payouts/requests/pending/count");
+}
+
+export function myPendingSettlementCount() {
+  return request<{ count: number }>("/payouts/requests/mine/pending/count");
 }
 
 export function decideRecord(id: number, approve: boolean, note = "") {

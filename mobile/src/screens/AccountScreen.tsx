@@ -46,6 +46,7 @@ export function AccountScreen({
   const isOwner = user.role === "owner";
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
+  const [nextConfirm, setNextConfirm] = useState("");
   const [kind, setKind] = useState<"expense_payout" | "income_handover">("income_handover");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -203,12 +204,17 @@ export function AccountScreen({
       Alert.alert("Fos", "Enter current password and new password (min 6)");
       return;
     }
+    if (next !== nextConfirm) {
+      Alert.alert("Fos", "Passwords do not match");
+      return;
+    }
     setBusy(true);
     try {
-      const res = await changePassword(current, next);
+      const res = await changePassword(current, next, nextConfirm);
       await saveToken(res.access_token);
       setCurrent("");
       setNext("");
+      setNextConfirm("");
       Alert.alert("Fos", "Password updated — other sessions signed out");
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -392,6 +398,12 @@ export function AccountScreen({
       <Label>Change password</Label>
       <Field secureTextEntry value={current} onChangeText={setCurrent} placeholder="Current password" />
       <Field secureTextEntry value={next} onChangeText={setNext} placeholder="New password" />
+      <Field
+        secureTextEntry
+        value={nextConfirm}
+        onChangeText={setNextConfirm}
+        placeholder="Confirm new password"
+      />
       <Btn title={busy ? "…" : "Update password"} onPress={onPassword} disabled={busy} />
 
       <Label>Request settlement</Label>

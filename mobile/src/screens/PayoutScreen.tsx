@@ -383,7 +383,7 @@ export function PayoutScreen({
         </Sub>
       )}
       <Label>Amount</Label>
-      <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
+      <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} maxLength={24} />
       <View style={styles.kinds}>
         <Chip
           label={kind === "expense_payout" ? "Pay available" : "Take available"}

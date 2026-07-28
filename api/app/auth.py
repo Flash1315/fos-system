@@ -12,6 +12,7 @@ from app.models import User, UserRole
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login-form")
+_DUMMY_PASSWORD_HASH: str | None = None
 
 
 def hash_password(password: str) -> str:
@@ -20,6 +21,14 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
+
+
+def dummy_password_hash() -> str:
+    """Constant-cost hash for login timing when the account does not exist."""
+    global _DUMMY_PASSWORD_HASH
+    if _DUMMY_PASSWORD_HASH is None:
+        _DUMMY_PASSWORD_HASH = hash_password("timing-dummy-not-a-real-password")
+    return _DUMMY_PASSWORD_HASH
 
 
 def _utcnow() -> datetime:

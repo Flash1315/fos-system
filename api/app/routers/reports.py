@@ -530,9 +530,21 @@ def export_csv(
     requests = sq.order_by(SettlementRequest.created_at.asc(), SettlementRequest.id.asc()).limit(2001).all()
     if len(requests) > 2000:
         raise HTTPException(400, "Export too large — narrow the date range")
+    if len(rows) + len(payouts) + len(adjustments) + len(requests) > 9000:
+        raise HTTPException(400, "Export too large — narrow the date range")
+    req_ids = {req.user_id for req in requests}
+    missing = req_ids - names.keys()
+    if missing:
+        names.update(
+            {
+                u.id: u.full_name
+                for u in db.query(User)
+                .filter(User.organization_id == oid, User.id.in_(missing))
+                .all()
+            }
+        )
     for req in requests:
-        u = db.get(User, req.user_id)
-        name = u.full_name if u else ""
+        name = names.get(req.user_id, "")
         rkind = req.kind.value if hasattr(req.kind, "value") else str(req.kind)
         rstatus = req.status.value if hasattr(req.status, "value") else str(req.status)
         writer.writerow(

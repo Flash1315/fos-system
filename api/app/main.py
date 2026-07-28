@@ -25,7 +25,7 @@ Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.7.35")
+app = FastAPI(title=settings.app_name, version="0.7.36")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 # Bearer-token auth does not use cookies; credentials+wildcard is unnecessary.
@@ -73,8 +73,34 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class PublicAuthRateLimitMiddleware(BaseHTTPMiddleware):
+    """Cheap IP limit before body parsing on public auth endpoints."""
+
+    _PATHS = {
+        "/auth/login",
+        "/auth/login-form",
+        "/auth/accept-invite",
+        "/orgs/register",
+    }
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        path = request.url.path.rstrip("/") or "/"
+        # login-form keeps trailing path as registered
+        check = path if path in self._PATHS else request.url.path
+        if check in self._PATHS or request.url.path in self._PATHS:
+            from app.services.rate_limit import client_ip, enforce_rate_limit
+
+            enforce_rate_limit(
+                f"preauth:{request.url.path}:{client_ip(request)}",
+                limit=60,
+                window_sec=60,
+            )
+        return await call_next(request)
+
+
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestIdMiddleware)
+app.add_middleware(PublicAuthRateLimitMiddleware)
 
 app.include_router(auth_router.router)
 app.include_router(records_router.router)
@@ -85,6 +111,19 @@ app.include_router(transfers_router.router)
 app.include_router(payouts_router.router)
 app.include_router(adjustments_router.router)
 app.include_router(billing_router.router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    from fastapi.responses import JSONResponse
+
+    request_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex
+    logger.exception("unhandled error request_id=%s", request_id)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers={"X-Request-Id": request_id},
+    )
 
 
 @app.get("/health")
@@ -107,7 +146,7 @@ def health(request: Request):
     body = {
         "ok": db_status == "ok",
         "app": settings.app_name,
-        "version": "0.7.35",
+        "version": "0.7.36",
         "db": db_status,
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }
@@ -116,5 +155,11 @@ def health(request: Request):
     return body
 
 
-if settings.secret_key in ("dev-secret-change-me", "change-me-in-production", ""):
+_INSECURE_SECRETS = ("dev-secret-change-me", "change-me-in-production", "")
+_env = (settings.environment or "development").strip().lower()
+if settings.secret_key in _INSECURE_SECRETS:
+    if _env in ("prod", "production"):
+        raise RuntimeError("SECRET_KEY is insecure — set a strong SECRET_KEY in production")
     logger.warning("SECRET_KEY is insecure — set a strong SECRET_KEY in production")
+if _env in ("prod", "production") and (settings.cors_origins or "").strip() == "*":
+    logger.warning("CORS_ORIGINS=* in production — set explicit origins")

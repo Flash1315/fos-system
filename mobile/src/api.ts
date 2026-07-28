@@ -432,6 +432,7 @@ export type InviteResult = User & {
   organization_slug?: string;
   must_set_password?: boolean;
   invite_token?: string | null;
+  email_sent?: boolean;
 };
 
 export function inviteUser(body: {

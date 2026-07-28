@@ -178,7 +178,7 @@ export function TransferScreen({
         maxLength={254}
       />
       <Label>Amount</Label>
-      <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
+      <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} maxLength={24} />
       <Label>Comment</Label>
       <Field value={comment} onChangeText={setComment} maxLength={2000} />
       <Btn

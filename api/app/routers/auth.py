@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.auth import (
     bump_token_version,
     create_access_token,
+    dummy_password_hash,
     get_current_user,
     hash_password,
     require_roles,
@@ -123,19 +124,26 @@ def _authenticate_login(body: LoginIn, db: Session) -> TokenOut:
     slug = (body.organization_slug or "").strip().lower()
     email = (body.email or "").strip().lower()
     org = db.query(Organization).filter(Organization.slug == slug).first()
-    if not org:
-        raise HTTPException(401, "Invalid credentials")
-    user = (
-        db.query(User)
-        .filter(User.organization_id == org.id, User.email == email)
-        .first()
+    user = None
+    if org:
+        user = (
+            db.query(User)
+            .filter(User.organization_id == org.id, User.email == email)
+            .first()
+        )
+    hashed = (
+        user.hashed_password
+        if user and user.is_active and user.hashed_password
+        else dummy_password_hash()
     )
-    if not user or not user.is_active:
+    password_ok = verify_password(body.password, hashed)
+    if not org or not user or not user.is_active or not password_ok:
         raise HTTPException(401, "Invalid credentials")
     if getattr(user, "must_set_password", False):
-        raise HTTPException(401, "Accept invite first — set your password with the invite token")
-    if not verify_password(body.password, user.hashed_password):
-        raise HTTPException(401, "Invalid credentials")
+        raise HTTPException(
+            401,
+            "Accept invite first — set your password with the invite token",
+        )
     return _token_out(db, user)
 
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Alert, View, StyleSheet } from "react-native";
-import { inviteUser, myOrg, type User } from "../api";
+import { Alert, Share, View, StyleSheet } from "react-native";
+import { inviteUser, myOrg, type InviteResult, type User } from "../api";
 import { Btn, Chip, Field, Label, LinkText, Screen, Sub, TopBar } from "../components/ui";
 
 export function InviteScreen({
@@ -25,6 +25,12 @@ export function InviteScreen({
   const [orgSlug, setOrgSlug] = useState("");
   const [slugError, setSlugError] = useState("");
   const [role, setRole] = useState<"employee" | "manager" | "owner">("employee");
+  const [lastInvite, setLastInvite] = useState<{
+    res: InviteResult;
+    email: string;
+    slug: string;
+    usedTempPassword: boolean;
+  } | null>(null);
   const roles =
     currentRole === "owner"
       ? (["employee", "manager", "owner"] as const)
@@ -44,6 +50,25 @@ export function InviteScreen({
   useEffect(() => {
     void loadSlug();
   }, []);
+
+  const shareText = (payload: {
+    res: InviteResult;
+    email: string;
+    slug: string;
+    usedTempPassword: boolean;
+  }) => {
+    if (payload.res.invite_token) {
+      return (
+        `Fos invite\nSlug: ${payload.slug}\nEmail: ${payload.email}\n` +
+        `Invite token: ${payload.res.invite_token}\n\n` +
+        `Open Accept invite, paste the token, and set a password.`
+      );
+    }
+    return (
+      `Fos invite\nSlug: ${payload.slug}\nEmail: ${payload.email}\n` +
+      `Password: (the temporary password you set)`
+    );
+  };
 
   const submit = async () => {
     if (busy) return;
@@ -85,26 +110,24 @@ export function InviteScreen({
     if (busy) return;
     setBusy(true);
     try {
+      const invitedEmail = email.trim().toLowerCase();
       const res = await inviteUser({
-        email: email.trim().toLowerCase(),
+        email: invitedEmail,
         full_name: fullName.trim(),
         role,
         ...(setTempPassword
           ? { password, password_confirm: passwordConfirm }
           : {}),
       });
-      if (res.invite_token) {
-        Alert.alert(
-          "Fos",
-          `Teammate invited.\n\nShare:\nSlug: ${orgSlug}\nEmail: ${email.trim().toLowerCase()}\nInvite token: ${res.invite_token}\n\nThey open Accept invite, paste the token, and set their own password.`,
-        );
-      } else {
-        Alert.alert(
-          "Fos",
-          `Teammate invited.\n\nShare login:\nSlug: ${orgSlug}\nEmail: ${email.trim().toLowerCase()}\nPassword: (the one you set)`,
-        );
-      }
-      onDone();
+      const payload = {
+        res,
+        email: invitedEmail,
+        slug: orgSlug,
+        usedTempPassword: setTempPassword,
+      };
+      setLastInvite(payload);
+      const mailNote = res.email_sent ? " Invite email was sent." : "";
+      Alert.alert("Fos", `Teammate invited.${mailNote} Keep the details below to share.`);
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
@@ -129,7 +152,13 @@ export function InviteScreen({
       <Label>Full name</Label>
       <Field value={fullName} onChangeText={setFullName} maxLength={200} />
       <Label>Email</Label>
-      <Field autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} maxLength={254} />
+      <Field
+        autoCapitalize="none"
+        keyboardType="email-address"
+        value={email}
+        onChangeText={setEmail}
+        maxLength={254}
+      />
       <View style={styles.kinds}>
         <Chip
           label="Invite token (recommended)"
@@ -171,11 +200,33 @@ export function InviteScreen({
           <Chip key={r} label={r} on={role === r} onPress={() => setRole(r)} />
         ))}
       </View>
-      <Btn
-        title={busy ? "…" : "Send invite"}
-        onPress={submit}
-        disabled={busy || !orgSlug}
-      />
+      <Btn title={busy ? "…" : "Invite"} onPress={submit} disabled={busy} />
+
+      {lastInvite && (
+        <>
+          <Label>Last invite — share before leaving</Label>
+          <Sub>{shareText(lastInvite)}</Sub>
+          {lastInvite.res.email_sent ? <Sub>Email delivery attempted.</Sub> : null}
+          <Btn
+            title="Share invite details"
+            variant="secondary"
+            onPress={async () => {
+              try {
+                await Share.share({ message: shareText(lastInvite) });
+              } catch (e) {
+                Alert.alert("Fos", e instanceof Error ? e.message : "Share failed");
+              }
+            }}
+          />
+          <Btn
+            title="Done"
+            onPress={() => {
+              setLastInvite(null);
+              onDone();
+            }}
+          />
+        </>
+      )}
     </Screen>
   );
 }

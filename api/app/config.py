@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     # Only honor X-Forwarded-For when the app sits behind a trusted reverse proxy
     trust_x_forwarded_for: bool = False
+    # development | production — production refuses insecure defaults
+    environment: str = "development"
 
 
 settings = Settings()

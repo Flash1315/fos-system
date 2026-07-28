@@ -483,7 +483,7 @@ export function AccountScreen({
           onPress={() => setKind("income_handover")}
         />
       </View>
-      <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
+      <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} maxLength={24} />
       <Field value={note} onChangeText={setNote} placeholder="Optional note" maxLength={2000} />
       <Btn title={busy ? "…" : "Send request"} onPress={onRequest} disabled={busy} />
 

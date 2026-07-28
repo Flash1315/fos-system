@@ -614,7 +614,7 @@ export function CreateScreen({
         ))}
       </View>
       <Label>Amount</Label>
-      <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
+      <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} maxLength={24} />
       <Label>When (optional YYYY-MM-DD)</Label>
       <Field autoCapitalize="none" value={occurredDate} onChangeText={setOccurredDate} placeholder="leave empty = now" maxLength={10} />
       {!!closedCycleHint && <Sub>{closedCycleHint}</Sub>}
@@ -658,9 +658,9 @@ export function CreateScreen({
       {kind === "fuel" && (
         <>
           <Label>Liters</Label>
-          <Field keyboardType="decimal-pad" value={liters} onChangeText={setLiters} />
+          <Field keyboardType="decimal-pad" value={liters} onChangeText={setLiters} maxLength={12} />
           <Label>Odometer</Label>
-          <Field keyboardType="decimal-pad" value={odometer} onChangeText={setOdometer} />
+          <Field keyboardType="decimal-pad" value={odometer} onChangeText={setOdometer} maxLength={12} />
           {minOdo != null && maxOdo != null && (
             <Sub>
               Allowed range {minOdo.toLocaleString()}–{maxOdo.toLocaleString()}.

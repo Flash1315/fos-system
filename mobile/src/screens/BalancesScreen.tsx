@@ -317,6 +317,7 @@ export function BalancesScreen({
               value={amount}
               onChangeText={setAmount}
               placeholder="e.g. 100000 or -5000"
+              maxLength={24}
             />
             <Label>Note</Label>
             <Field value={note} onChangeText={setNote} placeholder="Opening balance / correction" maxLength={2000} />

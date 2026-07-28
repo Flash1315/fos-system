@@ -51,7 +51,7 @@ async def upload_photo(
 def get_photo(
     org_id: int,
     filename: str,
-    token: str | None = Query(default=None),
+    token: str | None = Query(default=None, max_length=2048),
     creds: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
     db: Session = Depends(get_db),
 ):

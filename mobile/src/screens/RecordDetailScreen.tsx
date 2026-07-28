@@ -562,7 +562,7 @@ export function RecordDetailScreen({
           {canEdit && editing && (
             <Card>
               <Label>Edit amount</Label>
-              <Field keyboardType="decimal-pad" value={editAmount} onChangeText={setEditAmount} />
+              <Field keyboardType="decimal-pad" value={editAmount} onChangeText={setEditAmount} maxLength={24} />
               <Label>Category</Label>
               <Field value={editCategory} onChangeText={setEditCategory} maxLength={120} />
               {(rec.kind === "expense" || rec.kind === "fuel") && (
@@ -612,12 +612,13 @@ export function RecordDetailScreen({
                   <Label>Bike</Label>
                   <Field value={editBike} onChangeText={setEditBike} maxLength={120} />
                   <Label>Liters</Label>
-                  <Field keyboardType="decimal-pad" value={editLiters} onChangeText={setEditLiters} />
+                  <Field keyboardType="decimal-pad" value={editLiters} onChangeText={setEditLiters} maxLength={12} />
                   <Label>Odometer</Label>
                   <Field
                     keyboardType="decimal-pad"
                     value={editOdometer}
                     onChangeText={setEditOdometer}
+                    maxLength={12}
                   />
                 </>
               )}

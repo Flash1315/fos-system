@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
+import { Alert, FlatList, RefreshControl, Share, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import {
   listMembers,
@@ -10,7 +10,7 @@ import {
   type User,
 } from "../api";
 import { NoteModal } from "../components/NoteModal";
-import { Btn, Chip, Screen, Sub, TopBar } from "../components/ui";
+import { Btn, Chip, Label, Screen, Sub, TopBar } from "../components/ui";
 import { colors } from "../theme";
 
 export function TeamScreen({
@@ -30,6 +30,13 @@ export function TeamScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [showOwnerSetPassword, setShowOwnerSetPassword] = useState(false);
+  const [lastReset, setLastReset] = useState<{
+    name: string;
+    slug: string;
+    email: string;
+    token: string;
+    emailSent?: boolean;
+  } | null>(null);
 
   const reload = async () => {
     try {
@@ -191,9 +198,17 @@ export function TeamScreen({
                             setBusy(true);
                             try {
                               const res = await issueMemberResetToken(item.id);
+                              const payload = {
+                                name: item.full_name,
+                                slug: res.organization_slug,
+                                email: res.email,
+                                token: res.invite_token,
+                                emailSent: res.email_sent,
+                              };
+                              setLastReset(payload);
                               Alert.alert(
                                 "Fos",
-                                `Share with ${item.full_name}:\n\nSlug: ${res.organization_slug}\nEmail: ${res.email}\nReset token: ${res.invite_token}\n\nThey open Accept invite and set a new password.`,
+                                `Reset token issued${res.email_sent ? " (email sent)" : ""}. Keep the details below to share.`,
                               );
                               await reload();
                             } catch (e) {
@@ -220,6 +235,31 @@ export function TeamScreen({
           </View>
         )}
       />
+      {lastReset && (
+        <View style={styles.card}>
+          <Label>Last reset token — share before leaving</Label>
+          <Sub>
+            {`Share with ${lastReset.name}:\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\nReset token: ${lastReset.token}\n\nThey open Accept invite and set a new password.`}
+          </Sub>
+          {lastReset.emailSent ? <Sub>Email delivery attempted.</Sub> : null}
+          <Btn
+            title="Share reset details"
+            variant="secondary"
+            onPress={async () => {
+              try {
+                await Share.share({
+                  message:
+                    `Fos password reset\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\n` +
+                    `Reset token: ${lastReset.token}\n\nOpen Accept invite and set a new password.`,
+                });
+              } catch (e) {
+                Alert.alert("Fos", e instanceof Error ? e.message : "Share failed");
+              }
+            }}
+          />
+          <Btn title="Dismiss" variant="ghost" onPress={() => setLastReset(null)} />
+        </View>
+      )}
       <NoteModal
         visible={resetId != null}
         title="New password (min 6)"

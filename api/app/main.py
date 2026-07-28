@@ -69,6 +69,8 @@ def _validate_runtime_settings() -> str:
                 )
         if media == "s3" and not (settings.s3_bucket or "").strip():
             raise RuntimeError("MEDIA_BACKEND=s3 requires S3_BUCKET in production")
+        if not settings.rate_limit_enabled:
+            raise RuntimeError("RATE_LIMIT_ENABLED must be true in production")
         db_url = (settings.database_url or "").strip().lower()
         if db_url.startswith("sqlite:"):
             logger.warning("DATABASE_URL uses SQLite in production — prefer PostgreSQL")

@@ -11,10 +11,11 @@ from fastapi import HTTPException, Request
 
 from app.config import settings
 
-# Drop keys with no recent hits once the map grows.
+# Drop idle keys once the map grows; hard-cap total keys to bound memory.
 # Process-local only — under N workers effective limit is ~N× configured.
 _PRUNE_AFTER_KEYS = 512
 _PRUNE_IDLE_SEC = 600
+_MAX_KEYS = 4096
 
 
 class FixedWindowLimiter:
@@ -33,10 +34,22 @@ class FixedWindowLimiter:
         for key in stale:
             del self._hits[key]
 
+    def _evict_overflow(self) -> None:
+        overflow = len(self._hits) - _MAX_KEYS
+        if overflow <= 0:
+            return
+        ordered = sorted(
+            self._hits.items(),
+            key=lambda kv: max(kv[1]) if kv[1] else 0.0,
+        )
+        for key, _ in ordered[:overflow]:
+            del self._hits[key]
+
     def check(self, key: str, *, limit: int, window_sec: int) -> tuple[bool, int]:
         now = time.monotonic()
         with self._lock:
             self._prune_idle(now)
+            self._evict_overflow()
             hits = [t for t in self._hits.get(key, []) if now - t < window_sec]
             if len(hits) >= limit:
                 oldest = hits[0] if hits else now
@@ -48,6 +61,7 @@ class FixedWindowLimiter:
                 return False, max(1, retry)
             hits.append(now)
             self._hits[key] = hits
+            self._evict_overflow()
             return True, 0
 
     def reset(self) -> None:

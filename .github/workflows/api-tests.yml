@@ -1,4 +1,4 @@
-name: API tests
+name: API and mobile checks
 
 on:
   push:
@@ -26,3 +26,20 @@ jobs:
           SECRET_KEY: ci-secret
           DATABASE_URL: sqlite:////tmp/fos-ci.db
         run: PYTHONPATH=. pytest -q
+
+  mobile-tsc:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck

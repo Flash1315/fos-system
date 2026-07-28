@@ -25,7 +25,7 @@ export function AuthScreen({
 }: {
   busy: boolean;
   setBusy: (v: boolean) => void;
-  onDone: (token: string, user: User) => void;
+  onDone: (token: string, user: User) => void | Promise<void>;
 }) {
   const [mode, setMode] = useState<"login" | "register" | "invite">("login");
   const [orgSlug, setOrgSlug] = useState("");
@@ -90,7 +90,7 @@ export function AuthScreen({
           setOrgSlug(res.organization_slug);
           setRememberedSlug(res.organization_slug);
         }
-        onDone(res.access_token, res.user);
+        await onDone(res.access_token, res.user);
       } catch (e) {
         Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
       } finally {
@@ -149,7 +149,7 @@ export function AuthScreen({
         await storageSet(LAST_SLUG_KEY, slug);
         await storageSet(LAST_EMAIL_KEY, mail);
         setRememberedSlug(slug);
-        onDone(res.access_token, res.user);
+        await onDone(res.access_token, res.user);
       } else {
         const res = await login({
           email: mail,
@@ -159,7 +159,7 @@ export function AuthScreen({
         await storageSet(LAST_SLUG_KEY, slug);
         await storageSet(LAST_EMAIL_KEY, mail);
         setRememberedSlug(slug);
-        onDone(res.access_token, res.user);
+        await onDone(res.access_token, res.user);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed";

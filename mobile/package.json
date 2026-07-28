@@ -1,6 +1,6 @@
 {
   "name": "fos",
-  "version": "0.7.47",
+  "version": "0.7.48",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.7",
@@ -26,7 +26,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
   },
   "private": true
 }

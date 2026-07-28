@@ -225,7 +225,9 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Unsettled invitees (`must_set_password`) excluded from directory, balances, and money targets
 - Idempotency keys pruned after `IDEMPOTENCY_TTL_HOURS` (default 72)
 - CSV / report exports default to the last 365 days when no window is given; free-text cells truncated; settlement `settled_amount` is its own column (not under `overpayment`)
-- `ALGORITHM` must be HS256; S3 access/secret keys must be paired; DB pool uses `pool_pre_ping` (Postgres `connect_timeout=10`)
+- Production refuses `RATE_LIMIT_ENABLED=false`; process-local limiter hard-caps unique keys
+- Settlement-request cancel idempotency replay re-checks ownership/manager role
+- Mobile release builds require `EXPO_PUBLIC_API_URL` (https); upload media failures return 503
 - Rate limits are process-local (not shared across workers)
 - All record mutations scoped to caller’s `organization_id`
 - Do not leak other orgs’ data in list/balance endpoints

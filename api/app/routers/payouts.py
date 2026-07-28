@@ -1268,6 +1268,9 @@ def cancel_settlement_request(
             require_idem_match(hit, fp)
             existing = db.get(SettlementRequest, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
+                is_manager = user.role in (UserRole.owner, UserRole.manager)
+                if existing.user_id != user.id and not is_manager:
+                    raise HTTPException(403, "Insufficient role")
                 u = db.get(User, existing.user_id)
                 return _request_out(existing, u.full_name if u else "")
     req = (
@@ -1309,6 +1312,16 @@ def cancel_settlement_request(
         )
     from app.services.idempotency import commit_or_replay
 
+    def _load_cancel_replay(hit):
+        existing = db.get(SettlementRequest, hit.resource_id)
+        if not existing or existing.organization_id != user.organization_id:
+            return None
+        is_mgr = user.role in (UserRole.owner, UserRole.manager)
+        if existing.user_id != user.id and not is_mgr:
+            raise HTTPException(403, "Insufficient role")
+        u = db.get(User, existing.user_id)
+        return _request_out(existing, u.full_name if u else "")
+
     replay = commit_or_replay(
         db,
         organization_id=user.organization_id,
@@ -1316,15 +1329,7 @@ def cancel_settlement_request(
         scope="payouts.cancel_request",
         key=key,
         request_hash=fp,
-        load_replay=lambda hit: (
-            _request_out(
-                existing,
-                (u.full_name if (u := db.get(User, existing.user_id)) else ""),
-            )
-            if (existing := db.get(SettlementRequest, hit.resource_id))
-            and existing.organization_id == user.organization_id
-            else None
-        ),
+        load_replay=_load_cancel_replay,
     )
     if replay is not None:
         return replay

@@ -54,7 +54,7 @@ async def upload_photo(
             user.organization_id,
             type(exc).__name__,
         )
-        raise HTTPException(500, "Upload failed") from exc
+        raise HTTPException(503, "Media storage unavailable") from exc
     return PhotoOut(photo_url=url)
 
 

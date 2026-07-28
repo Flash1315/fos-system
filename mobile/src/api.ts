@@ -1,10 +1,23 @@
 import { storageDelete, storageGet, storageSet } from "./storage";
 
+function resolveApiUrl(): string {
+  const raw = (process.env.EXPO_PUBLIC_API_URL || "").trim().replace(/\/+$/, "");
+  const allowLocalFallback = typeof __DEV__ !== "undefined" && __DEV__;
+  if (!raw) {
+    if (allowLocalFallback) return "http://127.0.0.1:8000";
+    throw new Error("EXPO_PUBLIC_API_URL is required outside development builds");
+  }
+  if (!allowLocalFallback) {
+    const isLoopbackHttp = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(raw);
+    if (!/^https:\/\//i.test(raw) && !isLoopbackHttp) {
+      throw new Error("EXPO_PUBLIC_API_URL must use https:// outside development builds");
+    }
+  }
+  return raw;
+}
+
 /** Change to your machine LAN IP when testing on a phone. */
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(
-  /\/+$/,
-  "",
-);
+export const API_URL = resolveApiUrl();
 
 const TOKEN_KEY = "fos_token";
 let cachedToken: string | null = null;
@@ -151,8 +164,8 @@ async function authHeaders(): Promise<Record<string, string>> {
 }
 
 export async function saveToken(token: string) {
-  cachedToken = token;
   await storageSet(TOKEN_KEY, token);
+  cachedToken = token;
 }
 
 export async function clearToken() {

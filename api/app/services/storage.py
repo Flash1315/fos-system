@@ -49,19 +49,27 @@ def store_photo(org_id: int, filename: str, data: bytes, content_type: str = "im
     """Persist bytes; return API-relative photo_url path."""
     if media_backend() == "s3":
         key = f"{org_id}/{filename}"
-        client = _s3_client()
-        client.put_object(
-            Bucket=settings.s3_bucket.strip(),
-            Key=key,
-            Body=data,
-            ContentType=content_type,
-        )
+        try:
+            client = _s3_client()
+            client.put_object(
+                Bucket=settings.s3_bucket.strip(),
+                Key=key,
+                Body=data,
+                ContentType=content_type,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("s3 put failed org=%s err=%s", org_id, type(exc).__name__)
+            raise RuntimeError("Media storage unavailable") from exc
         logger.info("photo uploaded s3 bucket=%s", settings.s3_bucket)
         return f"/media/files/{org_id}/{filename}"
-    org_dir = ensure_upload_root() / str(org_id)
-    org_dir.mkdir(parents=True, exist_ok=True)
-    dest = org_dir / filename
-    dest.write_bytes(data)
+    try:
+        org_dir = ensure_upload_root() / str(org_id)
+        org_dir.mkdir(parents=True, exist_ok=True)
+        dest = org_dir / filename
+        dest.write_bytes(data)
+    except OSError as exc:
+        logger.warning("local put failed org=%s err=%s", org_id, type(exc).__name__)
+        raise RuntimeError("Media storage unavailable") from exc
     logger.info("photo uploaded local org=%s", org_id)
     return f"/media/files/{org_id}/{filename}"
 
@@ -90,8 +98,8 @@ def load_photo(org_id: int, filename: str) -> tuple[bytes | None, str | None, st
     if media_backend() == "s3":
         key = f"{org_id}/{filename}"
         # Never redirect to a naked public CDN URL — keep auth on the media endpoint.
-        client = _s3_client()
         try:
+            client = _s3_client()
             obj = client.get_object(Bucket=settings.s3_bucket.strip(), Key=key)
             stream = obj["Body"]
             try:

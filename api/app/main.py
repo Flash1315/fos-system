@@ -22,7 +22,7 @@ Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.7.15")
+app = FastAPI(title=settings.app_name, version="0.7.16")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 # Bearer-token auth does not use cookies; credentials+wildcard is unnecessary.
@@ -50,7 +50,7 @@ def health():
     return {
         "ok": True,
         "app": settings.app_name,
-        "version": "0.7.15",
+        "version": "0.7.16",
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }
 

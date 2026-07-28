@@ -2572,8 +2572,8 @@ def test_idempotency_key_and_money_round(client):
         headers={**h, "Idempotency-Key": key},
         json={
             "kind": "expense",
-            "amount": 99,
-            "category": "Food",
+            "amount": 10.006,
+            "category": "Supplies",
             "purpose": "Office",
             "payment_source": "my_pocket",
         },
@@ -2581,6 +2581,19 @@ def test_idempotency_key_and_money_round(client):
     assert second.status_code == 200
     assert second.json()["id"] == first.json()["id"]
     assert second.json()["amount"] == 10.01
+    # Reusing the same key with a different payload must not silently replay
+    mismatch = client.post(
+        "/records",
+        headers={**h, "Idempotency-Key": key},
+        json={
+            "kind": "expense",
+            "amount": 99,
+            "category": "Food",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+        },
+    )
+    assert mismatch.status_code == 409
     # Without key, a new row is created
     third = client.post(
         "/records",
@@ -2632,7 +2645,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.15"
+    assert health.json()["version"] == "0.7.16"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -3160,10 +3173,13 @@ def test_decide_batch_comment_cancel_idempotency_and_currency(client):
     c1 = client.post(f"/records/{c}/comment", headers=cmt_headers, json={"note": "first note"})
     assert c1.status_code == 200
     assert "first note" in c1.json()["comment"]
-    c2 = client.post(f"/records/{c}/comment", headers=cmt_headers, json={"note": "retry note"})
+    c2 = client.post(f"/records/{c}/comment", headers=cmt_headers, json={"note": "first note"})
     assert c2.status_code == 200
     assert c2.json()["comment"] == c1.json()["comment"]
-    assert "retry note" not in c2.json()["comment"]
+    c_mismatch = client.post(
+        f"/records/{c}/comment", headers=cmt_headers, json={"note": "retry note"}
+    )
+    assert c_mismatch.status_code == 409
 
     d = client.post(
         "/records",
@@ -3466,10 +3482,16 @@ def test_decide_void_idempotency_keys_and_upload_rate_limit(client, monkeypatch)
     void2 = client.post(
         f"/records/{rid}/void",
         headers={**h, "Idempotency-Key": vkey},
-        json={"note": "retry"},
+        json={"note": "mistake"},
     )
     assert void2.status_code == 200
     assert void2.json()["is_voided"] is True
+    void_mismatch = client.post(
+        f"/records/{rid}/void",
+        headers={**h, "Idempotency-Key": vkey},
+        json={"note": "retry"},
+    )
+    assert void_mismatch.status_code == 409
 
     adj = client.post(
         "/adjustments",
@@ -3493,10 +3515,16 @@ def test_decide_void_idempotency_keys_and_upload_rate_limit(client, monkeypatch)
     a2 = client.post(
         f"/adjustments/{aid}/void",
         headers={**h, "Idempotency-Key": avkey},
-        json={"note": "retry"},
+        json={"note": "undo"},
     )
     assert a2.status_code == 200
     assert a2.json()["is_voided"] is True
+    a_mismatch = client.post(
+        f"/adjustments/{aid}/void",
+        headers={**h, "Idempotency-Key": avkey},
+        json={"note": "retry"},
+    )
+    assert a_mismatch.status_code == 409
 
     from app.config import settings
     from app.services.rate_limit import reset_limiter_for_tests
@@ -4071,4 +4099,56 @@ def test_deactivate_balance_bike_trim_finite_and_password_confirm(client):
     )
     assert blocked.status_code == 400
     assert "cash or spendings" in blocked.json()["detail"].lower()
+
+
+def test_idem_fingerprint_occurred_at_patch_and_register_conflict(client):
+    owner = _register(client, "flow-0716", "v0716-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    # Duplicate slug → 400 (not 500)
+    dup = client.post(
+        "/orgs/register",
+        json={
+            "name": "Other",
+            "slug": "flow-0716",
+            "currency": "IDR",
+            "owner_email": "v0716-other@example.com",
+            "owner_name": "Other",
+            "owner_password": "secret12",
+            "owner_password_confirm": "secret12",
+        },
+    )
+    assert dup.status_code == 400
+
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 40,
+            "category": "Taxi",
+            "purpose": "Office",
+            "payment_source": "my_pocket",
+            "occurred_at": "2024-06-15T12:00:00",
+        },
+    )
+    assert rec.status_code == 200, rec.text
+    rid = rec.json()["id"]
+    assert rec.json()["occurred_at"].startswith("2024-06-15")
+
+    patched = client.patch(
+        f"/records/{rid}",
+        headers=h,
+        json={"occurred_at": "2024-07-01T12:00:00"},
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["occurred_at"].startswith("2024-07-01")
+
+    cleared = client.patch(
+        f"/records/{rid}",
+        headers=h,
+        json={"occurred_at": None},
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["occurred_at"] is None
 

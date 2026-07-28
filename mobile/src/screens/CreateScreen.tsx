@@ -15,6 +15,7 @@ import {
   type User,
 } from "../api";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
+import { isValidYmd } from "../dates";
 import { formatWhen } from "../format";
 
 export function CreateScreen({
@@ -249,8 +250,8 @@ export function CreateScreen({
       Alert.alert("Fos", "Purpose is required");
       return;
     }
-    if (occurredDate.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(occurredDate.trim())) {
-      Alert.alert("Fos", "When must be YYYY-MM-DD or empty");
+    if (occurredDate.trim() && !isValidYmd(occurredDate.trim())) {
+      Alert.alert("Fos", "When must be a real calendar day (YYYY-MM-DD) or empty");
       return;
     }
     if (kind === "fuel") {

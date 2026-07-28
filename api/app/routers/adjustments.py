@@ -116,10 +116,17 @@ def create_adjustment(
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
     from app.services.money import round_money
 
     key = normalize_idem_key(idempotency_key)
+    fp = fingerprint(body.model_dump(mode="json")) if key else None
     if key:
         hit = lookup_idem(
             db,
@@ -129,6 +136,7 @@ def create_adjustment(
             key=key,
         )
         if hit:
+            require_idem_match(hit, fp)
             existing = db.get(BalanceAdjustment, hit.resource_id)
             if existing and existing.organization_id == manager.organization_id:
                 u = db.get(User, existing.user_id)
@@ -176,6 +184,7 @@ def create_adjustment(
             scope="adjustments.create",
             key=key,
             resource_id=row.id,
+            request_hash=fp,
         )
     db.commit()
     db.refresh(row)
@@ -190,9 +199,20 @@ def void_adjustment(
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
 
     key = normalize_idem_key(idempotency_key)
+    fp = (
+        fingerprint({"adjustment_id": adjustment_id, **body.model_dump(mode="json")})
+        if key
+        else None
+    )
     if key:
         hit = lookup_idem(
             db,
@@ -202,6 +222,7 @@ def void_adjustment(
             key=key,
         )
         if hit:
+            require_idem_match(hit, fp)
             existing = db.get(BalanceAdjustment, hit.resource_id)
             if existing and existing.organization_id == manager.organization_id:
                 u = db.get(User, existing.user_id)
@@ -245,6 +266,7 @@ def void_adjustment(
             scope="adjustments.void",
             key=key,
             resource_id=row.id,
+            request_hash=fp,
         )
     db.commit()
     db.refresh(row)

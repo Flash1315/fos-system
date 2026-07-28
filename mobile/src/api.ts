@@ -583,6 +583,7 @@ export function updateRecord(
     client_name?: string;
     liters?: number;
     odometer?: number;
+    occurred_at?: string | null;
   },
 ) {
   return request<MoneyRecord>(`/records/${id}`, {

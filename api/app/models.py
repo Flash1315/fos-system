@@ -216,4 +216,6 @@ class IdempotencyKey(Base):
     secondary_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Optional cached JSON body for multi-resource responses (batch payouts)
     response_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # SHA-256 of canonical request payload — mismatch → 409 on key reuse
+    request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

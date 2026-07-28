@@ -16,6 +16,7 @@ import {
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Card, Chip, Field, Label, Row, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
+import { isValidYmd, ymdError } from "../dates";
 import { colors } from "../theme";
 
 const PURPOSES = ["Rental", "Lesson", "Office", "Other"] as const;
@@ -51,6 +52,7 @@ export function RecordDetailScreen({
   const [editLiters, setEditLiters] = useState("");
   const [editOdometer, setEditOdometer] = useState("");
   const [editBike, setEditBike] = useState("");
+  const [editOccurred, setEditOccurred] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [photoUri, setPhotoUri] = useState("");
@@ -76,6 +78,7 @@ export function RecordDetailScreen({
     setEditLiters(row.liters != null ? String(row.liters) : "");
     setEditOdometer(row.odometer != null ? String(row.odometer) : "");
     setEditBike(row.bike || "");
+    setEditOccurred(row.occurred_at ? String(row.occurred_at).slice(0, 10) : "");
   };
 
   const reload = async (opts?: { preserveEdits?: boolean }) => {
@@ -274,6 +277,17 @@ export function RecordDetailScreen({
         }
         body.odometer = odo;
       }
+    }
+    const when = editOccurred.trim();
+    if (when) {
+      const err = ymdError(when, "When");
+      if (err) {
+        Alert.alert("Fos", err);
+        return;
+      }
+      body.occurred_at = `${when}T12:00:00`;
+    } else {
+      body.occurred_at = null;
     }
     setBusy(true);
     try {
@@ -492,6 +506,13 @@ export function RecordDetailScreen({
               )}
               <Label>Place</Label>
               <Field value={editPlace} onChangeText={setEditPlace} />
+              <Label>When (optional YYYY-MM-DD)</Label>
+              <Field
+                autoCapitalize="none"
+                value={editOccurred}
+                onChangeText={setEditOccurred}
+                placeholder="leave empty = clear"
+              />
               <Label>Comment</Label>
               <Field value={editComment} onChangeText={setEditComment} />
               <Row>

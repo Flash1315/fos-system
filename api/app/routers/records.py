@@ -230,10 +230,18 @@ def create_record(
     user: User = Depends(get_current_user),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
     from app.services.money import require_positive_money
+    from sqlalchemy.exc import IntegrityError
 
     key = normalize_idem_key(idempotency_key)
+    fp = fingerprint(body.model_dump(mode="json")) if key else None
     if key:
         hit = lookup_idem(
             db,
@@ -243,6 +251,7 @@ def create_record(
             key=key,
         )
         if hit:
+            require_idem_match(hit, fp)
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
@@ -324,8 +333,26 @@ def create_record(
             scope="records.create",
             key=key,
             resource_id=rec.id,
+            request_hash=fp,
         )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        if key:
+            hit = lookup_idem(
+                db,
+                organization_id=user.organization_id,
+                user_id=user.id,
+                scope="records.create",
+                key=key,
+            )
+            if hit:
+                require_idem_match(hit, fp)
+                existing = db.get(MoneyRecord, hit.resource_id)
+                if existing and existing.organization_id == user.organization_id:
+                    return _record_out(db, existing)
+        raise HTTPException(409, "Concurrent request conflict — retry") from None
     db.refresh(rec)
     return _record_out(db, rec)
 
@@ -545,15 +572,18 @@ def decide_batch(
     """Approve/reject many pending records in one call."""
     from app.services.idempotency import (
         dumps_json,
+        fingerprint,
         loads_json,
         lookup_idem,
         normalize_idem_key,
+        require_idem_match,
         store_idem,
     )
 
     if not body.approve and not (body.note or "").strip():
         raise HTTPException(400, "Reject requires a note")
     key = normalize_idem_key(idempotency_key)
+    fp = fingerprint(body.model_dump(mode="json")) if key else None
     if key:
         hit = lookup_idem(
             db,
@@ -562,10 +592,12 @@ def decide_batch(
             scope="records.decide_batch",
             key=key,
         )
-        if hit and hit.response_json:
-            cached = loads_json(hit.response_json)
-            if isinstance(cached, dict):
-                return DecideBatchOut.model_validate(cached)
+        if hit:
+            require_idem_match(hit, fp)
+            if hit.response_json:
+                cached = loads_json(hit.response_json)
+                if isinstance(cached, dict):
+                    return DecideBatchOut.model_validate(cached)
     out = []
     skipped = 0
     skipped_cash = 0
@@ -663,6 +695,7 @@ def decide_batch(
             key=key,
             resource_id=out[0].id,
             response_json=dumps_json(payload.model_dump(mode="json")),
+            request_hash=fp,
         )
     db.commit()
     for rec in out:
@@ -760,9 +793,20 @@ def decide_record(
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
 
     key = normalize_idem_key(idempotency_key)
+    fp = (
+        fingerprint({"record_id": record_id, **body.model_dump(mode="json")})
+        if key
+        else None
+    )
     if key:
         hit = lookup_idem(
             db,
@@ -772,6 +816,7 @@ def decide_record(
             key=key,
         )
         if hit:
+            require_idem_match(hit, fp)
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
@@ -816,6 +861,7 @@ def decide_record(
             scope="records.decide",
             key=key,
             resource_id=rec.id,
+            request_hash=fp,
         )
     db.commit()
     db.refresh(rec)
@@ -830,9 +876,20 @@ def comment_record(
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
 
     key = normalize_idem_key(idempotency_key)
+    fp = (
+        fingerprint({"record_id": record_id, **body.model_dump(mode="json")})
+        if key
+        else None
+    )
     if key:
         hit = lookup_idem(
             db,
@@ -842,6 +899,7 @@ def comment_record(
             key=key,
         )
         if hit:
+            require_idem_match(hit, fp)
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
@@ -858,6 +916,7 @@ def comment_record(
             scope="records.comment",
             key=key,
             resource_id=rec.id,
+            request_hash=fp,
         )
     db.commit()
     db.refresh(rec)
@@ -879,9 +938,20 @@ def void_approved_record(
     that payout is voided first.
     """
     from app.services.balances import assert_void_records_keep_non_negative, can_void_record
-    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
 
     key = normalize_idem_key(idempotency_key)
+    fp = (
+        fingerprint({"record_id": record_id, **body.model_dump(mode="json")})
+        if key
+        else None
+    )
     if key:
         hit = lookup_idem(
             db,
@@ -891,6 +961,7 @@ def void_approved_record(
             key=key,
         )
         if hit:
+            require_idem_match(hit, fp)
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
@@ -935,6 +1006,7 @@ def void_approved_record(
             scope="records.void",
             key=key,
             resource_id=rec.id,
+            request_hash=fp,
         )
     db.commit()
     db.refresh(rec)
@@ -949,9 +1021,16 @@ def cancel_pending_record(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Creator (or manager) can cancel a still-pending record by rejecting it."""
-    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
 
     key = normalize_idem_key(idempotency_key)
+    fp = fingerprint({"record_id": record_id}) if key else None
     if key:
         hit = lookup_idem(
             db,
@@ -961,6 +1040,7 @@ def cancel_pending_record(
             key=key,
         )
         if hit:
+            require_idem_match(hit, fp)
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
@@ -986,6 +1066,7 @@ def cancel_pending_record(
             scope="records.cancel",
             key=key,
             resource_id=rec.id,
+            request_hash=fp,
         )
     db.commit()
     db.refresh(rec)

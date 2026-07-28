@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Alert, Text, StyleSheet, View } from "react-native";
 import { myReport, type MyReport, type ReportPeriod } from "../api";
 import { Btn, Card, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
+import { isValidYmd } from "../dates";
 import { colors } from "../theme";
 
 const PERIODS: { label: string; days?: number }[] = [
@@ -51,12 +52,12 @@ export function MyReportScreen({ onBack }: { onBack: () => void }) {
           setReport(null);
           return;
         }
-        if (from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) {
-          setLoadError("From date must be YYYY-MM-DD");
+        if (from && !isValidYmd(from)) {
+          setLoadError("From date must be a real calendar day (YYYY-MM-DD)");
           return;
         }
-        if (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
-          setLoadError("To date must be YYYY-MM-DD");
+        if (to && !isValidYmd(to)) {
+          setLoadError("To date must be a real calendar day (YYYY-MM-DD)");
           return;
         }
         if (from && to && from > to) {

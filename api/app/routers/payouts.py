@@ -749,9 +749,21 @@ def approve_settlement_request(
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
+    from app.services.idempotency import (
+        fingerprint,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
 
     key = normalize_idem_key(idempotency_key)
+    method = ((body.payment_method if body else None) or "cash").strip().lower()
+    fp = (
+        fingerprint({"request_id": request_id, "payment_method": method})
+        if key
+        else None
+    )
     if key:
         hit = lookup_idem(
             db,
@@ -761,6 +773,7 @@ def approve_settlement_request(
             key=key,
         )
         if hit:
+            require_idem_match(hit, fp)
             existing = db.get(Payout, hit.resource_id)
             # Voided payouts must not short-circuit — request may have reopened.
             if (
@@ -772,7 +785,12 @@ def approve_settlement_request(
                 return _payout_out(db, existing, u.full_name if u else "")
             db.delete(hit)
             db.flush()
-    req = db.get(SettlementRequest, request_id)
+    req = (
+        db.query(SettlementRequest)
+        .filter(SettlementRequest.id == request_id)
+        .with_for_update()
+        .first()
+    )
 
     if not req or req.organization_id != manager.organization_id:
         raise HTTPException(404, "Request not found")
@@ -790,7 +808,6 @@ def approve_settlement_request(
     target = db.get(User, req.user_id)
     if not target:
         raise HTTPException(404, "User not found")
-    method = ((body.payment_method if body else None) or "cash").strip().lower()
     if method not in PAYMENT_METHODS:
         raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
     bal = user_balance(db, target)
@@ -836,6 +853,7 @@ def approve_settlement_request(
             scope="payouts.approve_request",
             key=key,
             resource_id=row.id,
+            request_hash=fp,
         )
     db.commit()
     db.refresh(row)

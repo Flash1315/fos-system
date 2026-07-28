@@ -88,5 +88,6 @@ def ensure_money_record_columns() -> None:
         "idempotency_keys",
         [
             ("response_json", "TEXT"),
+            ("request_hash", "VARCHAR(64)"),
         ],
     )

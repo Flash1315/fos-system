@@ -79,6 +79,8 @@ def _token_out(db: Session, user: User) -> TokenOut:
 
 @router.post("/orgs/register", response_model=TokenOut)
 def register_organization(body: OrgCreate, request: Request, db: Session = Depends(get_db)):
+    from sqlalchemy.exc import IntegrityError
+
     enforce_rate_limit(f"register:{client_ip(request)}", limit=5, window_sec=60)
     if db.query(Organization).filter(Organization.slug == body.slug).first():
         raise HTTPException(400, "Organization slug already taken")
@@ -94,7 +96,11 @@ def register_organization(body: OrgCreate, request: Request, db: Session = Depen
         role=UserRole.owner,
     )
     db.add(owner)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(400, "Organization slug already taken") from None
     db.refresh(owner)
     return _token_out(db, owner)
 
@@ -172,12 +178,20 @@ def change_password(
 
 @router.post("/auth/accept-invite", response_model=TokenOut)
 def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(get_db)):
-    from app.services.invite_tokens import find_user_by_invite_token
+    from app.services.invite_tokens import find_user_by_invite_token, hash_invite_token
 
     enforce_rate_limit(f"accept-invite:{client_ip(request)}", limit=15, window_sec=60)
     token = body.token.strip()
-    user = find_user_by_invite_token(db, token)
+    found = find_user_by_invite_token(db, token)
+    if not found:
+        raise HTTPException(400, "Invalid or expired invite token")
+    # Lock row so concurrent accepts cannot both succeed
+    user = db.query(User).filter(User.id == found.id).with_for_update().first()
     if not user or not user.is_active or not getattr(user, "must_set_password", False):
+        raise HTTPException(400, "Invalid or expired invite token")
+    digest = hash_invite_token(token)
+    stored = user.invite_token or ""
+    if stored != digest and stored != token:
         raise HTTPException(400, "Invalid or expired invite token")
     expires = getattr(user, "invite_token_expires_at", None)
     if expires is not None and expires < _utcnow():
@@ -280,7 +294,15 @@ def invite_user(
         must_set_password=must_set,
     )
     db.add(invited)
-    db.commit()
+    try:
+        db.commit()
+    except Exception as exc:
+        from sqlalchemy.exc import IntegrityError
+
+        db.rollback()
+        if isinstance(exc, IntegrityError):
+            raise HTTPException(400, "User already in organization") from None
+        raise
     db.refresh(invited)
     emailed = False
     if org:

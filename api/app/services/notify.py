@@ -5,10 +5,14 @@ import logging
 import urllib.error
 import urllib.request
 
+from fastapi import BackgroundTasks
+
 from app.config import settings
 from app.models import Organization
 
 logger = logging.getLogger(__name__)
+
+_TELEGRAM_TIMEOUT_SEC = 5
 
 
 def telegram_configured() -> bool:
@@ -26,7 +30,7 @@ def send_telegram(chat_id: str, text: str) -> bool:
         url, data=payload, headers={"Content-Type": "application/json"}, method="POST"
     )
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=_TELEGRAM_TIMEOUT_SEC) as resp:
             ok = 200 <= resp.status < 300
             logger.info("telegram notify ok=%s", ok)
             return ok
@@ -36,6 +40,21 @@ def send_telegram(chat_id: str, text: str) -> bool:
 
 
 def notify_org(org: Organization | None, text: str) -> bool:
+    """Synchronous send — use for explicit test endpoints that need the result."""
     if not org:
         return False
     return send_telegram(getattr(org, "telegram_chat_id", "") or "", text)
+
+
+def schedule_org_notify(
+    background_tasks: BackgroundTasks,
+    org: Organization | None,
+    text: str,
+) -> None:
+    """Best-effort Telegram after the response — pass primitives, not ORM state."""
+    if not org or not telegram_configured():
+        return
+    chat = (getattr(org, "telegram_chat_id", "") or "").strip()
+    if not chat:
+        return
+    background_tasks.add_task(send_telegram, chat, text)

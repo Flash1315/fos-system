@@ -955,7 +955,6 @@ export function createPayout(
     amount: number;
     payment_method?: string;
     note?: string;
-    overpayment?: number;
   },
   opts?: { idempotencyKey?: string },
 ) {

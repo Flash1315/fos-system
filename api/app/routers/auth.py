@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -331,6 +331,7 @@ def update_org(
 def invite_user(
     body: InviteIn,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
@@ -405,7 +406,7 @@ def invite_user(
     emailed = False
     if org:
         from app.services.email import send_invite_email
-        from app.services.notify import notify_org
+        from app.services.notify import schedule_org_notify
 
         emailed = send_invite_email(
             to=invited.email,
@@ -415,7 +416,8 @@ def invite_user(
             invite_token=raw_invite,
             temp_password=bool(body.password),
         )
-        notify_org(
+        schedule_org_notify(
+            background_tasks,
             org,
             f"Fos: invited {invited.full_name} ({invited.email}) as {invited.role.value}",
         )

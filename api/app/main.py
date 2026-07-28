@@ -7,6 +7,7 @@ import re
 import uuid
 
 from app.config import settings
+from app.version import APP_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ run_alembic_upgrade()
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.7.44",
+    version=APP_VERSION,
     docs_url=None if _IS_PROD else "/docs",
     redoc_url=None if _IS_PROD else "/redoc",
     openapi_url=None if _IS_PROD else "/openapi.json",
@@ -288,6 +289,8 @@ def health(request: Request):
 
     from app.db import SessionLocal
     from app.services.rate_limit import client_ip, enforce_rate_limit
+    from app.services.storage import media_backend
+    from app.version import APP_VERSION
 
     enforce_rate_limit(f"health:{client_ip(request)}", limit=120, window_sec=60)
 
@@ -301,9 +304,9 @@ def health(request: Request):
     body = {
         "ok": db_status == "ok",
         "app": settings.app_name,
-        "version": "0.7.44",
+        "version": APP_VERSION,
         "db": db_status,
-        "media_backend": (settings.media_backend or "local").strip().lower(),
+        "media_backend": media_backend(),
     }
     if db_status != "ok":
         return JSONResponse(status_code=503, content=body)

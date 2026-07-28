@@ -94,7 +94,9 @@ export function HomeScreen({
       ]);
       if (gen !== reloadGen.current) return;
       if (freshUser && onUser) onUser(freshUser);
-      setBillingCanceled((billing?.billing_status || "").toLowerCase() === "canceled");
+      setBillingCanceled(
+        ["canceled", "past_due"].includes((billing?.billing_status || "").toLowerCase()),
+      );
       setBalance(formatMoney(b.cash_on_hand, b.currency));
       setSpendings(formatMoney(b.spendings ?? 0, b.currency));
       setAvailableSpend(b.available_spendings ?? b.spendings ?? 0);
@@ -266,8 +268,9 @@ export function HomeScreen({
       </View>
       {billingCanceled ? (
         <Sub>
-          Billing canceled — org is read-only. You can still view data and cancel pending items;
-          creates, approvals, and invites are blocked until billing is restored.
+          Billing restricted — org is read-only (canceled or past due). You can still view data
+          and cancel pending items; creates, approvals, and invites are blocked until billing is
+          restored.
         </Sub>
       ) : null}
       <Card>

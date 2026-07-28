@@ -19,11 +19,13 @@ def require_member_ready(user: User | None, *, action: str = "this action") -> U
 
 
 def require_org_writable(db: Session, org_id: int) -> Organization:
-    """Refuse money mutations when billing is canceled."""
+    """Refuse money mutations when billing is canceled or past due."""
     org = db.get(Organization, org_id)
     if not org:
         raise HTTPException(404, "Organization not found")
     status = (getattr(org, "billing_status", None) or "ok").strip().lower()
     if status == "canceled":
         raise HTTPException(403, "Organization billing is canceled")
+    if status == "past_due":
+        raise HTTPException(403, "Organization billing is past due")
     return org

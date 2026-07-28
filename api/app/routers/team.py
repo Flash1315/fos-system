@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.schemas import (
@@ -271,6 +271,7 @@ def reset_member_password(
     member_id: int,
     body: MemberPasswordResetIn,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
@@ -309,9 +310,13 @@ def reset_member_password(
     db.refresh(member)
     org = db.get(Organization, user.organization_id)
     if org:
-        from app.services.notify import notify_org
+        from app.services.notify import schedule_org_notify
 
-        notify_org(org, f"Fos: password set by owner for {member.full_name}")
+        schedule_org_notify(
+            background_tasks,
+            org,
+            f"Fos: password set by owner for {member.full_name}",
+        )
     return MemberOut.model_validate(member)
 
 
@@ -319,6 +324,7 @@ def reset_member_password(
 def issue_member_reset_token(
     member_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     force: bool = Query(default=False),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
@@ -373,7 +379,7 @@ def issue_member_reset_token(
     emailed = False
     if org:
         from app.services.email import send_reset_email
-        from app.services.notify import notify_org
+        from app.services.notify import schedule_org_notify
 
         emailed = send_reset_email(
             to=member.email,
@@ -382,7 +388,11 @@ def issue_member_reset_token(
             org_slug=org.slug,
             reset_token=raw_token,
         )
-        notify_org(org, f"Fos: password reset token issued for {member.full_name}")
+        schedule_org_notify(
+            background_tasks,
+            org,
+            f"Fos: password reset token issued for {member.full_name}",
+        )
     return MemberResetTokenOut(
         id=member.id,
         email=member.email,

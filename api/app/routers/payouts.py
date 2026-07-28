@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Body, Header, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles
@@ -24,12 +24,15 @@ router = APIRouter(prefix="/payouts", tags=["payouts"])
 
 
 class PayoutCreate(BaseModel):
+    """Create body — overpayment is computed server-side; clients must not send it."""
+
+    model_config = ConfigDict(extra="forbid")
+
     user_id: int
     kind: PayoutKind
     amount: float = Field(gt=0)
     payment_method: str = "cash"
     note: str = Field(default="", max_length=2000)
-    overpayment: float = Field(default=0, ge=0)
 
     @field_validator("payment_method")
     @classmethod
@@ -50,19 +53,6 @@ class PayoutCreate(BaseModel):
             return require_positive_money(v)
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
-
-    @field_validator("overpayment")
-    @classmethod
-    def overpayment_finite(cls, v: float) -> float:
-        from app.services.money import round_money
-
-        try:
-            amount = round_money(v)
-        except ValueError as exc:
-            raise ValueError(str(exc)) from exc
-        if amount < 0:
-            raise ValueError("Overpayment cannot be negative")
-        return amount
 
 
 class PayoutOut(BaseModel):

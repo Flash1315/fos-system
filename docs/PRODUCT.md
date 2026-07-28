@@ -22,9 +22,8 @@
 
 ## 3. Non-goals (v1)
 
-- Photo upload to object storage (field exists; storage later)
 - Web admin / billing / subscriptions UI
-- Telegram bot inside this repo
+- Full Telegram bot client inside this repo (outbound org alerts only)
 - Multi-currency FX conversion
 - White-label theming
 - GPS tracking, calendar, CRM, bike fleet (those stay in RJ bot if needed)
@@ -216,9 +215,11 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Logout bumps `token_version` and revokes **all** sessions for the account
 - Passwords: min 8 characters with at least one letter and one digit
 - Optional `ENABLE_HSTS` behind HTTPS terminators; OpenAPI/docs hidden when `ENVIRONMENT=production`
-- `billing_status=canceled` is read-only: login OK; money creates/approve/void/invite/accept/reset-token/org edits/team mutations/billing integrations blocked; cancel pending record/settlement allowed; media served via authenticated API
+- `billing_status` of `canceled` or `past_due` is read-only: login OK; money creates/approve/void/invite/accept/reset-token/org edits/team mutations/billing integrations blocked; cancel pending record/settlement allowed; media served via authenticated API (local or S3)
 - Production refuses padded/blank `SECRET_KEY` and `TRUST_X_FORWARDED_FOR` without valid `TRUSTED_PROXY_CIDRS`
 - Reactivating an inactive member uses the active-seat ceiling (does not treat existing rows as new invites)
+- SMTP/Telegram outbound I/O capped (~5s); Telegram event alerts run after the response when possible
+- Payout create rejects client-supplied `overpayment` (server computes it)
 - Unsettled invitees (`must_set_password`) excluded from directory, balances, and money targets
 - Idempotency keys pruned after `IDEMPOTENCY_TTL_HOURS` (default 72)
 - CSV / report exports default to the last 365 days when no window is given; free-text cells truncated
@@ -259,13 +260,12 @@ Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`
 
 ## 14. Roadmap hints (not committed work)
 
-- Photo upload (R2/S3) + attach to record
-- Org-wide balance / reports for owners
-- Web dashboard + billing
-- Telegram thin client using same API
+- Web dashboard + billing checkout
+- Telegram thin client using same API (beyond outbound alerts)
 - Auto-approve policy for owners (product decision)
 - Multi-currency / FX
 - White-label
+- Shared Redis rate limiter / heavier ops indexes
 
 ## 15. Definition of done for v1 scaffold
 
@@ -276,7 +276,7 @@ Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`
 - [x] Dual balance (cash on hand + spendings) + mobile home
 - [x] Settlements, transfers, adjustments, settlement requests
 - [x] Expo auth/home/create/approve/ledger/reports/settlements screens
-- [x] Team / reports / ledger / receipt photo (local)
+- [x] Team / reports / ledger / receipt photo (local or S3 via authenticated media API)
 - [x] README quick start
 - [x] API pytest + CI workflow
 - [ ] Production Postgres deploy (compose file ready — verify in target env)

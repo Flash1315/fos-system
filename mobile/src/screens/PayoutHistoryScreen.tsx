@@ -39,9 +39,12 @@ export function PayoutHistoryScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [voidId, setVoidId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const reload = async () => {
     try {
+      setLoadError("");
       const voided =
         voidFilter === "voided" ? true : voidFilter === "active" ? false : undefined;
       const data =
@@ -50,7 +53,10 @@ export function PayoutHistoryScreen({
           : await listMyPayouts({ voided });
       setRows(data);
     } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -89,7 +95,19 @@ export function PayoutHistoryScreen({
             }}
           />
         }
-        ListEmptyComponent={<Sub>No settlements yet</Sub>}
+        ListEmptyComponent={
+          <Sub>
+            {loading
+              ? "Loading..."
+              : loadError
+                ? `Could not load — ${loadError}`
+                : voidFilter === "voided"
+                  ? "No voided settlements"
+                  : voidFilter === "active"
+                    ? "No active settlements"
+                    : "No settlements yet"}
+          </Sub>
+        }
         renderItem={({ item }) => (
           <View style={styles.row}>
             <Text style={styles.rowTitle}>

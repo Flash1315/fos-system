@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import { inviteUser, type User } from "../api";
-import { Btn, Chip, Field, Label, Screen, TopBar } from "../components/ui";
+import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
 export function InviteScreen({
   busy,
@@ -51,6 +51,9 @@ export function InviteScreen({
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Invite teammate</Label>
+      <Sub>
+        They log in with this org slug, the email below, and the temporary password you set.
+      </Sub>
       <Label>Full name</Label>
       <Field value={fullName} onChangeText={setFullName} />
       <Label>Email</Label>

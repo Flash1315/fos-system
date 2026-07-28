@@ -21,8 +21,14 @@ def _validate_runtime_settings() -> str:
             f"ENVIRONMENT must be one of {sorted(_ALLOWED_ENVS)} (got {settings.environment!r})"
         )
     secret = settings.secret_key or ""
-    if int(settings.access_token_expire_minutes or 0) <= 0:
+    expire_min = int(settings.access_token_expire_minutes or 0)
+    if expire_min <= 0:
         raise RuntimeError("ACCESS_TOKEN_EXPIRE_MINUTES must be > 0")
+    if expire_min > 10_080:
+        msg = "ACCESS_TOKEN_EXPIRE_MINUTES exceeds 10080 (7 days)"
+        if env in ("prod", "production"):
+            raise RuntimeError(msg)
+        logger.warning("%s — prefer shorter JWT lifetime", msg)
     if not (1 <= int(settings.max_org_members or 0) <= 10_000):
         raise RuntimeError("MAX_ORG_MEMBERS must be between 1 and 10000")
     algo = (settings.algorithm or "").strip()
@@ -55,7 +61,8 @@ def _validate_runtime_settings() -> str:
     return env
 
 
-_validate_runtime_settings()
+_RUNTIME_ENV = _validate_runtime_settings()
+_IS_PROD = _RUNTIME_ENV in ("prod", "production")
 
 from app.alembic_runner import run_alembic_upgrade
 from app.db import Base, engine
@@ -74,7 +81,13 @@ Base.metadata.create_all(bind=engine)
 ensure_money_record_columns()
 run_alembic_upgrade()
 
-app = FastAPI(title=settings.app_name, version="0.7.40")
+app = FastAPI(
+    title=settings.app_name,
+    version="0.7.41",
+    docs_url=None if _IS_PROD else "/docs",
+    redoc_url=None if _IS_PROD else "/redoc",
+    openapi_url=None if _IS_PROD else "/openapi.json",
+)
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 # Bearer-token auth does not use cookies; credentials+wildcard is unnecessary.
@@ -158,17 +171,30 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class BodySizeLimitMiddleware(BaseHTTPMiddleware):
-    """Reject oversized Content-Length before reading the body."""
+    """Reject oversized bodies (Content-Length and streamed without CL)."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        if request.method in ("POST", "PUT", "PATCH"):
-            raw = request.headers.get("content-length")
-            if raw and raw.isdigit():
-                size = int(raw)
-                path = request.url.path.rstrip("/")
-                limit = _MAX_UPLOAD_BODY if path.endswith("/media/photo") else _MAX_JSON_BODY
-                if size > limit:
-                    return _json_error(413, "Request body too large", request=request)
+        if request.method not in ("POST", "PUT", "PATCH"):
+            return await call_next(request)
+        path = request.url.path.rstrip("/")
+        limit = _MAX_UPLOAD_BODY if path.endswith("/media/photo") else _MAX_JSON_BODY
+        raw = request.headers.get("content-length")
+        if raw and raw.isdigit():
+            if int(raw) > limit:
+                return _json_error(413, "Request body too large", request=request)
+            return await call_next(request)
+
+        # No Content-Length — buffer with a hard cap (JSON paths; uploads usually send CL).
+        body = b""
+        async for chunk in request.stream():
+            body += chunk
+            if len(body) > limit:
+                return _json_error(413, "Request body too large", request=request)
+
+        async def receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        request = Request(request.scope, receive)
         return await call_next(request)
 
 
@@ -256,7 +282,7 @@ def health(request: Request):
     body = {
         "ok": db_status == "ok",
         "app": settings.app_name,
-        "version": "0.7.40",
+        "version": "0.7.41",
         "db": db_status,
         "media_backend": (settings.media_backend or "local").strip().lower(),
     }

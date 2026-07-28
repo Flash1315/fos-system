@@ -1,6 +1,6 @@
 """Request idempotency for mutating money endpoints."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from typing import Any
@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models import IdempotencyKey
 
 
@@ -33,6 +34,16 @@ def fingerprint(payload: Any) -> str:
     """Stable SHA-256 of a request payload (sorted JSON)."""
     raw = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def prune_expired_idem(db: Session) -> int:
+    hours = max(1, int(settings.idempotency_ttl_hours or 72))
+    cutoff = _utcnow() - timedelta(hours=hours)
+    return (
+        db.query(IdempotencyKey)
+        .filter(IdempotencyKey.created_at < cutoff)
+        .delete(synchronize_session=False)
+    )
 
 
 def lookup_idem(
@@ -79,6 +90,7 @@ def store_idem(
     response_json: str | None = None,
     request_hash: str | None = None,
 ) -> IdempotencyKey:
+    prune_expired_idem(db)
     row = IdempotencyKey(
         organization_id=organization_id,
         user_id=user_id,

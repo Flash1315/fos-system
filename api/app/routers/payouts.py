@@ -209,12 +209,13 @@ def _create_payout_row(
     """
     from app.services.money import require_positive_money, round_money
     from app.services.locks import lock_users
+    from app.services.org_gates import require_member_ready, require_org_writable
 
+    require_org_writable(db, manager.organization_id)
     target = db.get(User, body.user_id)
     if not target or target.organization_id != manager.organization_id:
         raise HTTPException(404, "User not found")
-    if not target.is_active:
-        raise HTTPException(400, "User inactive")
+    require_member_ready(target, action="settlement")
     lock_users(db, target.id)
     org = db.get(Organization, manager.organization_id)
     bal = user_balance(db, target)

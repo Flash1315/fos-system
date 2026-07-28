@@ -106,6 +106,7 @@ def create_transfer(
             User.organization_id == user.organization_id,
             User.email == body.to_email.lower(),
             User.is_active.is_(True),
+            User.must_set_password.is_(False),
         )
         .first()
     )
@@ -115,7 +116,9 @@ def create_transfer(
         raise HTTPException(400, "Cannot transfer to yourself")
 
     from app.services.locks import lock_users
+    from app.services.org_gates import require_org_writable
 
+    require_org_writable(db, user.organization_id)
     lock_users(db, user.id, recipient.id)
 
     try:

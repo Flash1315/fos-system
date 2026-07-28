@@ -48,6 +48,7 @@ class PlanIn(BaseModel):
 
 @router.get("/billing/me", response_model=BillingOut)
 def billing_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Org plan/status. Money writes refuse billing_status=canceled."""
     from app.services.rate_limit import enforce_rate_limit
 
     enforce_rate_limit(

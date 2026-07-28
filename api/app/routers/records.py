@@ -379,6 +379,7 @@ def create_record(
         commit_or_replay,
     )
     from app.services.money import require_positive_money
+    from app.services.org_gates import require_org_writable
     from app.services.rate_limit import enforce_rate_limit
 
     enforce_rate_limit(
@@ -386,6 +387,7 @@ def create_record(
         limit=60,
         window_sec=60,
     )
+    require_org_writable(db, user.organization_id)
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None
@@ -422,7 +424,10 @@ def create_record(
         if user.role not in (UserRole.owner, UserRole.manager):
             raise HTTPException(403, "Only managers can create on behalf")
         target = db.get(User, body.created_for_user_id)
-        if not target or target.organization_id != user.organization_id or not target.is_active:
+        from app.services.org_gates import require_member_ready
+
+        require_member_ready(target, action="filing on their behalf")
+        if target.organization_id != user.organization_id:
             raise HTTPException(404, "Target user not found")
         owner_id = target.id
         stamp = _utcnow().strftime("%Y-%m-%d %H:%M")

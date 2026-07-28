@@ -80,7 +80,11 @@ def org_directory(
     require_org_member_capacity(db, user.organization_id, active_only=True)
     rows = (
         db.query(User)
-        .filter(User.organization_id == user.organization_id, User.is_active.is_(True))
+        .filter(
+            User.organization_id == user.organization_id,
+            User.is_active.is_(True),
+            User.must_set_password.is_(False),
+        )
         .order_by(User.full_name.asc(), User.id.asc())
         .offset(offset)
         .limit(limit)
@@ -262,6 +266,7 @@ def reset_member_password(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
+    from app.services.locks import lock_organization
     from app.services.rate_limit import enforce_rate_limit
 
     enforce_rate_limit(
@@ -269,6 +274,12 @@ def reset_member_password(
         limit=20,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"reset-password-member:{user.organization_id}:{member_id}",
+        limit=5,
+        window_sec=900,
+    )
+    lock_organization(db, user.organization_id)
     member = (
         db.query(User)
         .filter(User.id == member_id, User.organization_id == user.organization_id)
@@ -286,6 +297,11 @@ def reset_member_password(
     member.invite_token_expires_at = None
     db.commit()
     db.refresh(member)
+    org = db.get(Organization, user.organization_id)
+    if org:
+        from app.services.notify import notify_org
+
+        notify_org(org, f"Fos: password set by owner for {member.full_name}")
     return MemberOut.model_validate(member)
 
 
@@ -359,7 +375,7 @@ def issue_member_reset_token(
         email=member.email,
         full_name=member.full_name,
         organization_slug=org.slug if org else "",
-        invite_token=raw_token,
+        invite_token="" if emailed else raw_token,
         must_set_password=True,
         email_sent=emailed,
     )

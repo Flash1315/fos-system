@@ -16,7 +16,7 @@ async def read_upload_capped(file, max_bytes: int = MAX_UPLOAD_BYTES) -> bytes:
             break
         total += len(chunk)
         if total > max_bytes:
-            raise HTTPException(400, "File too large (max 8MB)")
+            raise HTTPException(413, "File too large (max 8MB)")
         chunks.append(chunk)
     data = b"".join(chunks)
     if len(data) < _MIN_BYTES:

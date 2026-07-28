@@ -185,8 +185,12 @@ def create_adjustment(
     if abs(amount) < 1e-9:
         raise HTTPException(400, "Amount cannot be zero")
     target = db.get(User, body.user_id)
-    if not target or target.organization_id != manager.organization_id or not target.is_active:
+    from app.services.org_gates import require_member_ready, require_org_writable
+
+    require_org_writable(db, manager.organization_id)
+    if not target or target.organization_id != manager.organization_id:
         raise HTTPException(404, "User not found")
+    require_member_ready(target, action="balance adjustment")
     from app.services.locks import lock_users
 
     lock_users(db, target.id)

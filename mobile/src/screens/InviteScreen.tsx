@@ -65,10 +65,19 @@ export function InviteScreen({
         `Open Accept invite, paste the token, and set a password.`
       );
     }
-    return (
-      `Fos invite\nSlug: ${payload.slug}\nEmail: ${payload.email}\n` +
-      `Password: (the temporary password you set)`
-    );
+    if (payload.res.email_sent) {
+      return (
+        `Fos invite\nSlug: ${payload.slug}\nEmail: ${payload.email}\n` +
+        `Invite email was sent — ask them to check their inbox.`
+      );
+    }
+    if (payload.usedTempPassword) {
+      return (
+        `Fos invite\nSlug: ${payload.slug}\nEmail: ${payload.email}\n` +
+        `Password: (the temporary password you set)`
+      );
+    }
+    return `Fos invite\nSlug: ${payload.slug}\nEmail: ${payload.email}`;
   };
 
   const submit = async () => {

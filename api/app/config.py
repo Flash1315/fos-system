@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     # Optional HSTS (enable only behind HTTPS terminators)
     enable_hsts: bool = False
     hsts_max_age: int = 31_536_000
+    # Drop idempotency rows older than this (hours)
+    idempotency_ttl_hours: int = 72
 
 
 settings = Settings()

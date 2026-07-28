@@ -232,13 +232,15 @@ export function TeamScreen({
                                 name: item.full_name,
                                 slug: res.organization_slug,
                                 email: res.email,
-                                token: res.invite_token,
+                                token: res.invite_token || "",
                                 emailSent: res.email_sent,
                               };
                               setLastReset(payload);
                               Alert.alert(
                                 "Fos",
-                                `Reset token issued${res.email_sent ? " (email sent)" : ""}. Keep the details below to share.`,
+                                res.email_sent && !res.invite_token
+                                  ? "Reset email was sent — share the company slug if needed."
+                                  : `Reset token issued${res.email_sent ? " (email sent)" : ""}. Keep the details below to share.`,
                               );
                               await reload();
                             } catch (e) {
@@ -265,9 +267,15 @@ export function TeamScreen({
       />
       {lastReset && (
         <View style={styles.card}>
-          <Label>Last reset token — share before leaving</Label>
+          <Label>
+            {lastReset.token
+              ? "Last reset token — share before leaving"
+              : "Last reset — email sent"}
+          </Label>
           <Sub>
-            {`Share with ${lastReset.name}:\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\nReset token: ${lastReset.token}\n\nThey open Accept invite and set a new password.`}
+            {lastReset.token
+              ? `Share with ${lastReset.name}:\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\nReset token: ${lastReset.token}\n\nThey open Accept invite and set a new password.`
+              : `Reset email sent to ${lastReset.email} (${lastReset.slug}). Ask them to check their inbox.`}
           </Sub>
           {lastReset.emailSent ? <Sub>Email delivery attempted.</Sub> : null}
           <Btn
@@ -276,9 +284,11 @@ export function TeamScreen({
             onPress={async () => {
               try {
                 await Share.share({
-                  message:
-                    `Fos password reset\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\n` +
-                    `Reset token: ${lastReset.token}\n\nOpen Accept invite and set a new password.`,
+                  message: lastReset.token
+                    ? `Fos password reset\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\n` +
+                      `Reset token: ${lastReset.token}\n\nOpen Accept invite and set a new password.`
+                    : `Fos password reset\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\n` +
+                      `Reset email was sent — check your inbox.`,
                 });
               } catch (e) {
                 Alert.alert("Fos", e instanceof Error ? e.message : "Share failed");

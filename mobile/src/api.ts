@@ -172,6 +172,10 @@ export async function getToken() {
   return cachedToken;
 }
 
+function newClientRequestId(): string {
+  return `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 async function request<T>(
   path: string,
   init: RequestInit = {},
@@ -186,6 +190,7 @@ async function request<T>(
     ...auth,
     ...((init.headers as Record<string, string>) || {}),
   };
+  if (!headers["X-Request-Id"]) headers["X-Request-Id"] = newClientRequestId();
   const controller = new AbortController();
   const timeoutMs = opts?.timeoutMs ?? REQUEST_TIMEOUT_MS;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -221,7 +226,7 @@ async function request<T>(
         res.statusText || `HTTP ${res.status}`,
         res.status,
         res.headers.get("Retry-After"),
-        res.headers.get("X-Request-Id"),
+        res.headers.get("X-Request-Id") || headers["X-Request-Id"],
       ),
     );
   }
@@ -237,6 +242,7 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
     ...auth,
     ...((init.headers as Record<string, string>) || {}),
   };
+  if (!headers["X-Request-Id"]) headers["X-Request-Id"] = newClientRequestId();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res: Response;

@@ -262,6 +262,18 @@ export function ReportsScreen({ onBack }: { onBack: () => void }) {
           />
         </View>
       )}
+      {(custom || days != null) && (
+        <Btn
+          title="Clear filters"
+          variant="ghost"
+          onPress={() => {
+            setCustom(false);
+            setDays(undefined);
+            setDateFrom("");
+            setDateTo("");
+          }}
+        />
+      )}
       {body}
     </Screen>
   );

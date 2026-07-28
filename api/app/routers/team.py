@@ -114,11 +114,19 @@ def set_member_active(
                 400,
                 "Cannot deactivate — teammate still has pending settlement requests",
             )
+    if body.is_active and not member.is_active:
+        if member.must_set_password and not member.invite_token:
+            raise HTTPException(
+                400,
+                "Issue a reset token before reactivating — teammate still must set a password",
+            )
     member.is_active = body.is_active
     if not body.is_active:
         bump_token_version(member)
-        member.invite_token = None
-        member.invite_token_expires_at = None
+        # Keep invite/reset token for unsettled invitees so they can still accept after reactivate.
+        if not member.must_set_password:
+            member.invite_token = None
+            member.invite_token_expires_at = None
     db.commit()
     db.refresh(member)
     return MemberOut.model_validate(member)
@@ -148,7 +156,9 @@ def set_member_role(
         )
         if owners <= 1:
             raise HTTPException(400, "Cannot demote the last owner")
-    member.role = body.role
+    if member.role != body.role:
+        member.role = body.role
+        bump_token_version(member)
     db.commit()
     db.refresh(member)
     return MemberOut.model_validate(member)
@@ -158,9 +168,17 @@ def set_member_role(
 def reset_member_password(
     member_id: int,
     body: MemberPasswordResetIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"reset-password:{user.organization_id}:{user.id}",
+        limit=20,
+        window_sec=60,
+    )
     member = db.get(User, member_id)
     if not member or member.organization_id != user.organization_id:
         raise HTTPException(404, "User not found")

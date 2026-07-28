@@ -87,6 +87,55 @@ def record_in_closed_cycle(db: Session, rec: MoneyRecord) -> bool:
     return eff <= cut
 
 
+def void_record_balance_deltas(rec: MoneyRecord) -> tuple[float, float]:
+    """Cash/spendings deltas when voiding an approved record (positive = balance up)."""
+    amt = float(rec.amount or 0)
+    if rec.kind == RecordKind.income and (rec.payment_method or "") == "cash":
+        return (-amt, 0.0)
+    if rec.kind in (RecordKind.expense, RecordKind.fuel):
+        source = rec.payment_source or "cash_on_hand"
+        if source == "my_pocket":
+            return (0.0, -amt)
+        return (amt, 0.0)
+    return (0.0, 0.0)
+
+
+def assert_void_records_keep_non_negative(
+    db: Session, targets: list[MoneyRecord]
+) -> None:
+    """Reject void if any teammate's cash_on_hand or spendings would go negative."""
+    from fastapi import HTTPException
+
+    by_user: dict[int, list[MoneyRecord]] = {}
+    for rec in targets:
+        by_user.setdefault(rec.created_by, []).append(rec)
+    for uid, rows in by_user.items():
+        user = db.get(User, uid)
+        if not user:
+            continue
+        bal = user_balance(db, user)
+        cash = float(bal.get("cash_on_hand") or 0)
+        spend = float(bal.get("spendings") or 0)
+        d_cash = 0.0
+        d_spend = 0.0
+        for rec in rows:
+            dc, ds = void_record_balance_deltas(rec)
+            d_cash += dc
+            d_spend += ds
+        if cash + d_cash < -1e-6:
+            raise HTTPException(
+                400,
+                f"Voiding would make cash_on_hand negative for {user.full_name} "
+                f"(current {cash}, delta {d_cash})",
+            )
+        if spend + d_spend < -1e-6:
+            raise HTTPException(
+                400,
+                f"Voiding would make spendings negative for {user.full_name} "
+                f"(current {spend}, delta {d_spend})",
+            )
+
+
 def can_void_record(db: Session, rec: MoneyRecord) -> bool:
     if rec.status != RecordStatus.approved or rec.is_voided:
         return False

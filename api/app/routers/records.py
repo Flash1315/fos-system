@@ -447,6 +447,9 @@ def pending_count(
 @router.get("/media-token")
 def issue_media_token(user: User = Depends(get_current_user)):
     """Short-lived token for loading receipt images without the full access JWT."""
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(f"media-token:{user.organization_id}:{user.id}", limit=60, window_sec=60)
     token = create_media_token(
         user.id, user.organization_id, user.token_version or 0, minutes=15
     )
@@ -608,6 +611,28 @@ def decide_batch(
             raise HTTPException(
                 400,
                 "No records approved — selected records belong to inactive teammates",
+            )
+        # Soft retry: every id exists and is already at the desired decided status.
+        desired = RecordStatus.approved if body.approve else RecordStatus.rejected
+        already_ok = 0
+        missing = 0
+        conflict = False
+        for rid in body.ids:
+            rec = db.get(MoneyRecord, rid)
+            if not rec or rec.organization_id != user.organization_id:
+                missing += 1
+                continue
+            if rec.status == desired and not rec.is_voided:
+                already_ok += 1
+            else:
+                conflict = True
+                break
+        if already_ok > 0 and missing == 0 and not conflict:
+            return DecideBatchOut(
+                decided=[],
+                skipped=len(body.ids),
+                skipped_insufficient_cash=0,
+                skipped_inactive=0,
             )
         raise HTTPException(400, "No pending records matched the given ids")
     payload = DecideBatchOut(
@@ -835,7 +860,7 @@ def void_approved_record(
     Records already included in a settlement cutoff cannot be voided until
     that payout is voided first.
     """
-    from app.services.balances import can_void_record
+    from app.services.balances import assert_void_records_keep_non_negative, can_void_record
     from app.services.idempotency import lookup_idem, normalize_idem_key, store_idem
 
     key = normalize_idem_key(idempotency_key)
@@ -878,6 +903,7 @@ def void_approved_record(
             .all()
         )
         targets = siblings or [rec]
+    assert_void_records_keep_non_negative(db, targets)
     for row in targets:
         row.is_voided = True
         row.voided_at = now

@@ -93,6 +93,13 @@ def test_telegram(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
+    from app.services.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(
+        f"telegram-test:{user.organization_id}:{user.id}",
+        limit=5,
+        window_sec=60,
+    )
     if not telegram_configured():
         raise HTTPException(400, "TELEGRAM_BOT_TOKEN is not configured on the server")
     org = db.get(Organization, user.organization_id)

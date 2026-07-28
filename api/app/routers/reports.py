@@ -61,8 +61,8 @@ def _csv_text(value) -> str:
     """Neutralize spreadsheet formula injection for free-text cells."""
     if value is None:
         return ""
-    s = str(value)
-    if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+    s = str(value).replace("\r", " ").replace("\n", " ").strip()
+    if s and s[0] in ("=", "+", "-", "@", "\t"):
         return "'" + s
     return s
 
@@ -449,7 +449,8 @@ def export_csv(
         )
 
     stamp = (date_from or date_to or (f"{days}d" if days else "all"))
-    filename = f"fos-export-{stamp}.csv".replace("/", "-")
+    safe = "".join(ch if ch.isalnum() or ch in "-_." else "-" for ch in str(stamp))[:48] or "all"
+    filename = f"fos-export-{safe}.csv"
     return PlainTextResponse(
         buf.getvalue(),
         media_type="text/csv",

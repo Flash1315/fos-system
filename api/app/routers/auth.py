@@ -245,6 +245,11 @@ def invite_user(
         .first()
     )
     if exists:
+        if not exists.is_active:
+            raise HTTPException(
+                400,
+                "User is inactive — reactivate them in Team instead of inviting again",
+            )
         raise HTTPException(400, "User already in organization")
     if body.role == UserRole.owner and user.role != UserRole.owner:
         raise HTTPException(403, "Only owner can invite owner")

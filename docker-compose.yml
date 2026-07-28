@@ -9,6 +9,8 @@ services:
       DATABASE_URL: postgresql+psycopg2://fos:fos@db:5432/fos
       ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
       CORS_ORIGINS: "*"
+      # Optional shared limiter (uncomment redis service too):
+      # RATE_LIMIT_REDIS_URL: redis://redis:6379/0
     volumes:
       - fos_uploads:/app/uploads
     depends_on:
@@ -37,6 +39,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # Optional — enable with RATE_LIMIT_REDIS_URL on api
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "127.0.0.1:6379:6379"
 
 volumes:
   fos_pg:

@@ -231,11 +231,12 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - API Docker image includes Alembic + runs as non-root; Compose is for local/dev only
 - Compose Postgres binds `127.0.0.1` only; API healthcheck uses `start_period`
 - EAS preview/production require https EXPO_PUBLIC_API_URL (`docs/EAS.md`)
+- Optional Redis rate limiter + composite indexes for money/payout/idempotency lists
 - Production refuses SQLite `DATABASE_URL`; Alembic upgrade fails hard in production
 - Postgres pool/SSL knobs: `DB_POOL_*`, `DB_SSLMODE`; see `docs/DEPLOY.md`
 - Accept-invite allowed during billing freeze; money idempotency replays before writable gate
 - Local media I/O errors → 503; runtime image excludes pytest (`requirements-dev.txt`)
-- Rate limits are process-local (not shared across workers)
+- Rate limits use Redis when `RATE_LIMIT_REDIS_URL` is set; otherwise process-local
 - All record mutations scoped to caller’s `organization_id`
 - Do not leak other orgs’ data in list/balance endpoints
 - CORS configurable via `CORS_ORIGINS`
@@ -280,7 +281,7 @@ Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`
 - Auto-approve policy for owners (product decision)
 - Multi-currency / FX
 - White-label
-- Shared Redis rate limiter / heavier ops indexes
+- Heavier analytics indexes / read replicas
 
 ## 15. Definition of done for v1 scaffold
 

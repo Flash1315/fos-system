@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     String, Integer, Float, DateTime, ForeignKey, Enum, Text, Boolean, UniqueConstraint,
+    Index,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -52,7 +53,10 @@ class Organization(Base):
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("organization_id", "email", name="uq_org_email"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "email", name="uq_org_email"),
+        Index("ix_users_org_active", "organization_id", "is_active"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
@@ -79,6 +83,29 @@ class User(Base):
 class MoneyRecord(Base):
     """Unified expense / fuel / income row."""
     __tablename__ = "money_records"
+    __table_args__ = (
+        Index(
+            "ix_money_records_org_creator_created",
+            "organization_id",
+            "created_by",
+            "created_at",
+        ),
+        Index(
+            "ix_money_records_org_status_void_created",
+            "organization_id",
+            "status",
+            "is_voided",
+            "created_at",
+        ),
+        Index(
+            "ix_money_records_org_creator_status_void",
+            "organization_id",
+            "created_by",
+            "status",
+            "is_voided",
+        ),
+        Index("ix_money_records_transfer_group", "transfer_group_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
@@ -127,6 +154,16 @@ class PayoutKind(str, enum.Enum):
 class Payout(Base):
     """Manager settlement rows — RJ Expense payout / Income handover."""
     __tablename__ = "payouts"
+    __table_args__ = (
+        Index(
+            "ix_payouts_org_user_kind_void_created",
+            "organization_id",
+            "user_id",
+            "kind",
+            "is_voided",
+            "created_at",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
@@ -157,6 +194,20 @@ class SettlementRequestStatus(str, enum.Enum):
 class SettlementRequest(Base):
     """Employee asks manager to settle (expense payout or income handover)."""
     __tablename__ = "settlement_requests"
+    __table_args__ = (
+        Index(
+            "ix_settlement_requests_org_status_created",
+            "organization_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_settlement_requests_org_user_status",
+            "organization_id",
+            "user_id",
+            "status",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
@@ -205,6 +256,7 @@ class IdempotencyKey(Base):
         UniqueConstraint(
             "organization_id", "user_id", "scope", "key", name="uq_idempotency_scope_key"
         ),
+        Index("ix_idempotency_keys_created_at", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

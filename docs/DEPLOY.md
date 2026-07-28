@@ -45,5 +45,6 @@ DB_POOL_RECYCLE=1800
 
 ## 6. Optional next
 
-- Shared rate limits: `RATE_LIMIT_REDIS_URL` (multi-worker)
+- Shared rate limits: `RATE_LIMIT_REDIS_URL` (Redis INCR fixed-window; falls back to process-local on errors)
+- Hot-path DB indexes via Alembic `20260728_0002`
 - Managed Redis / object storage / observability outside this repo

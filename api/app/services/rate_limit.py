@@ -1,8 +1,9 @@
-"""Process-local fixed-window rate limiting (approximate under multi-worker)."""
+"""Fixed-window rate limiting — Redis when configured, else process-local."""
 
 from __future__ import annotations
 
 import ipaddress
+import logging
 import time
 from collections import defaultdict
 from threading import Lock
@@ -11,8 +12,11 @@ from fastapi import HTTPException, Request
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 # Drop idle keys once the map grows; hard-cap total keys to bound memory.
-# Process-local only — under N workers effective limit is ~N× configured.
+# Process-local only — under N workers effective limit is ~N× configured
+# unless RATE_LIMIT_REDIS_URL is set.
 _PRUNE_AFTER_KEYS = 512
 _PRUNE_IDLE_SEC = 600
 _MAX_KEYS = 4096
@@ -69,7 +73,82 @@ class FixedWindowLimiter:
             self._hits.clear()
 
 
-_limiter = FixedWindowLimiter()
+class RedisFixedWindowLimiter:
+    """INCR + EXPIRE fixed window shared across workers."""
+
+    def __init__(self, url: str) -> None:
+        import redis  # type: ignore
+
+        self._r = redis.Redis.from_url(
+            url,
+            decode_responses=True,
+            socket_connect_timeout=0.5,
+            socket_timeout=0.5,
+        )
+        # Fail fast at construction when URL is obviously wrong.
+        self._r.ping()
+
+    def check(self, key: str, *, limit: int, window_sec: int) -> tuple[bool, int]:
+        rkey = f"fos:rl:{key}"
+        pipe = self._r.pipeline()
+        pipe.incr(rkey)
+        pipe.ttl(rkey)
+        count, ttl = pipe.execute()
+        count = int(count or 0)
+        ttl = int(ttl or -1)
+        if count == 1 or ttl < 0:
+            self._r.expire(rkey, max(1, int(window_sec)))
+            ttl = max(1, int(window_sec))
+        if count > limit:
+            return False, max(1, ttl if ttl > 0 else int(window_sec))
+        return True, 0
+
+    def reset(self) -> None:
+        # Test helper — scan keys is OK in tests only.
+        for key in self._r.scan_iter(match="fos:rl:*", count=200):
+            self._r.delete(key)
+
+
+class _LimiterFacade:
+    def __init__(self) -> None:
+        self._memory = FixedWindowLimiter()
+        self._redis: RedisFixedWindowLimiter | None = None
+        self._redis_failed = False
+        url = (settings.rate_limit_redis_url or "").strip()
+        if url:
+            try:
+                self._redis = RedisFixedWindowLimiter(url)
+                logger.info("rate limit: using Redis backend")
+            except Exception as exc:  # noqa: BLE001
+                self._redis_failed = True
+                logger.warning(
+                    "rate limit: Redis unavailable (%s) — using process-local",
+                    type(exc).__name__,
+                )
+
+    def check(self, key: str, *, limit: int, window_sec: int) -> tuple[bool, int]:
+        if self._redis is not None:
+            try:
+                return self._redis.check(key, limit=limit, window_sec=window_sec)
+            except Exception as exc:  # noqa: BLE001
+                if not self._redis_failed:
+                    logger.warning(
+                        "rate limit: Redis error (%s) — falling back to process-local",
+                        type(exc).__name__,
+                    )
+                    self._redis_failed = True
+        return self._memory.check(key, limit=limit, window_sec=window_sec)
+
+    def reset(self) -> None:
+        self._memory.reset()
+        if self._redis is not None:
+            try:
+                self._redis.reset()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+_limiter = _LimiterFacade()
 
 
 def _parse_networks(raw: str) -> list[ipaddress._BaseNetwork]:
@@ -92,6 +171,7 @@ def _parse_networks(raw: str) -> list[ipaddress._BaseNetwork]:
 def parse_proxy_cidrs(raw: str) -> list[ipaddress._BaseNetwork]:
     """Public helper for startup validation of TRUSTED_PROXY_CIDRS."""
     return _parse_networks(raw)
+
 
 _MAX_XFF_HOPS = 8
 

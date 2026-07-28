@@ -82,6 +82,7 @@ export function ApproveScreen({
   }, [purpose, kind]);
 
   const runDecide = async (id: number, approve: boolean, note = "") => {
+    if (busy) return;
     if (approve) {
       const row = rows.find((r) => r.id === id);
       if (row?.is_in_closed_cycle) {
@@ -110,6 +111,7 @@ export function ApproveScreen({
   };
 
   const doDecide = async (id: number, approve: boolean, note = "") => {
+    if (busy) return;
     setBusy(true);
     try {
       await decideRecord(id, approve, note);
@@ -122,9 +124,10 @@ export function ApproveScreen({
   };
 
   const approveAll = async () => {
-    if (!rows.length) return;
+    if (busy || !rows.length) return;
     const closed = rows.filter((r) => r.is_in_closed_cycle);
     const go = async () => {
+      if (busy) return;
       setBusy(true);
       try {
         const res = await decideBatch(
@@ -164,7 +167,7 @@ export function ApproveScreen({
   };
 
   const rejectAll = async (note: string) => {
-    if (!rows.length) return;
+    if (busy || !rows.length) return;
     setBusy(true);
     try {
       const res = await decideBatch(

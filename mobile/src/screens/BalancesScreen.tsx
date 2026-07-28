@@ -37,42 +37,69 @@ export function BalancesScreen({
   const [adjTrackFilter, setAdjTrackFilter] = useState<"" | "cash_on_hand" | "spendings">("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [adjHasMore, setAdjHasMore] = useState(false);
+  const [loadingMoreAdj, setLoadingMoreAdj] = useState(false);
   const reloadGen = useRef(0);
+  const PAGE = 40;
 
   const [userId, setUserId] = useState<number | null>(null);
   const [track, setTrack] = useState<"cash_on_hand" | "spendings">("spendings");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
 
+  const adjParams = () => {
+    const voided =
+      adjFilter === "voided" ? true : adjFilter === "active" ? false : undefined;
+    return {
+      voided,
+      user_id: adjUserFilter ?? undefined,
+      track: adjTrackFilter || undefined,
+      limit: PAGE,
+    };
+  };
+
   const reload = async () => {
     const gen = ++reloadGen.current;
     setLoading(true);
     try {
       setLoadError("");
-      const voided =
-        adjFilter === "voided" ? true : adjFilter === "active" ? false : undefined;
       const [list, org, adj] = await Promise.all([
         teamBalances(),
         myOrg(),
-        listAdjustments({
-          voided,
-          user_id: adjUserFilter ?? undefined,
-          track: adjTrackFilter || undefined,
-        }),
+        listAdjustments({ ...adjParams(), offset: 0 }),
       ]);
       if (gen !== reloadGen.current) return;
       setRows(list);
       setCurrency(org.currency);
       setAdjustments(adj);
+      setAdjHasMore(adj.length >= PAGE);
       if (userId == null && list[0]) setUserId(list[0].user_id);
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setRows([]);
       setAdjustments([]);
+      setAdjHasMore(false);
       setLoadError(e instanceof Error ? e.message : "Failed");
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
       if (gen === reloadGen.current) setLoading(false);
+    }
+  };
+
+  const loadMoreAdj = async () => {
+    if (loadingMoreAdj || !adjHasMore || loading) return;
+    const gen = reloadGen.current;
+    setLoadingMoreAdj(true);
+    try {
+      const more = await listAdjustments({ ...adjParams(), offset: adjustments.length });
+      if (gen !== reloadGen.current) return;
+      setAdjustments((prev) => [...prev, ...more]);
+      setAdjHasMore(more.length >= PAGE);
+    } catch (e) {
+      if (gen !== reloadGen.current) return;
+      Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
+    } finally {
+      setLoadingMoreAdj(false);
     }
   };
 
@@ -310,6 +337,14 @@ export function BalancesScreen({
                 </View>
               ))
             )}
+            {adjHasMore ? (
+              <Btn
+                title={loadingMoreAdj ? "…" : "Load more adjustments"}
+                variant="ghost"
+                disabled={loadingMoreAdj}
+                onPress={() => void loadMoreAdj()}
+              />
+            ) : null}
             <Label>Settle</Label>
             <Sub>Tap to settle one teammate (uses available, not reserved).</Sub>
           </View>

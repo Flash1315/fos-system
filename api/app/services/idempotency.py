@@ -1,6 +1,7 @@
 """Request idempotency for mutating money endpoints."""
 
 from datetime import datetime, timezone
+import json
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -52,6 +53,7 @@ def store_idem(
     key: str,
     resource_id: int,
     secondary_id: int | None = None,
+    response_json: str | None = None,
 ) -> IdempotencyKey:
     row = IdempotencyKey(
         organization_id=organization_id,
@@ -60,7 +62,18 @@ def store_idem(
         key=key,
         resource_id=resource_id,
         secondary_id=secondary_id,
+        response_json=response_json,
         created_at=_utcnow(),
     )
     db.add(row)
     return row
+
+
+def dumps_json(payload) -> str:
+    return json.dumps(payload, default=str)
+
+
+def loads_json(raw: str | None):
+    if not raw:
+        return None
+    return json.loads(raw)

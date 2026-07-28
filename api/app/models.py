@@ -214,4 +214,6 @@ class IdempotencyKey(Base):
     key: Mapped[str] = mapped_column(String(128), nullable=False)
     resource_id: Mapped[int] = mapped_column(Integer, nullable=False)
     secondary_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Optional cached JSON body for multi-resource responses (batch payouts)
+    response_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

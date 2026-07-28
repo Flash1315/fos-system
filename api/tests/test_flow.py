@@ -690,6 +690,34 @@ def test_batch_pay_all_spendings(client):
     assert client.get("/records/balance/me", headers=h).json()["spendings"] == 0
 
 
+def test_batch_spendings_idempotency_key(client):
+    owner = _register(client, "flow-batch-idem", "batch-idem@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    rid = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 4500,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "purpose": "Office",
+        },
+    ).json()["id"]
+    client.post(f"/records/{rid}/decide", headers=h, json={"approve": True})
+    headers = {**h, "Idempotency-Key": "batch-spend-once-1"}
+    first = client.post("/payouts/batch-spendings?payment_method=cash", headers=headers)
+    assert first.status_code == 200, first.text
+    assert len(first.json()) >= 1
+    second = client.post("/payouts/batch-spendings?payment_method=cash", headers=headers)
+    assert second.status_code == 200, second.text
+    assert [x["id"] for x in second.json()] == [x["id"] for x in first.json()]
+    assert client.get("/records/balance/me", headers=h).json()["spendings"] == 0
+    org = client.get("/payouts/org?kind=expense_payout&voided=false", headers=h)
+    assert org.status_code == 200
+    assert len([x for x in org.json() if x["amount"] == 4500]) == 1
+
+
 def test_batch_take_all_cash_and_my_requests(client):
     owner = _register(client, "flow-batch-cash", "bcash-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -2564,7 +2592,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.1"
+    assert health.json()["version"] == "0.7.2"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")

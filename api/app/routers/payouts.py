@@ -2,6 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Body, Header, Query
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles
@@ -393,8 +394,24 @@ def batch_pay_all_spendings(
     payment_method: str = "cash",
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Create expense_payout for every teammate with available spendings > 0 (one commit)."""
+    from app.services.idempotency import dumps_json, loads_json, lookup_idem, normalize_idem_key, store_idem
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="payouts.batch_spendings",
+            key=key,
+        )
+        if hit and hit.response_json:
+            cached = loads_json(hit.response_json)
+            if isinstance(cached, list):
+                return [PayoutOut.model_validate(item) for item in cached]
     members = (
         db.query(User)
         .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
@@ -419,11 +436,37 @@ def batch_pay_all_spendings(
                 manager=manager,
             )
         )
-    db.commit()
-    out = []
+    out: list[PayoutOut] = []
     for row, target in built:
         db.refresh(row)
         out.append(_payout_out(db, row, target.full_name))
+    if key:
+        store_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="payouts.batch_spendings",
+            key=key,
+            resource_id=out[0].id if out else 0,
+            response_json=dumps_json([o.model_dump(mode="json") for o in out]),
+        )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        if key:
+            hit = lookup_idem(
+                db,
+                organization_id=manager.organization_id,
+                user_id=manager.id,
+                scope="payouts.batch_spendings",
+                key=key,
+            )
+            if hit and hit.response_json:
+                cached = loads_json(hit.response_json)
+                if isinstance(cached, list):
+                    return [PayoutOut.model_validate(item) for item in cached]
+        raise HTTPException(409, "Idempotent batch conflict — retry") from None
     return out
 
 
@@ -432,8 +475,24 @@ def batch_take_all_cash(
     payment_method: str = "cash",
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Create income_handover for every teammate with available cash > 0 (one commit)."""
+    from app.services.idempotency import dumps_json, loads_json, lookup_idem, normalize_idem_key, store_idem
+
+    key = normalize_idem_key(idempotency_key)
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="payouts.batch_cash",
+            key=key,
+        )
+        if hit and hit.response_json:
+            cached = loads_json(hit.response_json)
+            if isinstance(cached, list):
+                return [PayoutOut.model_validate(item) for item in cached]
     members = (
         db.query(User)
         .filter(User.organization_id == manager.organization_id, User.is_active.is_(True))
@@ -458,11 +517,37 @@ def batch_take_all_cash(
                 manager=manager,
             )
         )
-    db.commit()
-    out = []
+    out: list[PayoutOut] = []
     for row, target in built:
         db.refresh(row)
         out.append(_payout_out(db, row, target.full_name))
+    if key:
+        store_idem(
+            db,
+            organization_id=manager.organization_id,
+            user_id=manager.id,
+            scope="payouts.batch_cash",
+            key=key,
+            resource_id=out[0].id if out else 0,
+            response_json=dumps_json([o.model_dump(mode="json") for o in out]),
+        )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        if key:
+            hit = lookup_idem(
+                db,
+                organization_id=manager.organization_id,
+                user_id=manager.id,
+                scope="payouts.batch_cash",
+                key=key,
+            )
+            if hit and hit.response_json:
+                cached = loads_json(hit.response_json)
+                if isinstance(cached, list):
+                    return [PayoutOut.model_validate(item) for item in cached]
+        raise HTTPException(409, "Idempotent batch conflict — retry") from None
     return out
 
 

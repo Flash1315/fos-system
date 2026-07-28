@@ -67,6 +67,11 @@ export function AccountScreen({
   const [reqLoadError, setReqLoadError] = useState("");
   const [billing, setBilling] = useState<BillingInfo | null>(null);
   const [tgChat, setTgChat] = useState("");
+  const [mineHasMore, setMineHasMore] = useState(false);
+  const [teamHasMore, setTeamHasMore] = useState(false);
+  const [loadingMoreMine, setLoadingMoreMine] = useState(false);
+  const [loadingMoreTeam, setLoadingMoreTeam] = useState(false);
+  const PAGE = 40;
 
   const reloadOrg = async () => {
     try {
@@ -95,21 +100,67 @@ export function AccountScreen({
   const reloadRequests = async () => {
     setReqLoadError("");
     try {
-      setMine(
-        await listMySettlementRequests(
-          mineReqFilter === "all" ? undefined : { status: mineReqFilter },
-        ),
-      );
+      const mineRows = await listMySettlementRequests({
+        ...(mineReqFilter === "all" ? {} : { status: mineReqFilter }),
+        limit: PAGE,
+        offset: 0,
+      });
+      setMine(mineRows);
+      setMineHasMore(mineRows.length >= PAGE);
     } catch (e) {
       setMine([]);
+      setMineHasMore(false);
       setReqLoadError(e instanceof Error ? e.message : "Failed to load requests");
     }
     if (!isManager) return;
     try {
-      setRequests(await listSettlementRequests({ status: teamReqFilter }));
+      const teamRows = await listSettlementRequests({
+        status: teamReqFilter,
+        limit: PAGE,
+        offset: 0,
+      });
+      setRequests(teamRows);
+      setTeamHasMore(teamRows.length >= PAGE);
     } catch (e) {
       setRequests([]);
+      setTeamHasMore(false);
       setReqLoadError(e instanceof Error ? e.message : "Failed to load team requests");
+    }
+  };
+
+  const loadMoreMine = async () => {
+    if (loadingMoreMine || !mineHasMore) return;
+    setLoadingMoreMine(true);
+    try {
+      const more = await listMySettlementRequests({
+        ...(mineReqFilter === "all" ? {} : { status: mineReqFilter }),
+        limit: PAGE,
+        offset: mine.length,
+      });
+      setMine((prev) => [...prev, ...more]);
+      setMineHasMore(more.length >= PAGE);
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
+    } finally {
+      setLoadingMoreMine(false);
+    }
+  };
+
+  const loadMoreTeam = async () => {
+    if (loadingMoreTeam || !teamHasMore || !isManager) return;
+    setLoadingMoreTeam(true);
+    try {
+      const more = await listSettlementRequests({
+        status: teamReqFilter,
+        limit: PAGE,
+        offset: requests.length,
+      });
+      setRequests((prev) => [...prev, ...more]);
+      setTeamHasMore(more.length >= PAGE);
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
+    } finally {
+      setLoadingMoreTeam(false);
     }
   };
 
@@ -135,6 +186,7 @@ export function AccountScreen({
   }, [kind, teamReqFilter, mineReqFilter]);
 
   const onPassword = async () => {
+    if (busy) return;
     if (!current || next.length < 6) {
       Alert.alert("Fos", "Enter current password and new password (min 6)");
       return;
@@ -189,6 +241,7 @@ export function AccountScreen({
   };
 
   const onRequest = async () => {
+    if (busy) return;
     const value = Number(amount.replace(",", "."));
     if (!value || value <= 0) {
       Alert.alert("Fos", "Enter amount");
@@ -203,6 +256,7 @@ export function AccountScreen({
       {
         text: "Send",
         onPress: async () => {
+          if (busy) return;
           setBusy(true);
           try {
             await requestSettlement({ kind, amount: value, note });
@@ -404,6 +458,14 @@ export function AccountScreen({
           </View>
         ))
       )}
+      {mineHasMore ? (
+        <Btn
+          title={loadingMoreMine ? "…" : "Load more"}
+          variant="ghost"
+          disabled={loadingMoreMine}
+          onPress={() => void loadMoreMine()}
+        />
+      ) : null}
 
       {isManager && (
         <>
@@ -466,6 +528,14 @@ export function AccountScreen({
               </View>
             ))
           )}
+          {teamHasMore ? (
+            <Btn
+              title={loadingMoreTeam ? "…" : "Load more"}
+              variant="ghost"
+              disabled={loadingMoreTeam}
+              onPress={() => void loadMoreTeam()}
+            />
+          ) : null}
         </>
       )}
       <NoteModal

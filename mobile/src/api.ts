@@ -752,14 +752,24 @@ export function createPayout(body: {
 }
 
 export function batchPaySpendings(payment_method = "cash") {
+  const idem =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `bpay-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   return request(`/payouts/batch-spendings?payment_method=${encodeURIComponent(payment_method)}`, {
     method: "POST",
+    headers: { "Idempotency-Key": idem },
   });
 }
 
 export function batchTakeCash(payment_method = "cash") {
+  const idem =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `bcash-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   return request(`/payouts/batch-cash?payment_method=${encodeURIComponent(payment_method)}`, {
     method: "POST",
+    headers: { "Idempotency-Key": idem },
   });
 }
 
@@ -867,11 +877,15 @@ export function listAdjustments(params?: {
   voided?: boolean;
   user_id?: number;
   track?: "cash_on_hand" | "spendings";
+  limit?: number;
+  offset?: number;
 }) {
   const q = new URLSearchParams();
   if (params?.voided != null) q.set("voided", String(params.voided));
   if (params?.user_id != null) q.set("user_id", String(params.user_id));
   if (params?.track) q.set("track", params.track);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
   const qs = q.toString();
   return request<BalanceAdjustment[]>(`/adjustments${qs ? `?${qs}` : ""}`);
 }

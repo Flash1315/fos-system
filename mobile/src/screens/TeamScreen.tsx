@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Alert, FlatList, Text, StyleSheet, View } from "react-native";
+import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import {
   listMembers,
@@ -27,6 +27,7 @@ export function TeamScreen({
   const [rows, setRows] = useState<User[]>([]);
   const [resetId, setResetId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
 
   const reload = async () => {
@@ -44,6 +45,7 @@ export function TeamScreen({
   useFocusEffect(reload);
 
   const toggle = async (member: User) => {
+    if (busy) return;
     if (currentUser.role !== "owner") {
       Alert.alert("Fos", "Only owner can activate/deactivate");
       return;
@@ -60,6 +62,7 @@ export function TeamScreen({
           text: nextActive ? "Activate" : "Deactivate",
           style: nextActive ? "default" : "destructive",
           onPress: async () => {
+            if (busy) return;
             setBusy(true);
             try {
               await setMemberActive(member.id, nextActive);
@@ -76,6 +79,7 @@ export function TeamScreen({
   };
 
   const changeRole = async (member: User, role: "owner" | "manager" | "employee") => {
+    if (busy) return;
     if (currentUser.role !== "owner") return;
     if (member.role === role) return;
     Alert.alert("Fos", `Change ${member.full_name} role to ${role}?`, [
@@ -83,6 +87,7 @@ export function TeamScreen({
       {
         text: "Change",
         onPress: async () => {
+          if (busy) return;
           setBusy(true);
           try {
             await setMemberRole(member.id, role);
@@ -104,6 +109,17 @@ export function TeamScreen({
       <FlatList
         data={rows}
         keyExtractor={(item) => String(item.id)}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={colors.accent}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await reload();
+              setRefreshing(false);
+            }}
+          />
+        }
         ListEmptyComponent={
           <Sub>
             {loading
@@ -135,7 +151,9 @@ export function TeamScreen({
                       key={r}
                       label={r}
                       on={item.role === r}
-                      onPress={() => changeRole(item, r)}
+                      onPress={() => {
+                        if (!busy) void changeRole(item, r);
+                      }}
                     />
                   ))}
                 </View>

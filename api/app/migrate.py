@@ -80,3 +80,9 @@ def ensure_money_record_columns() -> None:
             ("telegram_chat_id", "VARCHAR(64) DEFAULT ''"),
         ],
     )
+    _ensure_columns(
+        "idempotency_keys",
+        [
+            ("response_json", "TEXT"),
+        ],
+    )

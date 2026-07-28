@@ -45,6 +45,7 @@ export function InviteScreen({
   }, []);
 
   const submit = async () => {
+    if (busy) return;
     if (!orgSlug) {
       Alert.alert("Fos", "Company slug not loaded — tap Retry first");
       return;
@@ -57,6 +58,22 @@ export function InviteScreen({
       Alert.alert("Fos", "Temporary password must be at least 6 characters");
       return;
     }
+    const mode = setTempPassword ? "temporary password" : "invite token";
+    Alert.alert(
+      "Fos",
+      `Invite ${fullName.trim()} <${email.trim()}> as ${role} via ${mode}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Send invite",
+          onPress: () => void doInvite(),
+        },
+      ],
+    );
+  };
+
+  const doInvite = async () => {
+    if (busy) return;
     setBusy(true);
     try {
       const res = await inviteUser({

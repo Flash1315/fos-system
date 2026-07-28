@@ -43,6 +43,10 @@ DB_POOL_RECYCLE=1800
 - Adjustment create/void enforce per-org `adjustment-org:` rate limits
 - Payout create/batch/settle-approve enforce per-org `payout-org:` rate limits
 - Record decide-batch enforces per-org `decide-batch-org:` rate limits
+- Record comment/void/cancel/decide enforce per-org `comment-org:` / `void-org:` / `cancel-org:` / `decide-org:` rate limits
+- Settlement requests enforce per-org `settle-request-org:` rate limits
+- Team activate/role enforce per-org `team-org:` rate limits
+- Media file responses send `X-Content-Type-Options: nosniff`
 - CSV export responses send `Cache-Control: no-store`
 - Persist `/app/uploads` or S3; content-addressed keys; cancels may remove unused receipt objects
 - Idempotency rows are pruned on API startup (and on store)

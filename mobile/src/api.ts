@@ -48,9 +48,19 @@ const REQUEST_TIMEOUT_MS = 30000;
 const UPLOAD_TIMEOUT_MS = 120000;
 type UnauthorizedHandler = () => void;
 let unauthorizedHandler: UnauthorizedHandler | null = null;
+let lastAuthClearedMs = 0;
 
 export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
   unauthorizedHandler = handler;
+}
+
+/** True for a short window after JWT clear — avoid Offline + Session expired dual Alerts. */
+export function wasAuthRecentlyCleared(withinMs = 2500): boolean {
+  return lastAuthClearedMs > 0 && Date.now() - lastAuthClearedMs < withinMs;
+}
+
+function markAuthCleared() {
+  lastAuthClearedMs = Date.now();
 }
 
 export type User = {
@@ -82,6 +92,7 @@ async function notifyUnauthorized(requestToken: string | null) {
   } catch {
     /* ignore */
   }
+  markAuthCleared();
   try {
     unauthorizedHandler?.();
   } catch {
@@ -232,12 +243,14 @@ async function loadTokenExpMs(): Promise<number> {
   return cachedTokenExpMs;
 }
 
-/** Clear local session when persisted access-token expiry has passed. */
+/** Clear local session when persisted access-token expiry has passed.
+ * Legacy sessions without fos_token_exp skip client preflight (server 401 still clears).
+ */
 async function ensureAccessTokenNotExpired(): Promise<void> {
   const token = await getToken();
   if (!token) return;
   const expMs = await loadTokenExpMs();
-  if (expMs <= 0) return;
+  if (expMs <= 0) return; // pre-0.7.81 tokens: no client expiry
   // Small skew so we don't race the server clock.
   if (Date.now() + 5_000 < expMs) return;
   await notifyUnauthorized(token);
@@ -260,6 +273,11 @@ function parseRetryAfterSec(raw: string | null): number | null {
   const n = Number(trimmed);
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.min(30, n);
+}
+
+/** Soft-retry is only safe for GET or Idempotency-Key mutations. */
+export function isSafeSoftRetry(method: string, hasIdempotencyKey: boolean): boolean {
+  return method.toUpperCase() === "GET" || hasIdempotencyKey;
 }
 
 function shouldSoftRetry(status: number | null, err: unknown): boolean {
@@ -293,7 +311,7 @@ async function request<T>(
   if (!headers["X-Request-Id"]) headers["X-Request-Id"] = newClientRequestId();
   const method = (init.method || "GET").toUpperCase();
   const hasIdem = !!(headers["Idempotency-Key"] || headers["idempotency-key"]);
-  const safeRetry = method === "GET" || hasIdem;
+  const safeRetry = isSafeSoftRetry(method, hasIdem);
   const maxAttempts = Math.max(1, (opts?.retries ?? (safeRetry ? 2 : 0)) + 1);
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -367,7 +385,7 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
   if (!headers["X-Request-Id"]) headers["X-Request-Id"] = newClientRequestId();
   const method = (init.method || "GET").toUpperCase();
   const hasIdem = !!(headers["Idempotency-Key"] || headers["idempotency-key"]);
-  const safeRetry = method === "GET" || hasIdem;
+  const safeRetry = isSafeSoftRetry(method, hasIdem);
   const maxAttempts = Math.max(1, (safeRetry ? 2 : 0) + 1);
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {

@@ -329,6 +329,17 @@ export function AccountScreen({
           }
           setBusy(true);
           try {
+            try {
+              const b = await billingMe();
+              const frozen = isBillingReadOnly(b.billing_status);
+              setBillingReadonly(frozen);
+              if (frozen) {
+                Alert.alert("Fos", BILLING_READONLY_MSG);
+                return;
+              }
+            } catch {
+              /* API will 403 if frozen */
+            }
             const bal = await myBalance();
             const available =
               kind === "expense_payout"

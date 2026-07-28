@@ -1303,6 +1303,11 @@ def decide_record(
         limit=60,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"decide-org:{user.organization_id}",
+        limit=120,
+        window_sec=60,
+    )
     from app.services.org_gates import require_org_writable
 
     key = normalize_idem_key(idempotency_key)
@@ -1442,6 +1447,11 @@ def comment_record(
         limit=60,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"comment-org:{user.organization_id}",
+        limit=120,
+        window_sec=60,
+    )
     from app.services.org_gates import require_org_writable
 
     key = normalize_idem_key(idempotency_key)
@@ -1540,6 +1550,11 @@ def void_approved_record(
     enforce_rate_limit(
         f"record-void:{user.organization_id}:{user.id}",
         limit=30,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"void-org:{user.organization_id}",
+        limit=60,
         window_sec=60,
     )
     from app.services.org_gates import require_org_writable
@@ -1703,6 +1718,11 @@ def cancel_pending_record(
     enforce_rate_limit(
         f"record-cancel:{user.organization_id}:{user.id}",
         limit=60,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"cancel-org:{user.organization_id}",
+        limit=120,
         window_sec=60,
     )
     # Cancel is allowed during billing freeze so pending work can be released.

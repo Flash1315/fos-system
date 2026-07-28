@@ -150,5 +150,8 @@ def get_photo(
     return Response(
         content=data,
         media_type=storage.content_type_for(filename),
-        headers={"Cache-Control": "no-store"},
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )

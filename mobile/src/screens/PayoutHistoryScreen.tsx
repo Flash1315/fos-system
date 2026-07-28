@@ -97,7 +97,6 @@ export function PayoutHistoryScreen({
       setRows([]);
       setHasMore(false);
       setLoadError(e instanceof Error ? e.message : "Failed");
-      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
       if (gen === reloadGen.current) setLoading(false);
     }
@@ -130,7 +129,7 @@ export function PayoutHistoryScreen({
       setHasMore(more.length >= PAGE);
     } catch (e) {
       if (gen !== reloadGen.current) return;
-      Alert.alert("Fos", e instanceof Error ? e.message : "Load more failed");
+      setLoadError(e instanceof Error ? e.message : "Load more failed");
     } finally {
       setLoadingMore(false);
     }
@@ -303,6 +302,15 @@ export function PayoutHistoryScreen({
             Alert.alert("Fos", BILLING_READONLY_MSG);
             return;
           }
+          try {
+            const b = await billingMe();
+            const frozen = isBillingReadOnly(b.billing_status);
+            setBillingReadonly(frozen);
+            if (frozen) {
+              Alert.alert("Fos", BILLING_READONLY_MSG);
+              return;
+            }
+          } catch { /* API 403 if frozen */ }
           const noteKey = note.replace(/\s+/g, " ").trim();
           const key = idemKeyFor(voidIdemRef, voidSlotRef, "pvoid", `${id}:${noteKey}`);
           setBusy(true);

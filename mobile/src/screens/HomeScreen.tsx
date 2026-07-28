@@ -254,7 +254,7 @@ export function HomeScreen({
             );
             requestIdemRef.current = null;
             requestSlotRef.current = null;
-            Alert.alert("Fos", "Settlement request sent");
+            Alert.alert("Fos", "Settlement request sent to managers");
             await reload();
           } catch (e) {
             Alert.alert("Fos", e instanceof Error ? e.message : "Failed");

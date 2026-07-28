@@ -96,6 +96,15 @@ export function TeamScreen({
           }
           setBusy(true);
           try {
+            try {
+              const b = await billingMe();
+              const frozen = isBillingReadOnly(b.billing_status);
+              setBillingReadonly(frozen);
+              if (frozen) {
+                Alert.alert("Fos", BILLING_READONLY_MSG);
+                return;
+              }
+            } catch { /* API 403 if frozen */ }
             await setMemberActive(member.id, nextActive);
             await reload();
           } catch (e) {
@@ -123,6 +132,15 @@ export function TeamScreen({
           }
           setBusy(true);
           try {
+            try {
+              const b = await billingMe();
+              const frozen = isBillingReadOnly(b.billing_status);
+              setBillingReadonly(frozen);
+              if (frozen) {
+                Alert.alert("Fos", BILLING_READONLY_MSG);
+                return;
+              }
+            } catch { /* API 403 if frozen */ }
             await setMemberRole(member.id, role);
             await reload();
           } catch (e) {

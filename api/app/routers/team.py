@@ -113,6 +113,11 @@ def set_member_active(
         limit=30,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"team-org:{user.organization_id}",
+        limit=120,
+        window_sec=60,
+    )
     require_org_writable(db, user.organization_id)
     lock_organization(db, user.organization_id)
     member = (
@@ -228,6 +233,11 @@ def set_member_role(
     enforce_rate_limit(
         f"member-role:{user.organization_id}:{user.id}",
         limit=30,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"team-org:{user.organization_id}",
+        limit=120,
         window_sec=60,
     )
     require_org_writable(db, user.organization_id)

@@ -272,7 +272,7 @@ export function RecordDetailScreen({
             reloadGen.current += 1;
             setRec(await cancelRecord(id, { idempotencyKey: cancelIdemRef.current }));
             cancelIdemRef.current = null;
-            Alert.alert("Fos", "Record cancelled");
+            Alert.alert("Fos", "Record canceled");
           } catch (e) {
             Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
           } finally {

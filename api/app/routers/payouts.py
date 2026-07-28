@@ -437,6 +437,11 @@ def void_payout(
         limit=30,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"payout-org:{manager.organization_id}",
+        limit=120,
+        window_sec=60,
+    )
     from app.services.org_gates import require_org_writable
 
     key = normalize_idem_key(idempotency_key)
@@ -920,6 +925,11 @@ def request_settlement(
     enforce_rate_limit(
         f"settle-request:{user.organization_id}:{user.id}",
         limit=30,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"settle-request-org:{user.organization_id}",
+        limit=120,
         window_sec=60,
     )
     from app.services.org_gates import require_org_writable

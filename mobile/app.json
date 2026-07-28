@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fos",
     "slug": "fos",
-    "version": "0.7.90",
+    "version": "0.7.100",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

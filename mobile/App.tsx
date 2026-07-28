@@ -9,6 +9,7 @@ import {
   probeApiLive,
   saveToken,
   setUnauthorizedHandler,
+  wasAuthRecentlyCleared,
   type User,
 } from "./src/api";
 import { Loading } from "./src/components/ui";
@@ -94,6 +95,10 @@ export default function App() {
           setScreen("auth");
           return;
         }
+        if (wasAuthRecentlyCleared()) {
+          setScreen("auth");
+          return;
+        }
         Alert.alert(
           "Fos",
           OFFLINE_MSG,
@@ -128,6 +133,7 @@ export default function App() {
           return;
         }
         if (offlineAlerted.current) return;
+        if (wasAuthRecentlyCleared()) return;
         offlineAlerted.current = true;
         Alert.alert(
           "Fos",

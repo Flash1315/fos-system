@@ -175,6 +175,15 @@ export function PayoutScreen({
       return;
     }
     try {
+      try {
+        const b = await billingMe();
+        const frozen = isBillingReadOnly(b.billing_status);
+        setBillingReadonly(frozen);
+        if (frozen) {
+          Alert.alert("Fos", BILLING_READONLY_MSG);
+          return;
+        }
+      } catch { /* API 403 if frozen */ }
       const bals = await teamBalances();
       setBalances(bals);
       const fresh = bals.find((b) => b.user_id === userId);
@@ -231,7 +240,10 @@ export function PayoutScreen({
   };
 
   const payAllSpendings = async () => {
-    if (busy) return;
+    if (busy || billingReadonly) {
+      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     setBusy(true);
     try {
       const bals = await teamBalances();
@@ -284,7 +296,10 @@ export function PayoutScreen({
   };
 
   const takeAllCash = async () => {
-    if (busy) return;
+    if (busy || billingReadonly) {
+      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     setBusy(true);
     try {
       const bals = await teamBalances();
@@ -367,13 +382,13 @@ export function PayoutScreen({
         title={busy ? "…" : "Pay all available spendings"}
         variant="secondary"
         onPress={payAllSpendings}
-        disabled={busy}
+        disabled={busy || billingReadonly}
       />
       <Btn
         title={busy ? "…" : "Take all available cash"}
         variant="secondary"
         onPress={takeAllCash}
-        disabled={busy}
+        disabled={busy || billingReadonly}
       />
       <Label>Type</Label>
       <View style={styles.kinds}>

@@ -164,6 +164,15 @@ export function ApproveScreen({
       if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
       return;
     }
+    try {
+      const b = await billingMe();
+      const frozen = isBillingReadOnly(b.billing_status);
+      setBillingReadonly(frozen);
+      if (frozen) {
+        Alert.alert("Fos", BILLING_READONLY_MSG);
+        return;
+      }
+    } catch { /* API 403 if frozen */ }
     const noteKey = note.replace(/\s+/g, " ").trim();
     const key = idemKeyFor(
       decideIdemRef,
@@ -192,6 +201,15 @@ export function ApproveScreen({
         if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
         return;
       }
+      try {
+        const b = await billingMe();
+        const frozen = isBillingReadOnly(b.billing_status);
+        setBillingReadonly(frozen);
+        if (frozen) {
+          Alert.alert("Fos", BILLING_READONLY_MSG);
+          return;
+        }
+      } catch { /* API 403 if frozen */ }
       setBusy(true);
       try {
         const slot = `a:${rows.map((r) => r.id).join(",")}`;

@@ -287,8 +287,6 @@ def void_adjustment(
     )
     from app.services.org_gates import require_org_writable
 
-    require_org_writable(db, manager.organization_id)
-
     key = normalize_idem_key(idempotency_key)
     fp = (
         fingerprint({"adjustment_id": adjustment_id, **body.model_dump(mode="json")})
@@ -309,6 +307,7 @@ def void_adjustment(
             if existing and existing.organization_id == manager.organization_id:
                 u = db.get(User, existing.user_id)
                 return _out(existing, u.full_name if u else "", db)
+    require_org_writable(db, manager.organization_id)
     row = db.get(BalanceAdjustment, adjustment_id)
     if not row or row.organization_id != manager.organization_id:
         raise HTTPException(404, "Adjustment not found")

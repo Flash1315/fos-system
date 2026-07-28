@@ -19,6 +19,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   db:
     image: postgres:16-alpine
@@ -26,8 +27,9 @@ services:
       POSTGRES_USER: fos
       POSTGRES_PASSWORD: fos
       POSTGRES_DB: fos
+    # Local/dev only — bind loopback so Postgres is not exposed on all interfaces
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - fos_pg:/var/lib/postgresql/data
     healthcheck:

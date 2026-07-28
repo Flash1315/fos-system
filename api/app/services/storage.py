@@ -130,6 +130,10 @@ def load_photo(org_id: int, filename: str) -> tuple[bytes | None, str | None, st
         path = local_path(org_id, filename)
     except ValueError:
         return None, None, "not_found"
-    if not path.is_file():
-        return None, None, "not_found"
-    return path.read_bytes(), content_type_for(filename), None
+    try:
+        if not path.is_file():
+            return None, None, "not_found"
+        return path.read_bytes(), content_type_for(filename), None
+    except OSError as exc:
+        logger.warning("local get failed org=%s err=%s", org_id, type(exc).__name__)
+        return None, None, "unavailable"

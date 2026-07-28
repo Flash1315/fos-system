@@ -91,6 +91,8 @@ export EXPO_PUBLIC_API_URL=http://YOUR_LAN_IP:8000
 npx expo start
 ```
 
+Production EAS builds set `EXPO_PUBLIC_APP_ENV=production` and **require** `EXPO_PUBLIC_API_URL` as `https://…` (EAS secret or `eas.json` env). `app.config.js` fails the build if it is missing.
+
 ## Product v1 scope
 
 - Organizations (tenants)

@@ -12,4 +12,3 @@ psycopg2-binary>=2.9.10
 aiosqlite>=0.20.0
 httpx>=0.28.0
 boto3>=1.35.0
-pytest>=8.0.0

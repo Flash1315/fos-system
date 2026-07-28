@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import {
-  clearToken,
   getToken,
   logout,
   me,
@@ -72,21 +71,45 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+    const boot = async () => {
       try {
         const token = await getToken();
         if (!token) {
-          setScreen("auth");
+          if (!cancelled) setScreen("auth");
           return;
         }
         const u = await me();
+        if (cancelled) return;
         setUser(u);
         setScreen("home");
       } catch {
-        await clearToken();
-        setScreen("auth");
+        if (cancelled) return;
+        // 401 clears the token via notifyUnauthorized; keep session on network/5xx/429.
+        const still = await getToken();
+        if (!still) {
+          setScreen("auth");
+          return;
+        }
+        Alert.alert(
+          "Fos",
+          "Could not reach the server. Check your connection and try again.",
+          [
+            {
+              text: "Retry",
+              onPress: () => {
+                setScreen("boot");
+                void boot();
+              },
+            },
+          ],
+        );
       }
-    })();
+    };
+    void boot();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (screen === "boot") return <Loading />;

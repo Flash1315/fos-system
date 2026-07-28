@@ -246,9 +246,8 @@ def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(
     found = find_user_by_invite_token(db, token)
     if not found:
         raise HTTPException(400, "Invalid or expired invite token")
-    from app.services.org_gates import require_org_writable
-
-    require_org_writable(db, found.organization_id)
+    # Accept-invite is auth completion (set password), not a money write — allowed
+    # during billing freeze so invitees invited before freeze can finish setup.
     # Lock row so concurrent accepts cannot both succeed
     user = (
         db.query(User)

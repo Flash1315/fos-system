@@ -399,7 +399,6 @@ def create_record(
         limit=60,
         window_sec=60,
     )
-    require_org_writable(db, user.organization_id)
 
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None
@@ -416,6 +415,7 @@ def create_record(
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
+    require_org_writable(db, user.organization_id)
     org = db.get(Organization, user.organization_id)
     if body.approve_now and user.role not in (UserRole.owner, UserRole.manager):
         raise HTTPException(403, "Only managers can approve on create")
@@ -858,8 +858,6 @@ def decide_batch(
     )
     from app.services.org_gates import require_org_writable
 
-    require_org_writable(db, user.organization_id)
-
     if not body.approve and len(body.note or "") < 2:
         raise HTTPException(400, "Reject requires a note (min 2 characters)")
     key = normalize_idem_key(idempotency_key)
@@ -878,6 +876,7 @@ def decide_batch(
                 cached = loads_json(hit.response_json)
                 if isinstance(cached, dict):
                     return DecideBatchOut.model_validate(cached)
+    require_org_writable(db, user.organization_id)
     from app.services.locks import lock_users
 
     # Preload pending targets so we can lock creators before balance checks.
@@ -1077,8 +1076,6 @@ def update_pending_record(
     )
     from app.services.org_gates import require_org_writable
 
-    require_org_writable(db, user.organization_id)
-
     key = normalize_idem_key(idempotency_key)
     fp = (
         fingerprint({"record_id": record_id, **body.model_dump(mode="json")})
@@ -1099,6 +1096,7 @@ def update_pending_record(
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
 
+    require_org_writable(db, user.organization_id)
     rec = (
         db.query(MoneyRecord)
         .filter(
@@ -1228,8 +1226,6 @@ def decide_record(
     )
     from app.services.org_gates import require_org_writable
 
-    require_org_writable(db, user.organization_id)
-
     key = normalize_idem_key(idempotency_key)
     fp = (
         fingerprint({"record_id": record_id, **body.model_dump(mode="json")})
@@ -1249,6 +1245,7 @@ def decide_record(
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
+    require_org_writable(db, user.organization_id)
     peek = (
         db.query(MoneyRecord)
         .filter(
@@ -1367,8 +1364,6 @@ def comment_record(
     )
     from app.services.org_gates import require_org_writable
 
-    require_org_writable(db, user.organization_id)
-
     key = normalize_idem_key(idempotency_key)
     fp = (
         fingerprint({"record_id": record_id, **body.model_dump(mode="json")})
@@ -1388,6 +1383,7 @@ def comment_record(
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
+    require_org_writable(db, user.organization_id)
     rec = (
         db.query(MoneyRecord)
         .filter(
@@ -1464,8 +1460,6 @@ def void_approved_record(
     )
     from app.services.org_gates import require_org_writable
 
-    require_org_writable(db, user.organization_id)
-
     key = normalize_idem_key(idempotency_key)
     fp = (
         fingerprint({"record_id": record_id, **body.model_dump(mode="json")})
@@ -1485,6 +1479,7 @@ def void_approved_record(
             existing = db.get(MoneyRecord, hit.resource_id)
             if existing and existing.organization_id == user.organization_id:
                 return _record_out(db, existing)
+    require_org_writable(db, user.organization_id)
     peek = (
         db.query(MoneyRecord)
         .filter(

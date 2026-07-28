@@ -434,8 +434,6 @@ def void_payout(
     )
     from app.services.org_gates import require_org_writable
 
-    require_org_writable(db, manager.organization_id)
-
     key = normalize_idem_key(idempotency_key)
     fp = (
         fingerprint({"payout_id": payout_id, **body.model_dump(mode="json")})
@@ -456,6 +454,7 @@ def void_payout(
             if existing and existing.organization_id == manager.organization_id:
                 u = db.get(User, existing.user_id)
                 return _payout_out(db, existing, u.full_name if u else "")
+    require_org_writable(db, manager.organization_id)
     row = db.get(Payout, payout_id)
     if not row or row.organization_id != manager.organization_id:
         raise HTTPException(404, "Payout not found")
@@ -614,8 +613,6 @@ def batch_pay_all_spendings(
     )
     from app.services.org_gates import require_org_writable
 
-    require_org_writable(db, manager.organization_id)
-
     method = (payment_method or "cash").strip().lower() or "cash"
     if method not in PAYMENT_METHODS:
         raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
@@ -637,6 +634,7 @@ def batch_pay_all_spendings(
                 cached = loads_json(hit.response_json)
                 if isinstance(cached, list):
                     return [PayoutOut.model_validate(item) for item in cached]
+    require_org_writable(db, manager.organization_id)
     from app.services.org_limits import require_org_member_capacity
 
     require_org_member_capacity(db, manager.organization_id, active_only=True)
@@ -734,8 +732,6 @@ def batch_take_all_cash(
     )
     from app.services.org_gates import require_org_writable
 
-    require_org_writable(db, manager.organization_id)
-
     method = (payment_method or "cash").strip().lower() or "cash"
     if method not in PAYMENT_METHODS:
         raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
@@ -757,6 +753,7 @@ def batch_take_all_cash(
                 cached = loads_json(hit.response_json)
                 if isinstance(cached, list):
                     return [PayoutOut.model_validate(item) for item in cached]
+    require_org_writable(db, manager.organization_id)
     from app.services.org_limits import require_org_member_capacity
 
     require_org_member_capacity(db, manager.organization_id, active_only=True)
@@ -912,8 +909,6 @@ def request_settlement(
     )
     from app.services.org_gates import require_org_writable
 
-    require_org_writable(db, user.organization_id)
-
     key = normalize_idem_key(idempotency_key)
     fp = fingerprint(body.model_dump(mode="json")) if key else None
     if key:
@@ -930,6 +925,7 @@ def request_settlement(
             if existing and existing.organization_id == user.organization_id:
                 return _request_out(existing, user.full_name)
 
+    require_org_writable(db, user.organization_id)
     try:
         amount = require_positive_money(body.amount)
     except ValueError as exc:
@@ -1091,8 +1087,6 @@ def approve_settlement_request(
     )
     from app.services.org_gates import require_org_writable
 
-    require_org_writable(db, manager.organization_id)
-
     key = normalize_idem_key(idempotency_key)
     method = ((body.payment_method if body else None) or "cash").strip().lower()
     fp = (
@@ -1121,6 +1115,7 @@ def approve_settlement_request(
                 return _payout_out(db, existing, u.full_name if u else "")
             db.delete(hit)
             db.flush()
+    require_org_writable(db, manager.organization_id)
     req = (
         db.query(SettlementRequest)
         .filter(

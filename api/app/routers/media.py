@@ -3,7 +3,7 @@ import re
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -83,17 +83,10 @@ def get_photo(
         raise HTTPException(403, "Forbidden")
     if "/" in filename or ".." in filename or not _MEDIA_NAME_RE.match(filename):
         raise HTTPException(400, "Invalid filename")
-    if storage.media_backend() == "local":
-        try:
-            path = storage.local_path(org_id, filename)
-        except ValueError:
-            raise HTTPException(400, "Invalid filename") from None
-        if not path.is_file():
-            raise HTTPException(404, "Not found")
-        return FileResponse(path, media_type=storage.content_type_for(filename))
+    # Always go through load_photo so local OSError maps to 503 like S3 outages.
     data, _meta, err = storage.load_photo(org_id, filename)
     if err == "unavailable":
         raise HTTPException(503, "Media storage unavailable")
-    if data is None:
+    if data is None or err == "not_found":
         raise HTTPException(404, "Not found")
     return Response(content=data, media_type=storage.content_type_for(filename))

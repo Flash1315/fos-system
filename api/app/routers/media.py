@@ -1,8 +1,9 @@
+import hashlib
 import logging
 import re
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -28,7 +29,18 @@ async def upload_photo(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    from app.services.idempotency import (
+        commit_or_replay,
+        dumps_json,
+        fingerprint,
+        loads_json,
+        lookup_idem,
+        normalize_idem_key,
+        require_idem_match,
+        store_idem,
+    )
     from app.services.org_gates import require_org_writable
 
     enforce_rate_limit(
@@ -36,8 +48,27 @@ async def upload_photo(
         limit=30,
         window_sec=60,
     )
-    require_org_writable(db, user.organization_id)
+    key = normalize_idem_key(idempotency_key)
     data = await read_upload_capped(file)
+    fp = (
+        fingerprint({"bytes_sha": hashlib.sha256(data).hexdigest()}) if key else None
+    )
+    if key:
+        hit = lookup_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="media.photo",
+            key=key,
+        )
+        if hit:
+            require_idem_match(hit, fp)
+            if hit.response_json:
+                cached = loads_json(hit.response_json)
+                if isinstance(cached, dict) and cached.get("photo_url"):
+                    return PhotoOut.model_validate(cached)
+
+    require_org_writable(db, user.organization_id)
     suffix, content_type = detect_image(data)
     name = f"{uuid.uuid4().hex}{suffix}"
     try:
@@ -55,7 +86,35 @@ async def upload_photo(
             type(exc).__name__,
         )
         raise HTTPException(503, "Media storage unavailable") from exc
-    return PhotoOut(photo_url=url)
+    out = PhotoOut(photo_url=url)
+    if key:
+        store_idem(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="media.photo",
+            key=key,
+            resource_id=-1,
+            response_json=dumps_json(out.model_dump(mode="json")),
+            request_hash=fp,
+        )
+        replay = commit_or_replay(
+            db,
+            organization_id=user.organization_id,
+            user_id=user.id,
+            scope="media.photo",
+            key=key,
+            request_hash=fp,
+            load_replay=lambda hit: (
+                PhotoOut.model_validate(cached)
+                if hit.response_json
+                and isinstance((cached := loads_json(hit.response_json)), dict)
+                else None
+            ),
+        )
+        if replay is not None:
+            return replay
+    return out
 
 
 @router.get("/media/files/{org_id}/{filename}")

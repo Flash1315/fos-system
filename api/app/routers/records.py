@@ -227,6 +227,25 @@ def _assert_cash_for_approve(
         )
 
 
+def _assert_not_closed_cycle(
+    db: Session,
+    rec: MoneyRecord,
+    *,
+    allow_closed_cycle: bool = False,
+) -> None:
+    """Refuse approving a record whose effective date is already settled."""
+    if allow_closed_cycle:
+        return
+    from app.services.balances import record_in_closed_cycle
+
+    if record_in_closed_cycle(db, rec):
+        raise HTTPException(
+            400,
+            "Record falls in an already-settled cycle — reject, change the date, "
+            "or pass allow_closed_cycle=true",
+        )
+
+
 def _is_cash_on_hand_spend(rec: MoneyRecord) -> bool:
     if rec.kind not in (RecordKind.expense, RecordKind.fuel):
         return False
@@ -490,6 +509,7 @@ def create_record(
                 exclude_id=None,
             )
         _assert_cash_for_approve(db, rec)
+        _assert_not_closed_cycle(db, rec, allow_closed_cycle=body.allow_closed_cycle)
         rec.status = RecordStatus.approved
         rec.decided_by = user.id
         rec.decided_at = _utcnow()
@@ -895,6 +915,7 @@ def decide_batch(
     skipped = 0
     skipped_cash = 0
     skipped_inactive = 0
+    skipped_closed = 0
     # Track cash_on_hand spend approved in this batch (session autoflush is off).
     extra_cash_spent: dict[int, float] = {}
     for rid in body.ids:
@@ -918,6 +939,14 @@ def decide_batch(
             if creator is not None and not creator.is_active:
                 skipped += 1
                 skipped_inactive += 1
+                continue
+            try:
+                _assert_not_closed_cycle(
+                    db, rec, allow_closed_cycle=body.allow_closed_cycle
+                )
+            except HTTPException:
+                skipped += 1
+                skipped_closed += 1
                 continue
             spent = extra_cash_spent.get(rec.created_by, 0.0)
             if rec.kind == RecordKind.fuel:
@@ -959,6 +988,46 @@ def decide_batch(
                 400,
                 "No records approved — selected records belong to inactive teammates",
             )
+        if skipped_closed > 0:
+            payload = DecideBatchOut(
+                decided=[],
+                skipped=skipped,
+                skipped_insufficient_cash=0,
+                skipped_inactive=0,
+                skipped_closed_cycle=skipped_closed,
+            )
+            if key:
+                store_idem(
+                    db,
+                    organization_id=user.organization_id,
+                    user_id=user.id,
+                    scope="records.decide_batch",
+                    key=key,
+                    resource_id=-1,
+                    response_json=dumps_json(payload.model_dump(mode="json")),
+                    request_hash=fp,
+                )
+                from app.services.idempotency import commit_or_replay
+
+                replay = commit_or_replay(
+                    db,
+                    organization_id=user.organization_id,
+                    user_id=user.id,
+                    scope="records.decide_batch",
+                    key=key,
+                    request_hash=fp,
+                    load_replay=lambda hit: (
+                        DecideBatchOut.model_validate(cached)
+                        if hit.response_json
+                        and isinstance((cached := loads_json(hit.response_json)), dict)
+                        else None
+                    ),
+                )
+                if replay is not None:
+                    return replay
+            else:
+                db.commit()
+            return payload
         # Soft retry: every id exists and is already at the desired decided status.
         desired = RecordStatus.approved if body.approve else RecordStatus.rejected
         already_ok = 0
@@ -980,6 +1049,7 @@ def decide_batch(
                 skipped=len(body.ids),
                 skipped_insufficient_cash=0,
                 skipped_inactive=0,
+                skipped_closed_cycle=0,
             )
         raise HTTPException(400, "No pending records matched the given ids")
     payload = DecideBatchOut(
@@ -987,6 +1057,7 @@ def decide_batch(
         skipped=skipped,
         skipped_insufficient_cash=skipped_cash,
         skipped_inactive=skipped_inactive,
+        skipped_closed_cycle=skipped_closed,
     )
     if key:
         store_idem(
@@ -1025,6 +1096,7 @@ def decide_batch(
         skipped=skipped,
         skipped_insufficient_cash=skipped_cash,
         skipped_inactive=skipped_inactive,
+        skipped_closed_cycle=skipped_closed,
     )
 
 
@@ -1300,6 +1372,7 @@ def decide_record(
                 exclude_id=rec.id,
             )
         _assert_cash_for_approve(db, rec)
+        _assert_not_closed_cycle(db, rec, allow_closed_cycle=body.allow_closed_cycle)
     else:
         if len(body.note or "") < 2:
             raise HTTPException(400, "Reject requires a note (min 2 characters)")
@@ -1395,6 +1468,10 @@ def comment_record(
     )
     if not rec or rec.organization_id != user.organization_id:
         raise HTTPException(404, "Record not found")
+    if rec.is_voided:
+        raise HTTPException(400, "Cannot comment on a voided record")
+    if rec.status == RecordStatus.rejected:
+        raise HTTPException(400, "Cannot comment on a rejected record")
     stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
     rec.comment = _append_text(rec.comment, f"[mgr {user.full_name} {stamp}] {body.note}")
     if key:

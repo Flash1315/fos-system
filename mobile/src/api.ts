@@ -1158,7 +1158,7 @@ export function voidAdjustment(id: number, note: string, opts?: { idempotencyKey
 
 export async function uploadPhoto(
   uri: string,
-  opts?: { name?: string; type?: string },
+  opts?: { name?: string; type?: string; idempotencyKey?: string },
 ) {
   const form = new FormData();
   const name = opts?.name || "receipt.jpg";
@@ -1168,11 +1168,13 @@ export async function uploadPhoto(
     name,
     type,
   } as unknown as Blob);
+  const idem = opts?.idempotencyKey || makeIdempotencyKey("photo");
   return request<{ photo_url: string }>(
     "/media/photo",
     {
       method: "POST",
       body: form,
+      headers: { "Idempotency-Key": idem },
     },
     { timeoutMs: UPLOAD_TIMEOUT_MS },
   );

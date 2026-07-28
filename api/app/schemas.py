@@ -323,6 +323,8 @@ class RecordCreate(BaseModel):
     occurred_at: Optional[datetime] = None
     # Managers/owners can create already-approved (skip queue)
     approve_now: bool = False
+    # Managers may explicitly approve into an already-settled cycle
+    allow_closed_cycle: bool = False
 
     @field_validator("amount")
     @classmethod
@@ -484,6 +486,7 @@ class BalanceOut(BaseModel):
 class DecideIn(BaseModel):
     approve: bool
     note: str = Field(default="", max_length=2000)
+    allow_closed_cycle: bool = False
 
     @field_validator("note")
     @classmethod
@@ -501,6 +504,7 @@ class DecideBatchIn(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=100)
     approve: bool
     note: str = Field(default="", max_length=2000)
+    allow_closed_cycle: bool = False
 
     @field_validator("note")
     @classmethod
@@ -533,6 +537,7 @@ class DecideBatchOut(BaseModel):
     skipped: int = 0
     skipped_insufficient_cash: int = 0
     skipped_inactive: int = 0
+    skipped_closed_cycle: int = 0
 
 
 class CommentIn(BaseModel):

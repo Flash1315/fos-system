@@ -681,7 +681,7 @@ def batch_pay_all_spendings(
             user_id=manager.id,
             scope="payouts.batch_spendings",
             key=key,
-            resource_id=out[0].id if out else 0,
+            resource_id=out[0].id if out else -1,
             response_json=dumps_json([o.model_dump(mode="json") for o in out]),
             request_hash=fp,
         )
@@ -800,7 +800,7 @@ def batch_take_all_cash(
             user_id=manager.id,
             scope="payouts.batch_cash",
             key=key,
-            resource_id=out[0].id if out else 0,
+            resource_id=out[0].id if out else -1,
             response_json=dumps_json([o.model_dump(mode="json") for o in out]),
             request_hash=fp,
         )

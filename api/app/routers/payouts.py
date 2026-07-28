@@ -227,31 +227,33 @@ def create_payout(
 
 @router.get("/mine", response_model=list[PayoutOut])
 def my_payouts(
+    voided: bool | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    rows = (
-        db.query(Payout)
-        .filter(Payout.organization_id == user.organization_id, Payout.user_id == user.id)
-        .order_by(Payout.created_at.desc())
-        .limit(50)
-        .all()
+    q = db.query(Payout).filter(
+        Payout.organization_id == user.organization_id, Payout.user_id == user.id
     )
+    if voided is True:
+        q = q.filter(Payout.is_voided.is_(True))
+    elif voided is False:
+        q = q.filter(Payout.is_voided.is_(False))
+    rows = q.order_by(Payout.created_at.desc()).limit(50).all()
     return [_payout_out(db, r, user.full_name) for r in rows]
 
 
 @router.get("/org", response_model=list[PayoutOut])
 def org_payouts(
+    voided: bool | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
 ):
-    rows = (
-        db.query(Payout)
-        .filter(Payout.organization_id == user.organization_id)
-        .order_by(Payout.created_at.desc())
-        .limit(100)
-        .all()
-    )
+    q = db.query(Payout).filter(Payout.organization_id == user.organization_id)
+    if voided is True:
+        q = q.filter(Payout.is_voided.is_(True))
+    elif voided is False:
+        q = q.filter(Payout.is_voided.is_(False))
+    rows = q.order_by(Payout.created_at.desc()).limit(100).all()
     out = []
     for r in rows:
         u = db.get(User, r.user_id)

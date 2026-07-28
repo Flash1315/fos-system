@@ -1444,6 +1444,36 @@ def test_transfer_excluded_from_operating_report(client):
     assert report["net_result"] == 47000  # 50000 - 3000
 
 
+def test_payout_voided_filter(client):
+    owner = _register(client, "flow-pvoidf", "pvoidf-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 2000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    pay = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "expense_payout", "amount": 2000},
+    )
+    assert pay.status_code == 200
+    pid = pay.json()["id"]
+    client.post(f"/payouts/{pid}/void", headers=h, json={"note": "undo"})
+    active = client.get("/payouts/org?voided=false", headers=h).json()
+    assert all(not x.get("is_voided") for x in active)
+    assert all(x["id"] != pid for x in active)
+    voided = client.get("/payouts/org?voided=true", headers=h).json()
+    assert any(x["id"] == pid and x["is_voided"] for x in voided)
+
+
 def test_manager_cancel_request_requires_note(client):
     owner = _register(client, "flow-cancnote", "cancnote-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}

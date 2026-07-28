@@ -441,7 +441,10 @@ export function voidRecord(id: number, note: string) {
   });
 }
 
-export function listMyPayouts() {
+export function listMyPayouts(params?: { voided?: boolean }) {
+  const q = new URLSearchParams();
+  if (params?.voided != null) q.set("voided", String(params.voided));
+  const suffix = q.toString() ? `?${q}` : "";
   return request<
     {
       id: number;
@@ -460,10 +463,13 @@ export function listMyPayouts() {
       void_blocked_reason?: string | null;
       created_at: string;
     }[]
-  >("/payouts/mine");
+  >(`/payouts/mine${suffix}`);
 }
 
-export function listOrgPayouts() {
+export function listOrgPayouts(params?: { voided?: boolean }) {
+  const q = new URLSearchParams();
+  if (params?.voided != null) q.set("voided", String(params.voided));
+  const suffix = q.toString() ? `?${q}` : "";
   return request<
     {
       id: number;
@@ -482,7 +488,7 @@ export function listOrgPayouts() {
       void_blocked_reason?: string | null;
       created_at: string;
     }[]
-  >("/payouts/org");
+  >(`/payouts/org${suffix}`);
 }
 
 export function voidPayout(id: number, note: string) {

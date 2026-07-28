@@ -1,7 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { login, registerOrg, type User } from "../api";
+import { storageGet, storageSet } from "../storage";
 import { Brand, Btn, Card, Field, Label, LinkText, Screen, Sub } from "../components/ui";
+
+const LAST_SLUG_KEY = "fos_last_org_slug";
+const LAST_EMAIL_KEY = "fos_last_email";
 
 export function AuthScreen({
   busy,
@@ -19,6 +23,21 @@ export function AuthScreen({
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [slug, mail] = await Promise.all([
+          storageGet(LAST_SLUG_KEY),
+          storageGet(LAST_EMAIL_KEY),
+        ]);
+        if (slug) setOrgSlug(slug);
+        if (mail) setEmail(mail);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, []);
 
   const submit = async () => {
     if (!orgSlug.trim()) {
@@ -47,24 +66,30 @@ export function AuthScreen({
         return;
       }
     }
+    const slug = orgSlug.toLowerCase().trim();
+    const mail = email.trim();
     setBusy(true);
     try {
       if (mode === "register") {
         const res = await registerOrg({
           name: orgName.trim(),
-          slug: orgSlug.toLowerCase().trim(),
+          slug,
           currency: currency.trim().toUpperCase() || "IDR",
-          owner_email: email.trim(),
+          owner_email: mail,
           owner_name: name.trim(),
           owner_password: password,
         });
+        await storageSet(LAST_SLUG_KEY, slug);
+        await storageSet(LAST_EMAIL_KEY, mail);
         onDone(res.access_token, res.user);
       } else {
         const res = await login({
-          email: email.trim(),
+          email: mail,
           password,
-          organization_slug: orgSlug.toLowerCase().trim(),
+          organization_slug: slug,
         });
+        await storageSet(LAST_SLUG_KEY, slug);
+        await storageSet(LAST_EMAIL_KEY, mail);
         onDone(res.access_token, res.user);
       }
     } catch (e) {
@@ -89,22 +114,33 @@ export function AuthScreen({
         {mode === "register" && (
           <>
             <Label>Company name</Label>
-            <Field value={orgName} onChangeText={setOrgName} placeholder="My Company" />
+            <Field value={orgName} onChangeText={setOrgName} placeholder="Acme Field Ops" />
             <Label>Currency</Label>
             <Field autoCapitalize="characters" value={currency} onChangeText={setCurrency} placeholder="IDR" />
             <Label>Your name</Label>
-            <Field value={name} onChangeText={setName} placeholder="Owner name" />
+            <Field value={name} onChangeText={setName} placeholder="Alex" />
           </>
         )}
         <Label>Email</Label>
-        <Field autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="you@example.com" />
+        <Field
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+          placeholder="you@example.com"
+        />
         <Label>Password</Label>
-        <Field secureTextEntry value={password} onChangeText={setPassword} placeholder="min 6 characters" />
+        <Field
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+          placeholder="min 6 characters"
+        />
         <Btn title={busy ? "…" : mode === "login" ? "Log in" : "Create company"} onPress={submit} disabled={busy} />
-        <LinkText onPress={() => setMode(mode === "login" ? "register" : "login")}>
-          {mode === "login" ? "New company? Register" : "Have an account? Log in"}
-        </LinkText>
       </Card>
+      <LinkText onPress={() => setMode(mode === "login" ? "register" : "login")}>
+        {mode === "login" ? "New company? Register" : "Have an account? Log in"}
+      </LinkText>
     </Screen>
   );
 }

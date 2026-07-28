@@ -34,6 +34,7 @@ export function PayoutHistoryScreen({
 }) {
   const isManager = user.role === "owner" || user.role === "manager";
   const [scope, setScope] = useState<"mine" | "org">(isManager ? "org" : "mine");
+  const [voidFilter, setVoidFilter] = useState<"active" | "voided" | "all">("active");
   const [rows, setRows] = useState<PayoutRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [voidId, setVoidId] = useState<number | null>(null);
@@ -41,7 +42,12 @@ export function PayoutHistoryScreen({
 
   const reload = async () => {
     try {
-      const data = scope === "org" && isManager ? await listOrgPayouts() : await listMyPayouts();
+      const voided =
+        voidFilter === "voided" ? true : voidFilter === "active" ? false : undefined;
+      const data =
+        scope === "org" && isManager
+          ? await listOrgPayouts({ voided })
+          : await listMyPayouts({ voided });
       setRows(data);
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
@@ -51,7 +57,7 @@ export function PayoutHistoryScreen({
   useFocusEffect(reload);
   React.useEffect(() => {
     void reload();
-  }, [scope]);
+  }, [scope, voidFilter]);
 
   return (
     <Screen>
@@ -63,6 +69,11 @@ export function PayoutHistoryScreen({
           <Chip label="Mine" on={scope === "mine"} onPress={() => setScope("mine")} />
         </View>
       )}
+      <View style={styles.kinds}>
+        <Chip label="Active" on={voidFilter === "active"} onPress={() => setVoidFilter("active")} />
+        <Chip label="Voided" on={voidFilter === "voided"} onPress={() => setVoidFilter("voided")} />
+        <Chip label="All" on={voidFilter === "all"} onPress={() => setVoidFilter("all")} />
+      </View>
       <FlatList
         data={rows}
         keyExtractor={(item) => String(item.id)}

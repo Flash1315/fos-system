@@ -27,6 +27,7 @@ from app.services.org_limits import (
     require_org_can_add_member,
     require_org_member_capacity,
 )
+from app.services.audit import write_audit
 
 router = APIRouter(prefix="/orgs", tags=["team"])
 
@@ -258,6 +259,15 @@ def set_member_active(
         if not member.must_set_password:
             member.invite_token = None
             member.invite_token_expires_at = None
+    write_audit(
+        db,
+        org_id=user.organization_id,
+        actor_id=user.id,
+        action="member.set_active",
+        entity_type="user",
+        entity_id=member.id,
+        detail={"is_active": body.is_active},
+    )
     response = MemberOut.model_validate(member)
     if key:
         store_idem(
@@ -381,6 +391,15 @@ def set_member_role(
     if member.role != body.role:
         member.role = body.role
         bump_token_version(member)
+    write_audit(
+        db,
+        org_id=user.organization_id,
+        actor_id=user.id,
+        action="member.set_role",
+        entity_type="user",
+        entity_id=member.id,
+        detail={"role": body.role.value},
+    )
     response = MemberOut.model_validate(member)
     if key:
         store_idem(
@@ -506,6 +525,14 @@ def reset_member_password(
     member.must_set_password = False
     member.invite_token = None
     member.invite_token_expires_at = None
+    write_audit(
+        db,
+        org_id=user.organization_id,
+        actor_id=user.id,
+        action="member.reset_password",
+        entity_type="user",
+        entity_id=member.id,
+    )
     response = MemberOut.model_validate(member)
     if key:
         store_idem(

@@ -39,6 +39,7 @@ from app.schemas import (
     TokenOut,
     UserOut,
 )
+from app.services.audit import write_audit
 from app.services.rate_limit import client_ip, enforce_rate_limit
 
 router = APIRouter(tags=["auth"])
@@ -472,6 +473,15 @@ def update_org(
                     "Currency cannot change after money activity exists",
                 )
             org.currency = new_currency
+    write_audit(
+        db,
+        org_id=user.organization_id,
+        actor_id=user.id,
+        action="organization.update",
+        entity_type="organization",
+        entity_id=org.id,
+        detail={"fields": sorted(data)},
+    )
     response = _org_out(db, org)
     if key:
         store_idem(
@@ -619,6 +629,15 @@ def invite_user(
     )
     db.add(invited)
     db.flush()
+    write_audit(
+        db,
+        org_id=user.organization_id,
+        actor_id=user.id,
+        action="member.invite",
+        entity_type="user",
+        entity_id=invited.id,
+        detail={"email": invited.email, "role": invited.role.value},
+    )
     response = InviteOut(
         id=invited.id,
         email=invited.email,

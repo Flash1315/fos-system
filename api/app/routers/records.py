@@ -21,7 +21,8 @@ from app.schemas import (
     RecordOut,
     RecordUpdate,
 )
-from app.services.balances import user_balance
+from app.services.balances import team_balances as calculate_team_balances, user_balance
+from app.services.audit import write_audit
 from app.services.org_limits import require_org_member_capacity
 
 router = APIRouter(prefix="/records", tags=["records"])
@@ -817,7 +818,7 @@ def team_balances(
         .limit(org_member_limit())
         .all()
     )
-    return [user_balance(db, m) for m in members]
+    return calculate_team_balances(db, members)
 
 
 @router.get("/fuel/last-odometer")
@@ -1443,6 +1444,15 @@ def decide_record(
     rec.decided_by = user.id
     if body.note:
         rec.comment = _append_text(rec.comment, f"[review] {body.note}")
+    write_audit(
+        db,
+        org_id=user.organization_id,
+        actor_id=user.id,
+        action="record.decide",
+        entity_type="money_record",
+        entity_id=rec.id,
+        detail={"approved": body.approve, "note": body.note or ""},
+    )
     if key:
         store_idem(
             db,
@@ -1713,6 +1723,15 @@ def void_approved_record(
         row.voided_at = now
         row.voided_by = user.id
         row.comment = _append_text(row.comment, note)
+    write_audit(
+        db,
+        org_id=user.organization_id,
+        actor_id=user.id,
+        action="record.void",
+        entity_type="money_record",
+        entity_id=rec.id,
+        detail={"note": body.note, "record_ids": [row.id for row in targets]},
+    )
     if key:
         store_idem(
             db,
@@ -1816,6 +1835,14 @@ def cancel_pending_record(
     rec.decided_at = _utcnow()
     rec.decided_by = user.id
     rec.comment = _append_text(rec.comment, "[cancelled]")
+    write_audit(
+        db,
+        org_id=user.organization_id,
+        actor_id=user.id,
+        action="record.cancel",
+        entity_type="money_record",
+        entity_id=rec.id,
+    )
     if key:
         store_idem(
             db,

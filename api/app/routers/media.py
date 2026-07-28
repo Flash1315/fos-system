@@ -13,7 +13,7 @@ from app.db import get_db
 from app.models import User
 from app.schemas import PhotoOut
 from app.services import storage
-from app.services.images import detect_image, read_upload_capped
+from app.services.images import read_upload_capped, sanitize_image
 from app.services.rate_limit import enforce_rate_limit
 
 router = APIRouter(tags=["media"])
@@ -53,7 +53,8 @@ async def upload_photo(
         window_sec=60,
     )
     key = normalize_idem_key(idempotency_key)
-    data = await read_upload_capped(file)
+    raw_data = await read_upload_capped(file)
+    data, suffix, content_type = await run_in_threadpool(sanitize_image, raw_data)
     content_sha = hashlib.sha256(data).hexdigest()
     fp = fingerprint({"bytes_sha": content_sha}) if key else None
     if key:
@@ -72,7 +73,6 @@ async def upload_photo(
                     return PhotoOut.model_validate(cached)
 
     require_org_writable(db, user.organization_id)
-    suffix, content_type = detect_image(data)
     # Content-addressed name (32 hex) — same bytes → same path, fewer orphan uploads.
     name = f"{content_sha[:32]}{suffix}"
     try:

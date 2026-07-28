@@ -1,4 +1,8 @@
-"""Optional runtime Alembic upgrade (safe no-op if already at head)."""
+"""Optional runtime Alembic upgrade (safe no-op if already at head).
+
+The baseline migration intentionally uses ``create_all`` once. Every later
+revision must use explicit Alembic operations so upgrades remain reviewable.
+"""
 
 import logging
 from pathlib import Path
@@ -6,6 +10,7 @@ from pathlib import Path
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+_ALEMBIC_LOCK_KEY = 872014220
 
 
 def run_alembic_upgrade() -> None:
@@ -24,7 +29,29 @@ def run_alembic_upgrade() -> None:
     cfg = Config(str(root / "alembic.ini"))
     cfg.set_main_option("script_location", str(root / "alembic"))
     try:
-        command.upgrade(cfg, "head")
+        database_url = (settings.database_url or "").strip().lower()
+        if database_url.startswith("postgres"):
+            from sqlalchemy import text
+
+            from app.db import engine
+
+            with engine.connect() as lock_connection:
+                lock_connection.execute(
+                    text("SELECT pg_advisory_lock(:key)"),
+                    {"key": _ALEMBIC_LOCK_KEY},
+                )
+                lock_connection.commit()
+                logger.info("schema: PostgreSQL advisory migration lock acquired")
+                try:
+                    command.upgrade(cfg, "head")
+                finally:
+                    lock_connection.execute(
+                        text("SELECT pg_advisory_unlock(:key)"),
+                        {"key": _ALEMBIC_LOCK_KEY},
+                    )
+                    lock_connection.commit()
+        else:
+            command.upgrade(cfg, "head")
         logger.info("schema: alembic upgrade head ok")
     except Exception as exc:  # noqa: BLE001
         if is_prod:

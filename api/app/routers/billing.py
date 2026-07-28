@@ -7,6 +7,7 @@ from app.auth import get_current_user, require_roles
 from app.config import settings
 from app.db import get_db
 from app.models import Organization, User, UserRole
+from app.services.audit import write_audit
 from app.services.notify import notify_org, telegram_configured
 
 router = APIRouter(tags=["billing"])
@@ -159,7 +160,17 @@ def set_plan(
             replay = load_replay(hit)
             if replay is not None:
                 return replay
+    old_plan = org.plan
     org.plan = body.plan
+    write_audit(
+        db,
+        org_id=user.organization_id,
+        actor_id=user.id,
+        action="organization.set_plan",
+        entity_type="organization",
+        entity_id=org.id,
+        detail={"from": old_plan, "to": body.plan},
+    )
     response = billing_me(user, db)
     if key:
         store_idem(
@@ -257,6 +268,15 @@ def set_telegram_chat(
             if replay is not None:
                 return replay
     org.telegram_chat_id = body.telegram_chat_id
+    write_audit(
+        db,
+        org_id=user.organization_id,
+        actor_id=user.id,
+        action="organization.set_telegram_chat",
+        entity_type="organization",
+        entity_id=org.id,
+        detail={"configured": bool(body.telegram_chat_id)},
+    )
     response = billing_me(user, db)
     if key:
         store_idem(

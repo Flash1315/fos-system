@@ -20,6 +20,7 @@ from app.models import (
 # Prefer occurred_at when present (late entries), else created_at
 _effective_at = func.coalesce(MoneyRecord.occurred_at, MoneyRecord.created_at)
 _adj_at = func.coalesce(BalanceAdjustment.occurred_at, BalanceAdjustment.created_at)
+_UNSET = object()
 
 
 def last_payout(db: Session, org_id: int, user_id: int, kind: PayoutKind) -> Payout | None:
@@ -229,10 +230,20 @@ def _sum_adjustments(db: Session, org_id: int, user_id: int, track: AdjustmentTr
     return float(q.scalar() or 0)
 
 
-def user_balance(db: Session, user: User) -> dict:
+def _user_balance(
+    db: Session,
+    user: User,
+    *,
+    hand_cut=_UNSET,
+    pay_cut=_UNSET,
+    reserved_values: tuple[float, float] | None = None,
+    currency: str | None = None,
+) -> dict:
     org_id = user.organization_id
-    hand_cut = last_payout(db, org_id, user.id, PayoutKind.income_handover)
-    pay_cut = last_payout(db, org_id, user.id, PayoutKind.expense_payout)
+    if hand_cut is _UNSET:
+        hand_cut = last_payout(db, org_id, user.id, PayoutKind.income_handover)
+    if pay_cut is _UNSET:
+        pay_cut = last_payout(db, org_id, user.id, PayoutKind.expense_payout)
     since_hand = hand_cut.created_at if hand_cut else None
     since_pay = pay_cut.created_at if pay_cut else None
 
@@ -277,8 +288,15 @@ def user_balance(db: Session, user: User) -> dict:
     remaining_overpayment_credit = max(0.0, -spendings_net)
     cash_on_hand = income_cash - from_cash + carry_cash + adj_cash
 
-    reserved_spendings = pending_reserved(db, user.id, org_id, PayoutKind.expense_payout)
-    reserved_cash = pending_reserved(db, user.id, org_id, PayoutKind.income_handover)
+    if reserved_values is None:
+        reserved_spendings = pending_reserved(
+            db, user.id, org_id, PayoutKind.expense_payout
+        )
+        reserved_cash = pending_reserved(
+            db, user.id, org_id, PayoutKind.income_handover
+        )
+    else:
+        reserved_spendings, reserved_cash = reserved_values
     available_spendings = max(0.0, spendings - reserved_spendings)
     available_cash = max(0.0, cash_on_hand - reserved_cash)
 
@@ -293,7 +311,9 @@ def user_balance(db: Session, user: User) -> dict:
         .scalar()
         or 0
     )
-    org = db.get(Organization, org_id)
+    if currency is None:
+        org = db.get(Organization, org_id)
+        currency = org.currency if org else "IDR"
     return {
         "user_id": user.id,
         "full_name": user.full_name,
@@ -301,7 +321,7 @@ def user_balance(db: Session, user: User) -> dict:
         "cash_on_hand": cash_on_hand,
         "spendings": spendings,
         "owed_to_employee": spendings,
-        "currency": org.currency if org else "IDR",
+        "currency": currency,
         "pending_count": int(pending),
         "last_expense_payout_at": since_pay.isoformat() if since_pay else None,
         "last_income_handover_at": since_hand.isoformat() if since_hand else None,
@@ -311,3 +331,110 @@ def user_balance(db: Session, user: User) -> dict:
         "available_cash": available_cash,
         "remaining_overpayment_credit": remaining_overpayment_credit,
     }
+
+
+def user_balance(db: Session, user: User) -> dict:
+    """Calculate one user's balance with the single-user query path."""
+    return _user_balance(db, user)
+
+
+def _latest_payouts_for_kind(
+    db: Session,
+    *,
+    org_id: int,
+    user_ids: list[int],
+    kind: PayoutKind,
+) -> dict[int, object]:
+    """Fetch one latest non-voided payout per user in one query."""
+    rank = func.row_number().over(
+        partition_by=Payout.user_id,
+        order_by=(Payout.created_at.desc(), Payout.id.desc()),
+    )
+    ranked = (
+        db.query(
+            Payout.user_id.label("user_id"),
+            Payout.created_at.label("created_at"),
+            Payout.balance_after.label("balance_after"),
+            Payout.overpayment.label("overpayment"),
+            rank.label("row_number"),
+        )
+        .filter(
+            Payout.organization_id == org_id,
+            Payout.user_id.in_(user_ids),
+            Payout.kind == kind,
+            Payout.is_voided.is_(False),
+        )
+        .subquery()
+    )
+    rows = (
+        db.query(
+            ranked.c.user_id,
+            ranked.c.created_at,
+            ranked.c.balance_after,
+            ranked.c.overpayment,
+        )
+        .filter(ranked.c.row_number == 1)
+        .all()
+    )
+    return {int(row.user_id): row for row in rows}
+
+
+def team_balances(db: Session, members: list[User]) -> list[dict]:
+    """Calculate team balances with payout cutoffs and reservations batched."""
+    if not members:
+        return []
+    org_id = members[0].organization_id
+    if any(member.organization_id != org_id for member in members):
+        raise ValueError("team_balances members must belong to one organization")
+    user_ids = [member.id for member in members]
+
+    # Deliberately one query per payout kind, regardless of team size.
+    hand_cuts = _latest_payouts_for_kind(
+        db,
+        org_id=org_id,
+        user_ids=user_ids,
+        kind=PayoutKind.income_handover,
+    )
+    pay_cuts = _latest_payouts_for_kind(
+        db,
+        org_id=org_id,
+        user_ids=user_ids,
+        kind=PayoutKind.expense_payout,
+    )
+    reserved_rows = (
+        db.query(
+            SettlementRequest.user_id,
+            SettlementRequest.kind,
+            func.coalesce(func.sum(SettlementRequest.amount), 0.0),
+        )
+        .filter(
+            SettlementRequest.organization_id == org_id,
+            SettlementRequest.user_id.in_(user_ids),
+            SettlementRequest.status == SettlementRequestStatus.pending,
+        )
+        .group_by(SettlementRequest.user_id, SettlementRequest.kind)
+        .all()
+    )
+    reserved = {
+        (
+            int(user_id),
+            kind if isinstance(kind, PayoutKind) else PayoutKind(kind),
+        ): float(amount or 0)
+        for user_id, kind, amount in reserved_rows
+    }
+    org = db.get(Organization, org_id)
+    currency = org.currency if org else "IDR"
+    return [
+        _user_balance(
+            db,
+            member,
+            hand_cut=hand_cuts.get(member.id),
+            pay_cut=pay_cuts.get(member.id),
+            reserved_values=(
+                reserved.get((member.id, PayoutKind.expense_payout), 0.0),
+                reserved.get((member.id, PayoutKind.income_handover), 0.0),
+            ),
+            currency=currency,
+        )
+        for member in members
+    ]

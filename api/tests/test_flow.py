@@ -5,6 +5,17 @@ from pathlib import Path
 import pytest
 
 
+def _jpeg_bytes() -> bytes:
+    """Return a tiny valid JPEG for receipt-upload tests."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    output = BytesIO()
+    Image.new("RGB", (2, 2), color=(240, 240, 240)).save(output, format="JPEG")
+    return output.getvalue()
+
+
 @pytest.fixture(scope="module")
 def client(tmp_path_factory, monkeypatch_module):
     db_path = tmp_path_factory.mktemp("db") / "test.db"
@@ -2081,7 +2092,7 @@ def test_media_auth_bearer_and_query_token(client):
     owner = _register(client, "flow-media-auth", "media-auth-owner@example.com")
     token = owner["access_token"]
     h = {"Authorization": f"Bearer {token}"}
-    files = {"file": ("receipt.jpg", b"\xff\xd8\xff" + b"0" * 64, "image/jpeg")}
+    files = {"file": ("receipt.jpg", _jpeg_bytes(), "image/jpeg")}
     up = client.post("/media/photo", headers=h, files=files)
     assert up.status_code == 200, up.text
     url = up.json()["photo_url"]
@@ -2864,7 +2875,7 @@ def test_media_query_rejects_access_token(client, tmp_path, monkeypatch):
     name = "a" * 32 + ".jpg"
     path = storage.local_path(oid, name)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b"\xff\xd8\xff" + b"0" * 64)
+    path.write_bytes(_jpeg_bytes())
     access = owner["access_token"]
     # Access JWT must not work via ?token=
     denied = client.get(f"/media/files/{oid}/{name}?token={access}")
@@ -3071,7 +3082,7 @@ def test_settlement_pending_counts_and_image_magic(client):
     good = client.post(
         "/media/photo",
         headers=h,
-        files={"file": ("receipt.bin", b"\xff\xd8\xff" + b"0" * 64, "application/octet-stream")},
+        files={"file": ("receipt.bin", _jpeg_bytes(), "application/octet-stream")},
     )
     assert good.status_code == 200, good.text
     assert good.json()["photo_url"].endswith(".jpg")
@@ -3684,7 +3695,7 @@ def test_decide_void_idempotency_keys_and_upload_rate_limit(client, monkeypatch)
 
     monkeypatch.setattr(settings, "rate_limit_enabled", True)
     reset_limiter_for_tests()
-    jpeg = b"\xff\xd8\xff" + b"0" * 64
+    jpeg = _jpeg_bytes()
     last = None
     for _ in range(40):
         last = client.post(
@@ -7639,7 +7650,7 @@ def test_closed_cycle_gate_photo_idem_and_comment_status(client):
     assert batch.status_code == 200
     assert batch.json()["skipped_closed_cycle"] >= 1
 
-    usable = b"\xff\xd8\xff" + b"0" * 64
+    usable = _jpeg_bytes()
     up1 = client.post(
         "/media/photo",
         headers={**h, "Idempotency-Key": "photo-0755"},
@@ -7837,8 +7848,11 @@ def test_soft_retry_resume_content_hash_and_prod_metrics_compose(client):
 
     owner = _register(client, "flow-0762", "v0762-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
-    payload = b"\xff\xd8\xff" + b"content-hash-0762" + b"0" * 48
-    digest = hashlib.sha256(payload).hexdigest()[:32]
+    from app.services.images import sanitize_image
+
+    payload = _jpeg_bytes()
+    sanitized, _suffix, _content_type = sanitize_image(payload)
+    digest = hashlib.sha256(sanitized).hexdigest()[:32]
     up1 = client.post(
         "/media/photo",
         headers=h,
@@ -7944,8 +7958,11 @@ def test_resume_billing_media_hygiene_and_ready_media(client):
 
     owner = _register(client, "flow-0766", "v0766-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
-    payload = b"\xff\xd8\xff" + b"orphan-cleanup-0766" + b"1" * 40
-    digest = hashlib.sha256(payload).hexdigest()[:32]
+    from app.services.images import sanitize_image
+
+    payload = _jpeg_bytes()
+    sanitized, _suffix, _content_type = sanitize_image(payload)
+    digest = hashlib.sha256(sanitized).hexdigest()[:32]
     up = client.post(
         "/media/photo",
         headers=h,
@@ -7981,7 +7998,7 @@ def test_resume_billing_media_hygiene_and_ready_media(client):
     assert err2 == "not_found" or data2 is None
 
     # Shared content-hash: second record keeps file after first cancel
-    payload2 = b"\xff\xd8\xff" + b"shared-0766" + b"2" * 48
+    payload2 = _jpeg_bytes()
     up2 = client.post(
         "/media/photo",
         headers=h,
@@ -8235,7 +8252,7 @@ def test_detail_freeze_auth_offline_session_csv_ci(client, monkeypatch):
     up = client.post(
         "/media/photo",
         headers=h,
-        files={"file": ("e.jpg", b"\xff\xd8\xff" + b"0" * 64, "image/jpeg")},
+        files={"file": ("e.jpg", _jpeg_bytes(), "image/jpeg")},
     )
     assert up.status_code == 200, up.text
     photo_url = up.json()["photo_url"]
@@ -10004,3 +10021,100 @@ def test_v07220_version_seal(client):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["version"] == "0.7.220"
+
+
+def test_v07225_team_balances_two_users_shape(client):
+    owner = _register(client, "flow-07225", "v07225-owner@example.com")
+    headers = {"Authorization": f"Bearer {owner['access_token']}"}
+    invited = client.post(
+        "/orgs/invite",
+        headers=headers,
+        json={
+            "email": "v07225-employee@example.com",
+            "full_name": "Balance Employee",
+            "role": "employee",
+            "password": "secret12",
+            "password_confirm": "secret12",
+        },
+    )
+    assert invited.status_code == 200, invited.text
+
+    response = client.get("/records/balance/team", headers=headers)
+    assert response.status_code == 200, response.text
+    balances = response.json()
+    assert len(balances) == 2
+    required = {
+        "user_id",
+        "full_name",
+        "role",
+        "cash_on_hand",
+        "spendings",
+        "currency",
+        "pending_count",
+        "reserved_spendings",
+        "reserved_cash",
+        "available_spendings",
+        "available_cash",
+    }
+    assert all(required <= set(balance) for balance in balances)
+
+
+def test_v07226_decide_writes_audit_event(client):
+    from app.db import SessionLocal
+    from app.models import AuditEvent
+
+    owner = _register(client, "flow-07226", "v07226-owner@example.com")
+    headers = {"Authorization": f"Bearer {owner['access_token']}"}
+    record = client.post(
+        "/records",
+        headers=headers,
+        json={"kind": "expense", "amount": 125, "category": "Supplies"},
+    )
+    assert record.status_code == 200, record.text
+    record_id = record.json()["id"]
+    decided = client.post(
+        f"/records/{record_id}/decide",
+        headers=headers,
+        json={"approve": True},
+    )
+    assert decided.status_code == 200, decided.text
+
+    with SessionLocal() as db:
+        event = (
+            db.query(AuditEvent)
+            .filter(
+                AuditEvent.action == "record.decide",
+                AuditEvent.entity_type == "money_record",
+                AuditEvent.entity_id == record_id,
+            )
+            .one()
+        )
+        assert event.organization_id == owner["user"]["organization_id"]
+        assert event.actor_user_id == owner["user"]["id"]
+
+
+def test_v07226_v07228_audit_and_alembic_markers():
+    root = Path(__file__).resolve().parents[1]
+    models = (root / "app" / "models.py").read_text(encoding="utf-8")
+    audit = (root / "app" / "services" / "audit.py").read_text(encoding="utf-8")
+    migration = (
+        root / "alembic" / "versions" / "20260728_0003_audit_events.py"
+    ).read_text(encoding="utf-8")
+    runner = (root / "app" / "alembic_runner.py").read_text(encoding="utf-8")
+    assert "class AuditEvent" in models
+    assert "def write_audit" in audit
+    assert "op.create_table" in migration
+    assert "create_all" not in migration
+    assert "pg_advisory_lock" in runner
+
+
+def test_v07227_valid_jpeg_upload_is_sanitized(client):
+    owner = _register(client, "flow-07227", "v07227-owner@example.com")
+    headers = {"Authorization": f"Bearer {owner['access_token']}"}
+    response = client.post(
+        "/media/photo",
+        headers=headers,
+        files={"file": ("receipt.jpg", _jpeg_bytes(), "image/jpeg")},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["photo_url"].endswith(".jpg")

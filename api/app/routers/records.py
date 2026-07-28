@@ -372,6 +372,9 @@ def create_record(
     )
     db.add(rec)
     if body.approve_now:
+        from app.services.locks import lock_users
+
+        lock_users(db, owner_id)
         if body.kind == RecordKind.fuel:
             _assert_odometer(
                 db,
@@ -603,10 +606,11 @@ def team_balances(
 def last_fuel_odometer(
     bike: str = "",
     user_id: int | None = None,
+    at: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Hint for fuel form — latest reading for bike (or rider when bike blank)."""
+    """Hint for fuel form — latest or neighbor bounds around optional `at` (ISO date/datetime)."""
     owner_id = user.id
     if user_id is not None and user_id != user.id:
         if user.role not in (UserRole.owner, UserRole.manager):
@@ -615,15 +619,46 @@ def last_fuel_odometer(
         if not target or target.organization_id != user.organization_id:
             raise HTTPException(404, "User not found")
         owner_id = target.id
+    when: datetime | None = None
+    if (at or "").strip():
+        raw = at.strip()
+        try:
+            if len(raw) == 10 and raw[4] == "-" and raw[7] == "-":
+                when = datetime.fromisoformat(f"{raw}T12:00:00")
+            else:
+                when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                if when.tzinfo is not None:
+                    when = when.astimezone(timezone.utc).replace(tzinfo=None)
+        except ValueError as exc:
+            raise HTTPException(400, "at must be YYYY-MM-DD or ISO datetime") from exc
     last = _last_fuel_odometer(db, user.organization_id, owner_id, bike)
+    if when is not None:
+        pred, succ = _fuel_odometer_neighbors(
+            db, user.organization_id, owner_id, bike, at=when
+        )
+        return {
+            "bike": (bike or "").strip(),
+            "user_id": owner_id,
+            "odometer": float(pred.odometer) if pred and pred.odometer is not None else None,
+            "min_odometer": float(pred.odometer) if pred and pred.odometer is not None else None,
+            "max_odometer": float(succ.odometer) if succ and succ.odometer is not None else None,
+            "record_id": pred.id if pred else None,
+            "occurred_at": (pred.occurred_at or pred.created_at).isoformat()
+            if pred and (pred.occurred_at or pred.created_at)
+            else None,
+            "has_history": pred is not None or succ is not None or last is not None,
+        }
     return {
         "bike": (bike or "").strip(),
         "user_id": owner_id,
         "odometer": float(last.odometer) if last and last.odometer is not None else None,
+        "min_odometer": float(last.odometer) if last and last.odometer is not None else None,
+        "max_odometer": None,
         "record_id": last.id if last else None,
         "occurred_at": (last.occurred_at or last.created_at).isoformat()
         if last and (last.occurred_at or last.created_at)
         else None,
+        "has_history": last is not None,
     }
 
 
@@ -663,6 +698,20 @@ def decide_batch(
                 cached = loads_json(hit.response_json)
                 if isinstance(cached, dict):
                     return DecideBatchOut.model_validate(cached)
+    from app.services.locks import lock_users
+
+    # Preload pending targets so we can lock creators before balance checks.
+    pending_rows = []
+    for rid in body.ids:
+        rec = db.get(MoneyRecord, rid)
+        if (
+            rec
+            and rec.organization_id == user.organization_id
+            and rec.status == RecordStatus.pending
+        ):
+            pending_rows.append(rec)
+    if body.approve and pending_rows:
+        lock_users(db, *[r.created_by for r in pending_rows])
     out = []
     skipped = 0
     skipped_cash = 0
@@ -763,7 +812,24 @@ def decide_batch(
             response_json=dumps_json(payload.model_dump(mode="json")),
             request_hash=fp,
         )
-    db.commit()
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="records.decide_batch",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            DecideBatchOut.model_validate(cached)
+            if hit.response_json
+            and isinstance((cached := loads_json(hit.response_json)), dict)
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     for rec in out:
         db.refresh(rec)
     # Rebuild after refresh so timestamps/ids are current
@@ -903,6 +969,9 @@ def decide_record(
             return _record_out(db, rec)
         raise HTTPException(400, "Already decided")
     if body.approve:
+        from app.services.locks import lock_users
+
+        lock_users(db, rec.created_by)
         creator = db.get(User, rec.created_by)
         if creator is not None and not creator.is_active:
             raise HTTPException(
@@ -1101,6 +1170,9 @@ def void_approved_record(
             .all()
         )
         targets = siblings or [rec]
+    from app.services.locks import lock_users
+
+    lock_users(db, *[t.created_by for t in targets])
     assert_void_records_keep_non_negative(db, targets)
     for row in targets:
         row.is_voided = True

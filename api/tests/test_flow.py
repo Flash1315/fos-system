@@ -1790,6 +1790,102 @@ def test_fuel_odometer_cannot_decrease(client):
     assert other.status_code == 200, other.text
 
 
+def test_fuel_odometer_hint_at_and_chronology(client):
+    owner = _register(client, "flow-odo-at", "odo-at-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    early = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 100000,
+            "category": "Fuel",
+            "bike": "Chrono-1",
+            "odometer": 1000,
+            "liters": 4,
+            "occurred_at": "2026-01-01T12:00:00",
+            "approve_now": True,
+        },
+    )
+    assert early.status_code == 200, early.text
+    late = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 100000,
+            "category": "Fuel",
+            "bike": "Chrono-1",
+            "odometer": 2000,
+            "liters": 4,
+            "occurred_at": "2026-01-10T12:00:00",
+            "approve_now": True,
+        },
+    )
+    assert late.status_code == 200, late.text
+    latest = client.get("/records/fuel/last-odometer?bike=Chrono-1", headers=h)
+    assert latest.status_code == 200
+    assert latest.json()["odometer"] == 2000
+    assert latest.json()["min_odometer"] == 2000
+    assert latest.json()["max_odometer"] is None
+    assert latest.json()["has_history"] is True
+    mid = client.get(
+        "/records/fuel/last-odometer?bike=Chrono-1&at=2026-01-05",
+        headers=h,
+    )
+    assert mid.status_code == 200, mid.text
+    body = mid.json()
+    assert body["min_odometer"] == 1000
+    assert body["max_odometer"] == 2000
+    assert body["odometer"] == 1000
+    assert body["has_history"] is True
+    # Between neighbors: must sit in [1000, 2000]
+    bad_low = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 50000,
+            "category": "Fuel",
+            "bike": "Chrono-1",
+            "odometer": 900,
+            "liters": 2,
+            "occurred_at": "2026-01-05T12:00:00",
+        },
+    )
+    assert bad_low.status_code == 400
+    bad_high = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 50000,
+            "category": "Fuel",
+            "bike": "Chrono-1",
+            "odometer": 2100,
+            "liters": 2,
+            "occurred_at": "2026-01-05T12:00:00",
+        },
+    )
+    assert bad_high.status_code == 400
+    ok = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "fuel",
+            "amount": 50000,
+            "category": "Fuel",
+            "bike": "Chrono-1",
+            "odometer": 1500,
+            "liters": 2,
+            "occurred_at": "2026-01-05T12:00:00",
+        },
+    )
+    assert ok.status_code == 200, ok.text
+    bad_at = client.get("/records/fuel/last-odometer?bike=Chrono-1&at=not-a-date", headers=h)
+    assert bad_at.status_code == 400
+
+
 def test_balance_adjustments_and_atomic_approve(client):
     owner = _register(client, "flow-adj", "adj-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -2662,7 +2758,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.18"
+    assert health.json()["version"] == "0.7.19"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")

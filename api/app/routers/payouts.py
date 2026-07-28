@@ -392,6 +392,20 @@ def void_payout(
             400,
             "Only the latest settlement of this type for the teammate can be voided",
         )
+    from app.services.locks import lock_users
+
+    lock_users(db, row.user_id)
+    row = (
+        db.query(Payout)
+        .filter(Payout.id == payout_id)
+        .with_for_update()
+        .first()
+    )
+    if not row or row.organization_id != manager.organization_id:
+        raise HTTPException(404, "Payout not found")
+    if row.is_voided:
+        u = db.get(User, row.user_id)
+        return _payout_out(db, row, u.full_name if u else "")
     row.is_voided = True
     row.voided_at = _utcnow()
     row.voided_by = manager.id
@@ -457,7 +471,28 @@ def void_payout(
             resource_id=row.id,
             request_hash=fp,
         )
-    db.commit()
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=manager.organization_id,
+        user_id=manager.id,
+        scope="payouts.void",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _payout_out(
+                db,
+                existing,
+                (u.full_name if (u := db.get(User, existing.user_id)) else ""),
+            )
+            if (existing := db.get(Payout, hit.resource_id))
+            and existing.organization_id == manager.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(row)
     target = db.get(User, row.user_id)
     return _payout_out(db, row, target.full_name if target else "")
@@ -732,6 +767,9 @@ def request_settlement(
         amount = require_positive_money(body.amount)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    from app.services.locks import lock_users
+
+    lock_users(db, user.id)
     bal = user_balance(db, user)
     if body.kind == PayoutKind.expense_payout:
         available = float(bal.get("spendings") or 0)
@@ -768,7 +806,24 @@ def request_settlement(
             resource_id=row.id,
             request_hash=fp,
         )
-    db.commit()
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="payouts.request",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _request_out(existing, user.full_name)
+            if (existing := db.get(SettlementRequest, hit.resource_id))
+            and existing.organization_id == user.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(row)
     return _request_out(row, user.full_name)
 
@@ -895,6 +950,9 @@ def approve_settlement_request(
         raise HTTPException(404, "User not found")
     if method not in PAYMENT_METHODS:
         raise HTTPException(400, f"payment_method must be one of {PAYMENT_METHODS}")
+    from app.services.locks import lock_users
+
+    lock_users(db, target.id)
     bal = user_balance(db, target)
     track = (
         float(bal.get("spendings") or 0)
@@ -940,7 +998,29 @@ def approve_settlement_request(
             resource_id=row.id,
             request_hash=fp,
         )
-    db.commit()
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=manager.organization_id,
+        user_id=manager.id,
+        scope="payouts.approve_request",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _payout_out(
+                db,
+                existing,
+                (u.full_name if (u := db.get(User, existing.user_id)) else ""),
+            )
+            if (existing := db.get(Payout, hit.resource_id))
+            and existing.organization_id == manager.organization_id
+            and not existing.is_voided
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(row)
     return _payout_out(db, row, target.full_name)
 
@@ -981,7 +1061,12 @@ def cancel_settlement_request(
             if existing and existing.organization_id == user.organization_id:
                 u = db.get(User, existing.user_id)
                 return _request_out(existing, u.full_name if u else "")
-    req = db.get(SettlementRequest, request_id)
+    req = (
+        db.query(SettlementRequest)
+        .filter(SettlementRequest.id == request_id)
+        .with_for_update()
+        .first()
+    )
     if not req or req.organization_id != user.organization_id:
         raise HTTPException(404, "Request not found")
     is_manager = user.role in (UserRole.owner, UserRole.manager)
@@ -1010,7 +1095,27 @@ def cancel_settlement_request(
             resource_id=req.id,
             request_hash=fp,
         )
-    db.commit()
+    from app.services.idempotency import commit_or_replay
+
+    replay = commit_or_replay(
+        db,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        scope="payouts.cancel_request",
+        key=key,
+        request_hash=fp,
+        load_replay=lambda hit: (
+            _request_out(
+                existing,
+                (u.full_name if (u := db.get(User, existing.user_id)) else ""),
+            )
+            if (existing := db.get(SettlementRequest, hit.resource_id))
+            and existing.organization_id == user.organization_id
+            else None
+        ),
+    )
+    if replay is not None:
+        return replay
     db.refresh(req)
     u = db.get(User, req.user_id)
     return _request_out(req, u.full_name if u else "")

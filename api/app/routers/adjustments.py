@@ -258,6 +258,20 @@ def void_adjustment(
             400,
             "Adjustment is locked by a later settlement. Void that payout first.",
         )
+    from app.services.locks import lock_users
+
+    lock_users(db, row.user_id)
+    row = (
+        db.query(BalanceAdjustment)
+        .filter(BalanceAdjustment.id == adjustment_id)
+        .with_for_update()
+        .first()
+    )
+    if not row or row.organization_id != manager.organization_id:
+        raise HTTPException(404, "Adjustment not found")
+    if row.is_voided:
+        u = db.get(User, row.user_id)
+        return _out(row, u.full_name if u else "", db)
     target = db.get(User, row.user_id)
     if not target:
         raise HTTPException(404, "User not found")

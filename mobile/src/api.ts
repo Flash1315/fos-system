@@ -592,17 +592,25 @@ export function updateRecord(
   });
 }
 
-export function lastFuelOdometer(params?: { bike?: string; user_id?: number }) {
+export function lastFuelOdometer(params?: {
+  bike?: string;
+  user_id?: number;
+  at?: string;
+}) {
   const q = new URLSearchParams();
   if (params?.bike) q.set("bike", params.bike);
   if (params?.user_id != null) q.set("user_id", String(params.user_id));
+  if (params?.at) q.set("at", params.at);
   const suffix = q.toString() ? `?${q}` : "";
   return request<{
     bike: string;
     user_id: number;
     odometer: number | null;
+    min_odometer: number | null;
+    max_odometer: number | null;
     record_id: number | null;
     occurred_at: string | null;
+    has_history: boolean;
   }>(`/records/fuel/last-odometer${suffix}`);
 }
 

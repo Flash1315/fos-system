@@ -55,6 +55,8 @@ export function CreateScreen({
   const [occurredDate, setOccurredDate] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [lastOdo, setLastOdo] = useState<number | null>(null);
+  const [minOdo, setMinOdo] = useState<number | null>(null);
+  const [maxOdo, setMaxOdo] = useState<number | null>(null);
   const [closedCycleHint, setClosedCycleHint] = useState("");
   const [teamBals, setTeamBals] = useState<TeamBalance[]>([]);
   const [myCurrency, setMyCurrency] = useState("IDR");
@@ -170,23 +172,31 @@ export function CreateScreen({
   useEffect(() => {
     if (kind !== "fuel") {
       setLastOdo(null);
+      setMinOdo(null);
+      setMaxOdo(null);
       return;
     }
     const handle = setTimeout(() => {
       void (async () => {
         try {
+          const at = occurredDate.trim() || undefined;
           const res = await lastFuelOdometer({
             bike: bike.trim() || undefined,
             user_id: forUserId ?? undefined,
+            at,
           });
           setLastOdo(res.odometer);
+          setMinOdo(res.min_odometer);
+          setMaxOdo(res.max_odometer);
         } catch {
           setLastOdo(null);
+          setMinOdo(null);
+          setMaxOdo(null);
         }
       })();
     }, 300);
     return () => clearTimeout(handle);
-  }, [kind, bike, forUserId]);
+  }, [kind, bike, forUserId, occurredDate]);
 
   const pickPhoto = async (fromCamera: boolean) => {
     if (fromCamera) {
@@ -269,15 +279,17 @@ export function CreateScreen({
         Alert.alert("Fos", `Odometer is required (last reading ${lastOdo})`);
         return;
       }
-      if (
-        odoVal != null &&
-        lastOdo != null &&
-        odoVal < lastOdo &&
-        !occurredDate.trim()
-      ) {
+      if (odoVal != null && minOdo != null && odoVal < minOdo) {
         Alert.alert(
           "Fos",
-          `Odometer cannot decrease (last ${lastOdo}). Enter a higher reading.`,
+          `Odometer cannot decrease (previous ${minOdo}). Enter a higher reading.`,
+        );
+        return;
+      }
+      if (odoVal != null && maxOdo != null && odoVal > maxOdo) {
+        Alert.alert(
+          "Fos",
+          `Odometer cannot jump past the next reading (${maxOdo}).`,
         );
         return;
       }
@@ -382,13 +394,23 @@ export function CreateScreen({
         const last = await lastFuelOdometer({
           bike: bike.trim() || undefined,
           user_id: forUserId ?? undefined,
+          at: occurredDate.trim() || undefined,
         });
-        const lastVal = last.odometer;
-        setLastOdo(lastVal);
-        if (lastVal != null && Number(odometer.replace(",", ".")) < lastVal) {
+        setLastOdo(last.odometer);
+        setMinOdo(last.min_odometer);
+        setMaxOdo(last.max_odometer);
+        const odoVal = Number(odometer.replace(",", "."));
+        if (last.min_odometer != null && odoVal < last.min_odometer) {
           Alert.alert(
             "Fos",
-            `Odometer cannot decrease (last ${lastVal}). Enter a higher reading.`,
+            `Odometer cannot decrease (previous ${last.min_odometer}). Enter a higher reading.`,
+          );
+          return;
+        }
+        if (last.max_odometer != null && odoVal > last.max_odometer) {
+          Alert.alert(
+            "Fos",
+            `Odometer cannot jump past the next reading (${last.max_odometer}).`,
           );
           return;
         }
@@ -587,8 +609,16 @@ export function CreateScreen({
           <Field keyboardType="decimal-pad" value={liters} onChangeText={setLiters} />
           <Label>Odometer</Label>
           <Field keyboardType="decimal-pad" value={odometer} onChangeText={setOdometer} />
-          {lastOdo != null && (
-            <Sub>Last reading {lastOdo.toLocaleString()} — cannot go lower.</Sub>
+          {minOdo != null && maxOdo != null && (
+            <Sub>
+              Allowed range {minOdo.toLocaleString()}–{maxOdo.toLocaleString()}.
+            </Sub>
+          )}
+          {minOdo != null && maxOdo == null && (
+            <Sub>Previous reading {minOdo.toLocaleString()} — cannot go lower.</Sub>
+          )}
+          {minOdo == null && maxOdo != null && (
+            <Sub>Next reading {maxOdo.toLocaleString()} — cannot go higher.</Sub>
           )}
         </>
       )}

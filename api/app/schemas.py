@@ -129,6 +129,8 @@ class RecordOut(BaseModel):
     decided_at: Optional[datetime]
     decided_by: Optional[int]
     decided_by_name: str = ""
+    is_voided: bool = False
+    voided_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 

@@ -16,6 +16,7 @@ def last_payout(db: Session, org_id: int, user_id: int, kind: PayoutKind) -> Pay
             Payout.organization_id == org_id,
             Payout.user_id == user_id,
             Payout.kind == kind,
+            Payout.is_voided.is_(False),
         )
         .order_by(Payout.created_at.desc())
         .first()
@@ -40,6 +41,7 @@ def user_balance(db: Session, user: User) -> dict:
             MoneyRecord.created_by == user.id,
             MoneyRecord.kind == RecordKind.income,
             MoneyRecord.status == RecordStatus.approved,
+            MoneyRecord.is_voided.is_(False),
             MoneyRecord.payment_method == "cash",
         )
         if since_hand is not None:
@@ -52,6 +54,7 @@ def user_balance(db: Session, user: User) -> dict:
             MoneyRecord.created_by == user.id,
             MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
             MoneyRecord.status == RecordStatus.approved,
+            MoneyRecord.is_voided.is_(False),
             MoneyRecord.payment_source.in_(sources),
         )
         if since is not None:
@@ -75,6 +78,7 @@ def user_balance(db: Session, user: User) -> dict:
             MoneyRecord.organization_id == org_id,
             MoneyRecord.created_by == user.id,
             MoneyRecord.status == RecordStatus.pending,
+            MoneyRecord.is_voided.is_(False),
         )
         .scalar()
         or 0

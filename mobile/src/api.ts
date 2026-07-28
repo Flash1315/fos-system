@@ -38,6 +38,8 @@ export type MoneyRecord = {
   decided_at?: string | null;
   decided_by?: number | null;
   decided_by_name?: string;
+  is_voided?: boolean;
+  voided_at?: string | null;
 };
 
 export type OrgReport = {
@@ -391,6 +393,13 @@ export function cancelRecord(id: number) {
   return request<MoneyRecord>(`/records/${id}`, { method: "DELETE" });
 }
 
+export function voidRecord(id: number, note: string) {
+  return request<MoneyRecord>(`/records/${id}/void`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+}
+
 export function listMyPayouts() {
   return request<
     {
@@ -404,6 +413,8 @@ export function listMyPayouts() {
       note: string;
       overpayment?: number;
       balance_after?: number;
+      is_voided?: boolean;
+      void_note?: string;
       created_at: string;
     }[]
   >("/payouts/mine");
@@ -422,9 +433,18 @@ export function listOrgPayouts() {
       note: string;
       overpayment?: number;
       balance_after?: number;
+      is_voided?: boolean;
+      void_note?: string;
       created_at: string;
     }[]
   >("/payouts/org");
+}
+
+export function voidPayout(id: number, note: string) {
+  return request(`/payouts/${id}/void`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
 }
 
 export function transferCash(body: { to_email: string; amount: number; comment?: string }) {

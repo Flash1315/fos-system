@@ -1009,3 +1009,81 @@ def test_report_source_aware_metrics(client):
     assert report["spend_from_cash"] == 7000
     assert report["cash_position"] == 93000  # 100000 - 7000
     assert report["net_result"] == 83000  # 100000 - 10000 - 7000
+
+
+def test_void_record_and_payout(client):
+    owner = _register(client, "flow-void", "void-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    uid = owner["user"]["id"]
+    rec = client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 4000,
+            "category": "Taxi",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    assert rec.status_code == 200
+    rid = rec.json()["id"]
+    assert client.get("/records/balance/me", headers=h).json()["spendings"] == 4000
+    voided = client.post(f"/records/{rid}/void", headers=h, json={"note": "wrong receipt"})
+    assert voided.status_code == 200, voided.text
+    assert voided.json()["is_voided"] is True
+    assert client.get("/records/balance/me", headers=h).json()["spendings"] == 0
+    again = client.post(f"/records/{rid}/void", headers=h, json={"note": "x"})
+    assert again.status_code == 400
+
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "expense",
+            "amount": 2500,
+            "category": "Food",
+            "payment_source": "my_pocket",
+            "approve_now": True,
+        },
+    )
+    pay = client.post(
+        "/payouts",
+        headers=h,
+        json={"user_id": uid, "kind": "expense_payout", "amount": 2500},
+    )
+    assert pay.status_code == 200
+    pid = pay.json()["id"]
+    assert client.get("/records/balance/me", headers=h).json()["spendings"] == 0
+    pv = client.post(f"/payouts/{pid}/void", headers=h, json={"note": "paid wrong person"})
+    assert pv.status_code == 200, pv.text
+    assert pv.json()["is_voided"] is True
+    assert client.get("/records/balance/me", headers=h).json()["spendings"] == 2500
+
+
+def test_settlement_request_validates_balance(client):
+    owner = _register(client, "flow-reqbal", "reqbal-owner@example.com")
+    h = {"Authorization": f"Bearer {owner['access_token']}"}
+    denied = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "income_handover", "amount": 1000, "note": "no cash"},
+    )
+    assert denied.status_code == 400
+    client.post(
+        "/records",
+        headers=h,
+        json={
+            "kind": "income",
+            "amount": 3000,
+            "category": "Cash",
+            "payment_method": "cash",
+            "approve_now": True,
+        },
+    )
+    ok = client.post(
+        "/payouts/requests",
+        headers=h,
+        json={"kind": "income_handover", "amount": 2000, "note": "partial"},
+    )
+    assert ok.status_code == 200

@@ -14,7 +14,8 @@ export function formatWhen(iso: string | null | undefined) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function statusColor(status: string) {
+export function statusColor(status: string, isVoided = false) {
+  if (isVoided) return "#6B7280";
   if (status === "approved") return "#1DB954";
   if (status === "rejected") return "#B33A3A";
   return "#C9A227";

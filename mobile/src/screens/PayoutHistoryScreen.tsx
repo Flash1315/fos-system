@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
-import { listMyPayouts, listOrgPayouts, type User } from "../api";
-import { Chip, Screen, Sub, TopBar } from "../components/ui";
+import { listMyPayouts, listOrgPayouts, voidPayout, type User } from "../api";
+import { NoteModal } from "../components/NoteModal";
+import { Btn, Chip, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
 import { colors } from "../theme";
 
@@ -17,6 +18,8 @@ type PayoutRow = {
   note: string;
   overpayment?: number;
   balance_after?: number;
+  is_voided?: boolean;
+  void_note?: string;
   created_at: string;
 };
 
@@ -31,6 +34,8 @@ export function PayoutHistoryScreen({
   const [scope, setScope] = useState<"mine" | "org">(isManager ? "org" : "mine");
   const [rows, setRows] = useState<PayoutRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [voidId, setVoidId] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const reload = async () => {
     try {
@@ -73,21 +78,49 @@ export function PayoutHistoryScreen({
         }
         ListEmptyComponent={<Sub>No settlements yet</Sub>}
         renderItem={({ item }) => (
-          <Text style={styles.row}>
+          <View style={styles.row}>
             <Text style={styles.rowTitle}>
               {item.kind === "expense_payout" ? "Expense payout" : "Income handover"}
               {" · "}
               {formatMoney(item.amount, item.currency)}
+              {item.is_voided ? " · voided" : ""}
             </Text>
-            {"\n"}
             <Text style={styles.rowMeta}>
               {item.user_name} · {item.payment_method} · {formatWhen(item.created_at)}
               {item.balance_after ? ` · left ${formatMoney(item.balance_after, item.currency)}` : ""}
               {item.overpayment ? ` · overpay ${formatMoney(item.overpayment, item.currency)}` : ""}
               {item.note ? ` · ${item.note}` : ""}
+              {item.void_note ? ` · void: ${item.void_note}` : ""}
             </Text>
-          </Text>
+            {isManager && !item.is_voided && (
+              <Btn
+                title="Void"
+                variant="ghost"
+                disabled={busy}
+                onPress={() => setVoidId(item.id)}
+              />
+            )}
+          </View>
         )}
+      />
+      <NoteModal
+        visible={voidId != null}
+        title="Void settlement"
+        onCancel={() => setVoidId(null)}
+        onSubmit={async (note) => {
+          const id = voidId;
+          setVoidId(null);
+          if (id == null) return;
+          setBusy(true);
+          try {
+            await voidPayout(id, note || "voided");
+            await reload();
+          } catch (e) {
+            Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+          } finally {
+            setBusy(false);
+          }
+        }}
       />
     </Screen>
   );
@@ -101,8 +134,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
-    color: colors.text,
   },
   rowTitle: { color: colors.text, fontWeight: "600" },
-  rowMeta: { color: colors.muted },
+  rowMeta: { color: colors.muted, marginTop: 4 },
 });

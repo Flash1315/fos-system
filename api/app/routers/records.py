@@ -352,6 +352,31 @@ def comment_record(
     return _record_out(db, rec)
 
 
+@router.post("/{record_id}/void", response_model=RecordOut)
+def void_approved_record(
+    record_id: int,
+    body: CommentIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    """Manager voids an approved record; kept for audit, excluded from balances."""
+    rec = db.get(MoneyRecord, record_id)
+    if not rec or rec.organization_id != user.organization_id:
+        raise HTTPException(404, "Record not found")
+    if rec.status != RecordStatus.approved:
+        raise HTTPException(400, "Only approved records can be voided")
+    if rec.is_voided:
+        raise HTTPException(400, "Already voided")
+    stamp = _utcnow().strftime("%Y-%m-%d %H:%M")
+    rec.is_voided = True
+    rec.voided_at = _utcnow()
+    rec.voided_by = user.id
+    rec.comment = (rec.comment + f"\n[voided by {user.full_name} {stamp}] {body.note}").strip()
+    db.commit()
+    db.refresh(rec)
+    return _record_out(db, rec)
+
+
 @router.delete("/{record_id}", response_model=RecordOut)
 def cancel_pending_record(
     record_id: int,

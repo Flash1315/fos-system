@@ -64,6 +64,7 @@ def my_report(
             MoneyRecord.created_by == user.id,
             MoneyRecord.kind == kind,
             MoneyRecord.status == RecordStatus.approved,
+            MoneyRecord.is_voided.is_(False),
         )
         if payment is not None:
             q = q.filter(MoneyRecord.payment_method == payment)
@@ -80,6 +81,7 @@ def my_report(
         MoneyRecord.organization_id == user.organization_id,
         MoneyRecord.created_by == user.id,
         MoneyRecord.status == RecordStatus.approved,
+        MoneyRecord.is_voided.is_(False),
         MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
     )
     if since is not None:
@@ -98,6 +100,7 @@ def my_report(
         MoneyRecord.organization_id == user.organization_id,
         MoneyRecord.created_by == user.id,
         MoneyRecord.status == RecordStatus.approved,
+        MoneyRecord.is_voided.is_(False),
     )
     if since is not None:
         cat_q = cat_q.filter(eff >= since)
@@ -140,6 +143,7 @@ def org_report(
             MoneyRecord.organization_id == oid,
             MoneyRecord.kind == kind,
             MoneyRecord.status == RecordStatus.approved,
+            MoneyRecord.is_voided.is_(False),
         )
         if payment is not None:
             q = q.filter(MoneyRecord.payment_method == payment)
@@ -159,6 +163,7 @@ def org_report(
             MoneyRecord.organization_id == oid,
             MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
             MoneyRecord.status == RecordStatus.approved,
+            MoneyRecord.is_voided.is_(False),
             MoneyRecord.payment_source.in_(sources),
         )
         if since is not None:
@@ -197,6 +202,7 @@ def org_report(
     ).filter(
         MoneyRecord.organization_id == oid,
         MoneyRecord.status == RecordStatus.approved,
+        MoneyRecord.is_voided.is_(False),
     )
     if since is not None:
         cat_q = cat_q.filter(eff >= since)
@@ -214,6 +220,7 @@ def org_report(
     ).filter(
         MoneyRecord.organization_id == oid,
         MoneyRecord.status == RecordStatus.approved,
+        MoneyRecord.is_voided.is_(False),
         MoneyRecord.kind.in_([RecordKind.expense, RecordKind.fuel]),
     )
     if since is not None:
@@ -286,6 +293,7 @@ def export_csv(
             "occurred_at",
             "overpayment",
             "balance_after",
+            "is_voided",
             "comment",
         ]
     )
@@ -313,6 +321,7 @@ def export_csv(
                 r.occurred_at.isoformat() if r.occurred_at else "",
                 "",
                 "",
+                1 if r.is_voided else 0,
                 r.comment or "",
             ]
         )
@@ -331,7 +340,7 @@ def export_csv(
                 "payout",
                 p.id,
                 pkind,
-                "settled",
+                "voided" if p.is_voided else "settled",
                 p.amount,
                 p.currency,
                 "",
@@ -345,7 +354,8 @@ def export_csv(
                 "",
                 float(p.overpayment or 0),
                 float(p.balance_after or 0),
-                p.note or "",
+                1 if p.is_voided else 0,
+                (p.void_note or p.note or ""),
             ]
         )
 

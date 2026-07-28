@@ -41,10 +41,37 @@ class PayoutOut(BaseModel):
     note: str
     overpayment: float = 0.0
     balance_after: float = 0.0
+    is_voided: bool = False
+    voided_at: datetime | None = None
+    void_note: str = ""
     created_by: int
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class VoidIn(BaseModel):
+    note: str = Field(min_length=1, max_length=2000)
+
+
+def _payout_out(row: Payout, user_name: str) -> PayoutOut:
+    return PayoutOut(
+        id=row.id,
+        user_id=row.user_id,
+        user_name=user_name,
+        kind=row.kind,
+        amount=row.amount,
+        currency=row.currency,
+        payment_method=row.payment_method,
+        note=row.note,
+        overpayment=float(row.overpayment or 0),
+        balance_after=float(row.balance_after or 0),
+        is_voided=bool(row.is_voided),
+        voided_at=row.voided_at,
+        void_note=row.void_note or "",
+        created_by=row.created_by,
+        created_at=row.created_at,
+    )
 
 
 @router.post("", response_model=PayoutOut)
@@ -100,20 +127,7 @@ def create_payout(
         f"payout org={manager.organization_id} kind={body.kind.value} "
         f"user={target.id} amount={body.amount} overpay={overpayment} after={balance_after}"
     )
-    return PayoutOut(
-        id=row.id,
-        user_id=row.user_id,
-        user_name=target.full_name,
-        kind=row.kind,
-        amount=row.amount,
-        currency=row.currency,
-        payment_method=row.payment_method,
-        note=row.note,
-        overpayment=row.overpayment,
-        balance_after=float(row.balance_after or 0),
-        created_by=row.created_by,
-        created_at=row.created_at,
-    )
+    return _payout_out(row, target.full_name)
 
 
 @router.get("/mine", response_model=list[PayoutOut])
@@ -128,23 +142,7 @@ def my_payouts(
         .limit(50)
         .all()
     )
-    return [
-        PayoutOut(
-            id=r.id,
-            user_id=r.user_id,
-            user_name=user.full_name,
-            kind=r.kind,
-            amount=r.amount,
-            currency=r.currency,
-            payment_method=r.payment_method,
-            note=r.note,
-            overpayment=float(r.overpayment or 0),
-            balance_after=float(r.balance_after or 0),
-            created_by=r.created_by,
-            created_at=r.created_at,
-        )
-        for r in rows
-    ]
+    return [_payout_out(r, user.full_name) for r in rows]
 
 
 @router.get("/org", response_model=list[PayoutOut])
@@ -162,23 +160,30 @@ def org_payouts(
     out = []
     for r in rows:
         u = db.get(User, r.user_id)
-        out.append(
-            PayoutOut(
-                id=r.id,
-                user_id=r.user_id,
-                user_name=u.full_name if u else "",
-                kind=r.kind,
-                amount=r.amount,
-                currency=r.currency,
-                payment_method=r.payment_method,
-                note=r.note,
-                overpayment=float(r.overpayment or 0),
-                balance_after=float(r.balance_after or 0),
-                created_by=r.created_by,
-                created_at=r.created_at,
-            )
-        )
+        out.append(_payout_out(r, u.full_name if u else ""))
     return out
+
+
+@router.post("/{payout_id}/void", response_model=PayoutOut)
+def void_payout(
+    payout_id: int,
+    body: VoidIn,
+    db: Session = Depends(get_db),
+    manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
+):
+    row = db.get(Payout, payout_id)
+    if not row or row.organization_id != manager.organization_id:
+        raise HTTPException(404, "Payout not found")
+    if row.is_voided:
+        raise HTTPException(400, "Already voided")
+    row.is_voided = True
+    row.voided_at = _utcnow()
+    row.voided_by = manager.id
+    row.void_note = body.note
+    db.commit()
+    db.refresh(row)
+    target = db.get(User, row.user_id)
+    return _payout_out(row, target.full_name if target else "")
 
 
 class SettlementRequestIn(BaseModel):
@@ -304,6 +309,18 @@ def request_settlement(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    bal = user_balance(db, user)
+    if body.kind == PayoutKind.expense_payout:
+        available = float(bal.get("spendings") or 0)
+        label = "spendings owed"
+    else:
+        available = float(bal.get("cash_on_hand") or 0)
+        label = "cash on hand"
+    if body.amount > available + 1e-6:
+        raise HTTPException(
+            400,
+            f"Request exceeds {label} ({available}). Ask for {available} or less.",
+        )
     row = SettlementRequest(
         organization_id=user.organization_id,
         user_id=user.id,
@@ -372,22 +389,33 @@ def approve_settlement_request(
         raise HTTPException(404, "Request not found")
     if req.status != SettlementRequestStatus.pending:
         raise HTTPException(400, "Request already decided")
-    payout = create_payout(
+    target = db.get(User, req.user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    bal = user_balance(db, target)
+    available = (
+        float(bal.get("spendings") or 0)
+        if req.kind == PayoutKind.expense_payout
+        else float(bal.get("cash_on_hand") or 0)
+    )
+    amount = min(float(req.amount), available)
+    if amount <= 0:
+        raise HTTPException(400, "Nothing left to settle for this request")
+    req.status = SettlementRequestStatus.approved
+    req.decided_at = _utcnow()
+    req.decided_by = manager.id
+    db.flush()
+    return create_payout(
         PayoutCreate(
             user_id=req.user_id,
             kind=req.kind,
-            amount=req.amount,
+            amount=amount,
             payment_method="cash",
             note=req.note or f"From request #{req.id}",
         ),
         db=db,
         manager=manager,
     )
-    req.status = SettlementRequestStatus.approved
-    req.decided_at = _utcnow()
-    req.decided_by = manager.id
-    db.commit()
-    return payout
 
 
 @router.post("/requests/{request_id}/cancel", response_model=SettlementRequestOut)

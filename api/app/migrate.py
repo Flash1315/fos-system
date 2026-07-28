@@ -39,6 +39,9 @@ def ensure_money_record_columns() -> None:
             ("payment_source", "VARCHAR(40) DEFAULT ''"),
             ("bike", "VARCHAR(120) DEFAULT ''"),
             ("occurred_at", "DATETIME"),
+            ("is_voided", "BOOLEAN DEFAULT 0"),
+            ("voided_at", "DATETIME"),
+            ("voided_by", "INTEGER"),
         ],
     )
     _ensure_columns(
@@ -46,5 +49,9 @@ def ensure_money_record_columns() -> None:
         [
             ("overpayment", "FLOAT DEFAULT 0"),
             ("balance_after", "FLOAT DEFAULT 0"),
+            ("is_voided", "BOOLEAN DEFAULT 0"),
+            ("voided_at", "DATETIME"),
+            ("voided_by", "INTEGER"),
+            ("void_note", "TEXT DEFAULT ''"),
         ],
     )

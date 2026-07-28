@@ -8,6 +8,7 @@ import {
   getRecord,
   mediaUrl,
   updateRecord,
+  voidRecord,
   type MoneyRecord,
   type User,
 } from "../api";
@@ -32,6 +33,7 @@ export function RecordDetailScreen({
   const [rec, setRec] = useState<MoneyRecord | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
+  const [voidOpen, setVoidOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editAmount, setEditAmount] = useState("");
   const [editPlace, setEditPlace] = useState("");
@@ -68,6 +70,18 @@ export function RecordDetailScreen({
     try {
       setRec(await cancelRecord(id));
       Alert.alert("Fos", "Record cancelled");
+    } catch (e) {
+      Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onVoid = async (note: string) => {
+    setBusy(true);
+    try {
+      setRec(await voidRecord(id, note));
+      Alert.alert("Fos", "Record voided");
     } catch (e) {
       Alert.alert("Fos", e instanceof Error ? e.message : "Failed");
     } finally {
@@ -116,6 +130,7 @@ export function RecordDetailScreen({
     !!rec &&
     rec.status === "pending" &&
     (rec.created_by === user.id || isManager);
+  const canVoid = !!rec && isManager && rec.status === "approved" && !rec.is_voided;
 
   return (
     <Screen scroll>
@@ -128,7 +143,10 @@ export function RecordDetailScreen({
           <Card>
             <Label>Kind / status</Label>
             <Text style={styles.line}>
-              {rec.kind} · <Text style={{ color: statusColor(rec.status) }}>{rec.status}</Text>
+              {rec.kind} ·{" "}
+              <Text style={{ color: statusColor(rec.status, !!rec.is_voided) }}>
+                {rec.is_voided ? "voided" : rec.status}
+              </Text>
             </Text>
             <Label>Amount</Label>
             <Text style={styles.big}>{formatMoney(rec.amount, rec.currency)}</Text>
@@ -189,6 +207,12 @@ export function RecordDetailScreen({
                 </Text>
               </>
             )}
+            {!!rec.voided_at && (
+              <>
+                <Label>Voided</Label>
+                <Text style={styles.line}>{formatWhen(rec.voided_at)}</Text>
+              </>
+            )}
           </Card>
           {!!rec.photo_url && (
             <Card>
@@ -222,6 +246,9 @@ export function RecordDetailScreen({
           {canCancel && (
             <Btn title="Cancel record" variant="ghost" disabled={busy} onPress={onCancel} />
           )}
+          {canVoid && (
+            <Btn title="Void approved" variant="danger" disabled={busy} onPress={() => setVoidOpen(true)} />
+          )}
           {isManager && (
             <Btn
               title="Add manager note"
@@ -239,6 +266,15 @@ export function RecordDetailScreen({
         onSubmit={async (note) => {
           setRejectOpen(false);
           await decide(false, note);
+        }}
+      />
+      <NoteModal
+        visible={voidOpen}
+        title="Void approved record"
+        onCancel={() => setVoidOpen(false)}
+        onSubmit={async (note) => {
+          setVoidOpen(false);
+          await onVoid(note || "voided");
         }}
       />
       <NoteModal

@@ -348,7 +348,9 @@ def test_cancel_pending_and_comment(client):
     assert "[cancelled]" in cancelled.json()["comment"]
 
     again = client.delete(f"/records/{rid}", headers=h)
-    assert again.status_code == 400
+    assert again.status_code == 200
+    assert again.json()["status"] == "rejected"
+    assert "[cancelled]" in again.json()["comment"]
 
 
 def test_purpose_filter_and_period_report(client):

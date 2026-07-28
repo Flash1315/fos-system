@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import {
   billingMe,
+  isBillingReadOnly,
+  onResumeRefresh,
   changePassword,
   listSettlementRequests,
   listMySettlementRequests,
@@ -213,6 +215,13 @@ export function AccountScreen({
     })();
   }, [kind, teamReqFilter, mineReqFilter]);
 
+  useEffect(() => onResumeRefresh(() => {
+    void (async () => {
+      await reloadOrg();
+      await reloadRequests();
+    })();
+  }), []);
+
   const onPullRefresh = async () => {
     setRefreshing(true);
     try {
@@ -423,9 +432,9 @@ export function AccountScreen({
               {billing.telegram_configured ? " · telegram bot on" : " · telegram bot off"}
             </Sub>
           )}
-          {billing?.billing_status === "canceled" || billing?.billing_status === "past_due" ? (
+          {isBillingReadOnly(billing?.billing_status) ? (
             <Sub>
-              Billing {billing.billing_status} — money writes are blocked until status is restored.
+              Billing {billing?.billing_status} — money writes are blocked until status is restored.
             </Sub>
           ) : null}
           <Label>Telegram chat id</Label>

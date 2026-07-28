@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
-import { listMembers, listMyPayouts, listOrgPayouts, idemKeyFor, makeIdempotencyKey, voidPayout, type User } from "../api";
+import { listMembers, listMyPayouts, listOrgPayouts, idemKeyFor, makeIdempotencyKey, onResumeRefresh, voidPayout, type User } from "../api";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
@@ -138,6 +138,10 @@ export function PayoutHistoryScreen({
   useEffect(() => {
     void reload();
   }, [scope, voidFilter, kindFilter, userFilter]);
+
+  useEffect(() => onResumeRefresh(() => {
+    void reload();
+  }), []);
 
   return (
     <Screen>

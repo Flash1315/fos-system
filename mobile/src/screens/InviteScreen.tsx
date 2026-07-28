@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Alert, Share, View, StyleSheet } from "react-native";
-import { inviteUser, myOrg, type InviteResult, type User } from "../api";
+import { BILLING_READONLY_MSG, billingMe, inviteUser, isBillingReadOnly, myOrg, type InviteResult, type User } from "../api";
 import { Btn, Chip, Field, Label, LinkText, Screen, Sub, TopBar } from "../components/ui";
 import { passwordStrengthError } from "../format";
 
@@ -26,6 +26,7 @@ export function InviteScreen({
   const [orgSlug, setOrgSlug] = useState("");
   const [slugError, setSlugError] = useState("");
   const [role, setRole] = useState<"employee" | "manager" | "owner">("employee");
+  const [billingReadonly, setBillingReadonly] = useState(false);
   const [lastInvite, setLastInvite] = useState<{
     res: InviteResult;
     email: string;
@@ -50,6 +51,12 @@ export function InviteScreen({
 
   useEffect(() => {
     void loadSlug();
+  }, []);
+
+  useEffect(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
   }, []);
 
   const shareText = (payload: {
@@ -81,7 +88,7 @@ export function InviteScreen({
   };
 
   const submit = async () => {
-    if (busy) return;
+    if (busy || billingReadonly) return;
     if (!orgSlug) {
       Alert.alert("Fos", "Company slug not loaded — tap Retry first");
       return;
@@ -148,6 +155,7 @@ export function InviteScreen({
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Invite teammate</Label>
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
       <Sub>
         Default: share an invite token — they set their own password. Optional: set a temporary
         password yourself.
@@ -209,7 +217,7 @@ export function InviteScreen({
           <Chip key={r} label={r} on={role === r} onPress={() => setRole(r)} />
         ))}
       </View>
-      <Btn title={busy ? "…" : "Invite"} onPress={submit} disabled={busy} />
+      <Btn title={busy ? "…" : "Invite"} onPress={submit} disabled={busy || billingReadonly} />
 
       {lastInvite && (
         <>

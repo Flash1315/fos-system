@@ -1,10 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, View, StyleSheet } from "react-native";
 import {
+  BILLING_READONLY_MSG,
+  billingMe,
   decideBatch,
   decideRecord,
   idemKeyFor,
+  isBillingReadOnly,
   makeIdempotencyKey,
+  onResumeRefresh,
   pendingRecords,
   pendingSettlementCount,
   type MoneyRecord,
@@ -46,6 +50,7 @@ export function ApproveScreen({
   const decideIdemRef = useRef<string | null>(null);
   const decideSlotRef = useRef<string | null>(null);
   const PAGE = 40;
+  const [billingReadonly, setBillingReadonly] = useState(false);
 
   const reload = async () => {
     const gen = ++reloadGen.current;
@@ -109,8 +114,18 @@ export function ApproveScreen({
     void reload();
   }, [purpose, kind]);
 
+  useEffect(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => onResumeRefresh(() => {
+    void reload();
+  }), []);
+
   const runDecide = async (id: number, approve: boolean, note = "") => {
-    if (busy) return;
+    if (busy || billingReadonly) return;
     if (approve) {
       const row = rows.find((r) => r.id === id);
       if (row?.created_by_active === false) {
@@ -165,7 +180,7 @@ export function ApproveScreen({
   };
 
   const approveAll = async () => {
-    if (busy || !rows.length) return;
+    if (busy || billingReadonly || !rows.length) return;
     const closed = rows.filter((r) => r.is_in_closed_cycle);
     const go = async () => {
       if (busy) return;
@@ -227,7 +242,7 @@ export function ApproveScreen({
   };
 
   const rejectAll = async (note: string) => {
-    if (busy || !rows.length) return;
+    if (busy || billingReadonly || !rows.length) return;
     setBusy(true);
     try {
       const noteKey = (note || "batch reject").replace(/\s+/g, " ").trim();
@@ -272,6 +287,7 @@ export function ApproveScreen({
       <Sub>
         Pending records{rows.length ? ` · showing ${rows.length}${hasMore ? "+" : ""}` : ""}
       </Sub>
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
       {settlementPending > 0 && (
         <Btn
           title={`Settlement requests (${settlementPending})`}
@@ -312,13 +328,13 @@ export function ApproveScreen({
           <Btn
             title={busy ? "…" : `Approve all (${rows.length})`}
             onPress={approveAll}
-            disabled={busy}
+            disabled={busy || billingReadonly}
           />
           <Btn
             title="Reject all"
             variant="danger"
             onPress={() => setRejectAllOpen(true)}
-            disabled={busy}
+            disabled={busy || billingReadonly}
           />
         </Row>
       )}
@@ -383,13 +399,13 @@ export function ApproveScreen({
             <Row>
               <Btn
                 title={item.created_by_active === false ? "Inactive" : "Approve"}
-                disabled={busy || item.created_by_active === false}
+                disabled={busy || billingReadonly || item.created_by_active === false}
                 onPress={() => runDecide(item.id, true)}
               />
               <Btn
                 title="Reject"
                 variant="danger"
-                disabled={busy}
+                disabled={busy || billingReadonly}
                 onPress={() => setRejectId(item.id)}
               />
             </Row>

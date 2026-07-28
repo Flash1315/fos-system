@@ -2,8 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import {
+  BILLING_READONLY_MSG,
+  billingMe,
   createRecord,
   getCategories,
+  isBillingReadOnly,
   lastFuelOdometer,
   makeIdempotencyKey,
   myBalance,
@@ -39,6 +42,7 @@ export function CreateScreen({
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [approveNow, setApproveNow] = useState(false);
+  const [billingReadonly, setBillingReadonly] = useState(false);
   const [categories, setCategories] = useState<string[]>([]);
   const [purposes, setPurposes] = useState<string[]>(["Rental", "Lesson", "Office", "Other"]);
   const [purpose, setPurpose] = useState("Other");
@@ -66,6 +70,12 @@ export function CreateScreen({
   const [teamLoadError, setTeamLoadError] = useState("");
   const closedCycleGen = useRef(0);
   const odoGen = useRef(0);
+
+  useEffect(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     idemKeyRef.current = null;
@@ -236,6 +246,10 @@ export function CreateScreen({
   }, [kind, bike, forUserId, occurredDate]);
 
   const pickPhoto = async (fromCamera: boolean) => {
+    if (billingReadonly) {
+      Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     if (fromCamera) {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
@@ -287,6 +301,10 @@ export function CreateScreen({
   };
 
   const submit = async () => {
+    if (billingReadonly) {
+      Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     const value = parseFiniteMoney(amount);
     if (value == null) {
       Alert.alert("Fos", "Enter a valid amount");
@@ -408,7 +426,7 @@ export function CreateScreen({
       setConfirming(true);
       return;
     }
-    if (busy || submitLock.current) return;
+    if (busy || billingReadonly || submitLock.current) return;
     // Re-check cash right before submit (approve_now must not use stale Review numbers)
     if (kind !== "income" && paymentSource === "cash_on_hand" && isManager && approveNow) {
       try {
@@ -538,6 +556,7 @@ export function CreateScreen({
       <Screen scroll>
         <TopBar onBack={() => setConfirming(false)} onCancel={onBack} />
         <Label>Confirm record</Label>
+        {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
         <Label>For</Label>
         <Field editable={false} value={forName} />
         <Label>Kind</Label>
@@ -583,7 +602,7 @@ export function CreateScreen({
         <Btn
           title={busy ? "…" : approveNow && isManager ? "Confirm & approve" : "Confirm & submit"}
           onPress={submit}
-          disabled={busy}
+          disabled={busy || billingReadonly}
         />
         <Btn title="Back to edit" variant="ghost" onPress={() => setConfirming(false)} />
       </Screen>
@@ -594,6 +613,7 @@ export function CreateScreen({
     <Screen scroll>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>New record</Label>
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
       {isManager && members.length > 0 && (
         <>
           <Label>File for</Label>
@@ -718,10 +738,10 @@ export function CreateScreen({
         title={photoUrl ? "Photo attached ✓ (library)" : "Photo from library"}
         onPress={() => pickPhoto(false)}
         variant="ghost"
-        disabled={busy}
+        disabled={busy || billingReadonly}
       />
-      <Btn title="Photo from camera" onPress={() => pickPhoto(true)} variant="ghost" disabled={busy} />
-      <Btn title={busy ? "…" : "Review"} onPress={submit} disabled={busy} />
+      <Btn title="Photo from camera" onPress={() => pickPhoto(true)} variant="ghost" disabled={busy || billingReadonly} />
+      <Btn title={busy ? "…" : "Review"} onPress={submit} disabled={busy || billingReadonly} />
     </Screen>
   );
 }

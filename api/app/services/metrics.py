@@ -48,7 +48,9 @@ def _normalize_path(path: str) -> str:
     return "/" + "/".join(out) if out else "/"
 
 
-def render_prometheus(*, app: str, version: str, db_ok: bool, limiter: str) -> str:
+def render_prometheus(
+    *, app: str, version: str, db_ok: bool, limiter: str, media_ok: bool = True
+) -> str:
     lines = [
         f"# HELP fos_up 1 if process is up",
         f"# TYPE fos_up gauge",
@@ -62,6 +64,9 @@ def render_prometheus(*, app: str, version: str, db_ok: bool, limiter: str) -> s
         f"# HELP fos_db_up 1 if last ready check could open DB (best-effort at scrape)",
         f"# TYPE fos_db_up gauge",
         f"fos_db_up {1 if db_ok else 0}",
+        f"# HELP fos_media_up 1 if media backend probe succeeded (best-effort at scrape)",
+        f"# TYPE fos_media_up gauge",
+        f"fos_media_up {1 if media_ok else 0}",
         f"# HELP fos_http_requests_total HTTP requests",
         f"# TYPE fos_http_requests_total counter",
     ]

@@ -148,6 +148,18 @@ def _configure_logging() -> None:
 
 _configure_logging()
 
+# Best-effort: prune expired idempotency rows once at boot (also happens on store).
+try:
+    from app.db import SessionLocal
+    from app.services.idempotency import prune_expired_idem
+
+    with SessionLocal() as _boot_db:
+        _pruned = prune_expired_idem(_boot_db)
+        if _pruned:
+            logger.info("startup pruned %s expired idempotency row(s)", _pruned)
+except Exception:  # noqa: BLE001
+    logger.warning("startup idempotency prune skipped", exc_info=True)
+
 app = FastAPI(
     title=settings.app_name,
     version=APP_VERSION,
@@ -410,16 +422,18 @@ def health_live():
 
 @app.get("/health/ready")
 def health_ready(request: Request):
-    """Readiness — requires DB."""
-    from app.services.storage import media_backend
+    """Readiness — requires DB. Media status is reported but does not fail ready."""
+    from app.services.storage import media_backend, media_health
 
     db_status = _db_ping()
+    media_status = media_health()
     body = {
         "ok": db_status == "ok",
         "app": settings.app_name,
         "version": APP_VERSION,
         "db": db_status,
         "media_backend": media_backend(),
+        "media": media_status,
     }
     if db_status != "ok":
         return JSONResponse(status_code=503, content=body)
@@ -439,6 +453,7 @@ def metrics(request: Request):
     from fastapi.responses import PlainTextResponse
 
     from app.services.metrics import render_prometheus
+    from app.services.storage import media_health
 
     expected = (settings.metrics_token or "").strip()
     if expected:
@@ -454,6 +469,7 @@ def metrics(request: Request):
         app=settings.app_name,
         version=APP_VERSION,
         db_ok=_db_ping() == "ok",
+        media_ok=media_health() == "ok",
         limiter=limiter,
     )
     return PlainTextResponse(body, media_type="text/plain; version=0.0.4")

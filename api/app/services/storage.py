@@ -55,8 +55,17 @@ def store_photo(org_id: int, filename: str, data: bytes, content_type: str = "im
         key = f"{org_id}/{filename}"
         try:
             client = _s3_client()
+            bucket = settings.s3_bucket.strip()
+            try:
+                head = client.head_object(Bucket=bucket, Key=key)
+                existing_len = int(head.get("ContentLength") or 0)
+                if existing_len == len(data):
+                    return f"/media/files/{org_id}/{filename}"
+            except Exception:  # noqa: BLE001
+                # Missing key or head failure — fall through to put.
+                pass
             client.put_object(
-                Bucket=settings.s3_bucket.strip(),
+                Bucket=bucket,
                 Key=key,
                 Body=data,
                 ContentType=content_type,
@@ -119,6 +128,27 @@ def local_path(org_id: int, filename: str) -> Path:
     if not path.is_relative_to(org_root):
         raise ValueError("invalid media path")
     return path
+
+
+def media_health() -> str:
+    """Best-effort media backend probe: ok | error (never raises)."""
+    if media_backend() == "s3":
+        try:
+            client = _s3_client()
+            client.head_bucket(Bucket=settings.s3_bucket.strip())
+            return "ok"
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("s3 health failed err=%s", type(exc).__name__)
+            return "error"
+    try:
+        root = ensure_upload_root()
+        probe = root / ".health_write_probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return "ok"
+    except OSError as exc:
+        logger.warning("local media health failed err=%s", type(exc).__name__)
+        return "error"
 
 
 def load_photo(org_id: int, filename: str) -> tuple[bytes | None, str | None, str | None]:

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
-import { makeIdempotencyKey, me, myBalance, orgDirectory, transferCash, type User } from "../api";
+import { BILLING_READONLY_MSG, billingMe, isBillingReadOnly, makeIdempotencyKey, me, myBalance, orgDirectory, transferCash, type User } from "../api";
 import { formatMoney, parseFiniteMoney } from "../format";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 
@@ -25,6 +25,7 @@ export function TransferScreen({
   const [currency, setCurrency] = useState("IDR");
   const [bootError, setBootError] = useState("");
   const [booting, setBooting] = useState(true);
+  const [billingReadonly, setBillingReadonly] = useState(false);
   const submitLock = useRef(false);
   const idemKeyRef = useRef<string | null>(null);
 
@@ -55,8 +56,18 @@ export function TransferScreen({
     void bootstrap();
   }, []);
 
+  useEffect(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }, []);
+
   const submit = async () => {
-    if (busy || submitLock.current || bootError || booting) {
+    if (busy || billingReadonly || submitLock.current || bootError || booting) {
+      if (billingReadonly) {
+        Alert.alert("Fos", BILLING_READONLY_MSG);
+        return;
+      }
       if (bootError || booting) Alert.alert("Fos", bootError || "Still loading balances");
       return;
     }
@@ -137,6 +148,7 @@ export function TransferScreen({
     <Screen scroll onRefresh={() => void bootstrap()} refreshing={booting && !bootError && members.length > 0}>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Transfer cash to teammate</Label>
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
       <Sub>Moves available cash on hand immediately (approved transfer pair).</Sub>
       {booting ? (
         <Sub>Loading balances…</Sub>
@@ -184,7 +196,7 @@ export function TransferScreen({
       <Btn
         title={busy ? "…" : "Submit transfer"}
         onPress={submit}
-        disabled={busy || booting || !!bootError}
+        disabled={busy || billingReadonly || booting || !!bootError}
       />
     </Screen>
   );

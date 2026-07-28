@@ -35,7 +35,9 @@ DB_POOL_RECYCLE=1800
 
 ## 4. Boot / health
 
-- Probe `GET /health/live` (liveness) and `GET /health/ready` (DB)
+- Probe `GET /health/live` (liveness; use for container healthchecks) and `GET /health/ready` (DB; also reports `media` status without failing ready on media blips)
+- Persist `/app/uploads` or S3; content-addressed keys; cancels may remove unused receipt objects
+- Idempotency rows are pruned on API startup (and on store)
 - `METRICS_TOKEN` is **required** in production; scrapers call `GET /metrics` with `Authorization: Bearer <token>`
 - Production refuses `CORS_ORIGINS=*`; schema via Alembic only (no create_all)
 - OpenAPI/docs are hidden when `ENVIRONMENT=production`

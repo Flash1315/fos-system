@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, View, StyleSheet } from "react-native";
 import {
+  BILLING_READONLY_MSG,
+  billingMe,
   batchPaySpendings,
   batchTakeCash,
   createPayout,
+  isBillingReadOnly,
   makeIdempotencyKey,
   orgDirectory,
   teamBalances,
@@ -33,6 +36,7 @@ export function PayoutScreen({
   const [note, setNote] = useState("");
   const [booting, setBooting] = useState(true);
   const [bootError, setBootError] = useState("");
+  const [billingReadonly, setBillingReadonly] = useState(false);
   const payoutIdemRef = useRef<string | null>(null);
   const batchSpendIdemRef = useRef<string | null>(null);
   const batchCashIdemRef = useRef<string | null>(null);
@@ -68,6 +72,12 @@ export function PayoutScreen({
     void boot();
   }, []);
 
+  useEffect(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }, []);
+
   const onPullRefresh = async () => {
     setBooting(true);
     await boot({ preserveSelection: true });
@@ -98,7 +108,7 @@ export function PayoutScreen({
   }, [method]);
 
   const submit = async () => {
-    if (busy) return;
+    if (busy || billingReadonly) return;
     const value = parseFiniteMoney(amount);
     if (!userId || value == null) {
       Alert.alert("Fos", "Select teammate and amount");
@@ -319,6 +329,7 @@ export function PayoutScreen({
     <Screen scroll refreshing={booting && members.length > 0} onRefresh={() => void onPullRefresh()}>
       <TopBar onBack={onBack} onCancel={onBack} />
       <Label>Settlements</Label>
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
       {booting ? (
         <Sub>Loading teammates…</Sub>
       ) : bootError ? (
@@ -401,7 +412,7 @@ export function PayoutScreen({
       </View>
       <Label>Note</Label>
       <Field value={note} onChangeText={setNote} maxLength={2000} />
-      <Btn title={busy ? "…" : "Record settlement"} onPress={submit} disabled={busy} />
+      <Btn title={busy ? "…" : "Record settlement"} onPress={submit} disabled={busy || billingReadonly} />
         </>
       )}
     </Screen>

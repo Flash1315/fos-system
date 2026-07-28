@@ -1,8 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, FlatList, RefreshControl, Share, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import {
+  BILLING_READONLY_MSG,
+  billingMe,
+  isBillingReadOnly,
   listMembers,
+  onResumeRefresh,
   resetMemberPassword,
   issueMemberResetToken,
   setMemberActive,
@@ -26,6 +30,7 @@ export function TeamScreen({
   onBack: () => void;
 }) {
   const [rows, setRows] = useState<User[]>([]);
+  const [billingReadonly, setBillingReadonly] = useState(false);
   const [resetId, setResetId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,8 +58,18 @@ export function TeamScreen({
 
   useFocusEffect(reload);
 
+  useEffect(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => onResumeRefresh(() => {
+    void reload();
+  }), []);
+
   const toggle = async (member: User) => {
-    if (busy) return;
+    if (busy || billingReadonly) return;
     if (currentUser.role !== "owner") {
       Alert.alert("Fos", "Only owner can activate/deactivate");
       return;
@@ -115,6 +130,7 @@ export function TeamScreen({
   return (
     <Screen>
       <TopBar onBack={onBack} onCancel={onBack} />
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
       <Text style={styles.title}>Team</Text>
       {currentUser.role === "owner" ? (
         <View style={styles.kinds}>
@@ -180,13 +196,13 @@ export function TeamScreen({
                 <Btn
                   title={item.is_active === false ? "Activate" : "Deactivate"}
                   variant="ghost"
-                  disabled={busy}
+                  disabled={busy || billingReadonly}
                   onPress={() => toggle(item)}
                 />
                 <Btn
                   title="Issue reset token"
                   variant="ghost"
-                  disabled={busy}
+                  disabled={busy || billingReadonly}
                   onPress={() => {
                     Alert.alert(
                       "Fos",
@@ -255,7 +271,7 @@ export function TeamScreen({
                 <Btn
                   title="Set password (owner)"
                   variant="ghost"
-                  disabled={busy}
+                  disabled={busy || billingReadonly}
                   onPress={() => setResetId(item.id)}
                 />
               </>

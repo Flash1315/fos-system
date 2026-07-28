@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, Text, StyleSheet, View } from "react-native";
-import { listMembers, orgRecords, type MoneyRecord, type User } from "../api";
+import { listMembers, onResumeRefresh, orgRecords, type MoneyRecord, type User } from "../api";
 import { Btn, Chip, Field, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
 import { colors } from "../theme";
@@ -98,6 +98,10 @@ export function LedgerScreen({
   useEffect(() => {
     void reload();
   }, [status, kind, purpose, memberId, searchDebounced]);
+
+  useEffect(() => onResumeRefresh(() => {
+    void reload();
+  }), []);
 
   return (
     <Screen>

@@ -235,10 +235,12 @@ Local stack: `docker-compose.yml` runs API + Postgres.
 - Approving into a settled cycle requires `allow_closed_cycle`; photo uploads support Idempotency-Key
 - Invite/reset issuer always receives the raw token (email is best-effort)
 - Mobile soft-retries GET and Idempotency-Key requests on network/502/503/429; honors Retry-After
-- Closed-cycle Approve anyway / create approve_now sends allow_closed_cycle; AppState probes /health/live and refreshes Home
+- Closed-cycle Approve anyway / create approve_now sends allow_closed_cycle; AppState probes /health/live and refreshes list screens
 - Production requires METRICS_TOKEN for /metrics; prod compose example includes it + API healthcheck
-- Photo filenames are content-addressed (sha256 prefix); SecureStore uses device-only accessibility
-- Media JWT cached ~14m on the client; resume refresh bus after live probe
+- Photo filenames are content-addressed (sha256 prefix); cancel deletes unreferenced receipt objects; S3 skips rewrite on existing key
+- SecureStore uses device-only accessibility; media JWT cached ~14m; resume refresh bus after live probe
+- Billing freeze banner on write screens; JWT retained on billing 403; cancel pending still allowed
+- `/health/ready` reports media probe (non-blocking); idempotency rows pruned at API startup; `fos_media_up` metric
 - Production refuses SQLite `DATABASE_URL`; Alembic upgrade fails hard in production
 - Postgres pool/SSL knobs: `DB_POOL_*`, `DB_SSLMODE`; see `docs/DEPLOY.md`
 - Accept-invite allowed during billing freeze; money idempotency replays before writable gate

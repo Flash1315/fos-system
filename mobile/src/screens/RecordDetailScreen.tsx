@@ -3,14 +3,18 @@ import { Alert, Image, Text, StyleSheet } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect } from "../useFocus";
 import {
+  BILLING_READONLY_MSG,
+  billingMe,
   cancelRecord,
   commentRecord,
   decideRecord,
   getRecord,
   idemKeyFor,
+  isBillingReadOnly,
   lastFuelOdometer,
   makeIdempotencyKey,
   mediaUrlWithMediaToken,
+  onResumeRefresh,
   updateRecord,
   uploadPhoto,
   voidRecord,
@@ -39,6 +43,7 @@ export function RecordDetailScreen({
   onBack: () => void;
 }) {
   const [rec, setRec] = useState<MoneyRecord | null>(null);
+  const [billingReadonly, setBillingReadonly] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
   const [voidOpen, setVoidOpen] = useState(false);
@@ -140,6 +145,16 @@ export function RecordDetailScreen({
     void reload();
   });
 
+  useEffect(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => onResumeRefresh(() => {
+    void reload({ preserveEdits: editing });
+  }), [editing]);
+
   const onPullRefresh = async () => {
     setRefreshing(true);
     try {
@@ -150,6 +165,10 @@ export function RecordDetailScreen({
   };
 
   const decide = async (approve: boolean, note = "") => {
+    if (billingReadonly) {
+      Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
     if (approve && rec?.created_by_active === false) {
       Alert.alert("Fos", "Cannot approve — teammate is inactive. Reject instead.");
       return;
@@ -240,7 +259,7 @@ export function RecordDetailScreen({
   };
 
   const onVoid = async (note: string) => {
-    if (busy) return;
+    if (busy || billingReadonly) return;
     setBusy(true);
     try {
       const fresh = await getRecord(id);
@@ -452,6 +471,7 @@ export function RecordDetailScreen({
   return (
     <Screen scroll refreshing={refreshing} onRefresh={() => void onPullRefresh()}>
       <TopBar onBack={onBack} onCancel={onBack} />
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
       <Text style={styles.title}>Record #{id}</Text>
       {loading && !rec ? (
         <Sub>Loading...</Sub>
@@ -570,14 +590,14 @@ export function RecordDetailScreen({
             <Row>
               <Btn
                 title={rec.created_by_active === false ? "Inactive" : "Approve"}
-                disabled={busy || rec.created_by_active === false}
+                disabled={busy || billingReadonly || rec.created_by_active === false}
                 onPress={() => decide(true)}
               />
-              <Btn title="Reject" variant="danger" disabled={busy} onPress={() => setRejectOpen(true)} />
+              <Btn title="Reject" variant="danger" disabled={busy || billingReadonly} onPress={() => setRejectOpen(true)} />
             </Row>
           )}
           {canEdit && !editing && (
-            <Btn title="Edit pending" variant="ghost" disabled={busy} onPress={() => setEditing(true)} />
+            <Btn title="Edit pending" variant="ghost" disabled={busy || billingReadonly} onPress={() => setEditing(true)} />
           )}
           {canEdit && editing && (
             <Card>
@@ -655,7 +675,7 @@ export function RecordDetailScreen({
               <Label>Receipt photo</Label>
               <Sub>{editPhotoUrl ? "Attached" : "None"}</Sub>
               <Row>
-                <Btn title="Replace photo" variant="ghost" disabled={busy} onPress={() => void pickEditPhoto()} />
+                <Btn title="Replace photo" variant="ghost" disabled={busy || billingReadonly} onPress={() => void pickEditPhoto()} />
                 {!!editPhotoUrl && (
                   <Btn
                     title="Remove photo"
@@ -671,7 +691,7 @@ export function RecordDetailScreen({
               <Label>Comment</Label>
               <Field value={editComment} onChangeText={setEditComment} maxLength={4000} />
               <Row>
-                <Btn title="Save" disabled={busy} onPress={onSaveEdit} />
+                <Btn title="Save" disabled={busy || billingReadonly} onPress={onSaveEdit} />
                 <Btn title="Cancel edit" variant="ghost" onPress={() => setEditing(false)} />
               </Row>
             </Card>
@@ -680,7 +700,7 @@ export function RecordDetailScreen({
             <Btn title="Cancel record" variant="ghost" disabled={busy} onPress={onCancel} />
           )}
           {canVoid && (
-            <Btn title="Void approved" variant="danger" disabled={busy} onPress={() => setVoidOpen(true)} />
+            <Btn title="Void approved" variant="danger" disabled={busy || billingReadonly} onPress={() => setVoidOpen(true)} />
           )}
           {isManager &&
             !!rec &&

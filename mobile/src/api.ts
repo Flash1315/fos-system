@@ -392,6 +392,15 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
   throw lastError instanceof Error ? lastError : new Error("Request failed");
 }
 
+/** True when org billing freezes money mutations (canceled / past_due). */
+export function isBillingReadOnly(status: string | null | undefined): boolean {
+  const s = (status || "").toLowerCase();
+  return s === "canceled" || s === "past_due";
+}
+
+export const BILLING_READONLY_MSG =
+  "Billing restricted — org is read-only (canceled or past due). You can still view data and cancel pending items; creates, approvals, and invites are blocked until billing is restored.";
+
 function formatApiError(
   data: unknown,
   fallback: string,
@@ -431,7 +440,16 @@ function formatApiError(
     return reqId && status != null && status >= 400 ? `${fallback} (ref ${reqId})` : fallback;
   }
   const detail = (data as { detail: unknown }).detail;
-  if (typeof detail === "string") return detail;
+  if (typeof detail === "string") {
+    // Keep JWT on billing 403 — only soften the copy for freeze responses.
+    if (
+      status === 403 &&
+      /organization billing is (canceled|past due)/i.test(detail)
+    ) {
+      return BILLING_READONLY_MSG;
+    }
+    return detail;
+  }
   if (Array.isArray(detail)) {
     return detail
       .map((item) => {

@@ -1,12 +1,16 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, StyleSheet, View } from "react-native";
 import {
+  BILLING_READONLY_MSG,
+  billingMe,
   createAdjustment,
   createPayout,
   idemKeyFor,
+  isBillingReadOnly,
   listAdjustments,
   makeIdempotencyKey,
   myOrg,
+  onResumeRefresh,
   teamBalances,
   voidAdjustment,
   type BalanceAdjustment,
@@ -27,6 +31,7 @@ export function BalancesScreen({
   onBack: () => void;
 }) {
   const [rows, setRows] = useState<TeamBalance[]>([]);
+  const [billingReadonly, setBillingReadonly] = useState(false);
   const [adjustments, setAdjustments] = useState<BalanceAdjustment[]>([]);
   const [currency, setCurrency] = useState("IDR");
   const [refreshing, setRefreshing] = useState(false);
@@ -114,6 +119,16 @@ export function BalancesScreen({
     void reload();
   }, [adjFilter, adjUserFilter, adjTrackFilter]);
 
+  useEffect(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => onResumeRefresh(() => {
+    void reload();
+  }), []);
+
   React.useEffect(() => {
     adjustIdemRef.current = null;
   }, [userId, track, amount, note]);
@@ -122,7 +137,7 @@ export function BalancesScreen({
     item: TeamBalance,
     kind: "expense_payout" | "income_handover",
   ) => {
-    if (isBusy) return;
+    if (isBusy || billingReadonly) return;
     const value =
       kind === "expense_payout"
         ? item.available_spendings ?? item.spendings
@@ -209,7 +224,7 @@ export function BalancesScreen({
   };
 
   const postAdjustment = async () => {
-    if (isBusy) return;
+    if (isBusy || billingReadonly) return;
     const value = parseFiniteSignedMoney(amount);
     if (!userId || value == null || !note.trim()) {
       Alert.alert("Fos", "Pick teammate, signed amount, and note");
@@ -283,6 +298,7 @@ export function BalancesScreen({
         ListHeaderComponent={
           <View>
             <Text style={styles.title}>Team balances</Text>
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
             <Sub>
               Spendings = my pocket owed. Cash = held cash on hand. Opening/corrections change the
               track without hitting P&L. Settled-period adjustments stay locked until that payout is
@@ -321,7 +337,7 @@ export function BalancesScreen({
             />
             <Label>Note</Label>
             <Field value={note} onChangeText={setNote} placeholder="Opening balance / correction" maxLength={2000} />
-            <Btn title={isBusy ? "…" : "Post adjustment"} onPress={postAdjustment} disabled={isBusy} />
+            <Btn title={isBusy ? "…" : "Post adjustment"} onPress={postAdjustment} disabled={isBusy || billingReadonly} />
             <Label>Adjustments</Label>
             <View style={styles.chips}>
               <Chip label="Active" on={adjFilter === "active"} onPress={() => setAdjFilter("active")} />
@@ -387,7 +403,7 @@ export function BalancesScreen({
                     <Btn
                       title="Void"
                       variant="ghost"
-                      disabled={isBusy}
+                      disabled={isBusy || billingReadonly}
                       onPress={() => setVoidId(a.id)}
                     />
                   )}
@@ -450,13 +466,13 @@ export function BalancesScreen({
               <Btn
                 title="Pay spendings"
                 variant="ghost"
-                disabled={isBusy || !!loadError || (item.available_spendings ?? item.spendings) <= 0}
+                disabled={isBusy || billingReadonly || !!loadError || (item.available_spendings ?? item.spendings) <= 0}
                 onPress={() => settle(item, "expense_payout")}
               />
               <Btn
                 title="Take cash"
                 variant="ghost"
-                disabled={isBusy || !!loadError || (item.available_cash ?? item.cash_on_hand) <= 0}
+                disabled={isBusy || billingReadonly || !!loadError || (item.available_cash ?? item.cash_on_hand) <= 0}
                 onPress={() => settle(item, "income_handover")}
               />
             </View>

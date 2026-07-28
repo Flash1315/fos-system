@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import logging
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
@@ -24,6 +25,7 @@ from app.services.balances import user_balance
 from app.services.org_limits import require_org_member_capacity
 
 router = APIRouter(prefix="/records", tags=["records"])
+logger = logging.getLogger(__name__)
 
 _PHOTO_RE = re.compile(r"^/media/files/(\d+)/([0-9a-f]{32}\.(?:jpg|png|webp))$")
 _SEARCH_MAX = 80
@@ -111,7 +113,7 @@ def _validate_photo_url(photo_url: str, org_id: int) -> str:
     if not m:
         raise HTTPException(
             400,
-            "photo_url must be an uploaded /media/files/{org}/{uuid}.{jpg|png|webp} path",
+            "photo_url must be an uploaded /media/files/{org}/{sha256-prefix}.{jpg|png|webp} path",
         )
     if int(m.group(1)) != org_id:
         raise HTTPException(400, "photo_url does not belong to this organization")
@@ -1768,4 +1770,29 @@ def cancel_pending_record(
     if replay is not None:
         return replay
     db.refresh(rec)
+    # Best-effort: drop unreferenced content-addressed receipt after cancel.
+    photo = (rec.photo_url or "").strip()
+    if photo:
+        m = _PHOTO_RE.match(photo)
+        if m and int(m.group(1)) == user.organization_id:
+            shared = (
+                db.query(MoneyRecord.id)
+                .filter(
+                    MoneyRecord.organization_id == user.organization_id,
+                    MoneyRecord.photo_url == photo,
+                    MoneyRecord.id != rec.id,
+                )
+                .first()
+            )
+            if shared is None:
+                try:
+                    from app.services import storage as media_storage
+
+                    media_storage.delete_photo(user.organization_id, m.group(2))
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "cancel photo cleanup failed org=%s record=%s",
+                        user.organization_id,
+                        rec.id,
+                    )
     return _record_out(db, rec)

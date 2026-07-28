@@ -368,6 +368,11 @@ def my_payouts(
         limit=120,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"finance-list-org:{user.organization_id}",
+        limit=240,
+        window_sec=60,
+    )
     q = db.query(Payout).filter(
         Payout.organization_id == user.organization_id, Payout.user_id == user.id
     )
@@ -865,6 +870,11 @@ def my_settlement_requests(
         limit=120,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"finance-list-org:{user.organization_id}",
+        limit=240,
+        window_sec=60,
+    )
     q = db.query(SettlementRequest).filter(
         SettlementRequest.organization_id == user.organization_id,
         SettlementRequest.user_id == user.id,
@@ -896,6 +906,11 @@ def my_pending_settlement_count(
     enforce_rate_limit(
         f"settle-mine-count:{user.organization_id}:{user.id}",
         limit=120,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"finance-list-org:{user.organization_id}",
+        limit=240,
         window_sec=60,
     )
     count = (

@@ -203,6 +203,11 @@ def logout(
         limit=30,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"logout-org:{user.organization_id}",
+        limit=60,
+        window_sec=60,
+    )
     locked = db.query(User).filter(User.id == user.id).with_for_update().first()
     if not locked:
         raise HTTPException(404, "User not found")
@@ -221,6 +226,11 @@ def change_password(
     enforce_rate_limit(
         f"password:{user.id}:{client_ip(request)}",
         limit=10,
+        window_sec=300,
+    )
+    enforce_rate_limit(
+        f"password-org:{user.organization_id}",
+        limit=30,
         window_sec=300,
     )
     locked = db.query(User).filter(User.id == user.id).with_for_update().first()
@@ -260,6 +270,11 @@ def accept_invite(body: AcceptInviteIn, request: Request, db: Session = Depends(
     )
     if not user or not user.is_active:
         raise HTTPException(400, "Invalid or expired invite token")
+    enforce_rate_limit(
+        f"accept-invite-org:{user.organization_id}",
+        limit=30,
+        window_sec=60,
+    )
     if not getattr(user, "must_set_password", False):
         raise HTTPException(400, "Invite already accepted — log in instead")
     stored = user.invite_token or ""

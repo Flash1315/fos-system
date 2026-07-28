@@ -389,6 +389,11 @@ def list_categories(
         limit=120,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"categories-org:{user.organization_id}",
+        limit=240,
+        window_sec=60,
+    )
     return CategoriesOut(
         categories=categories_for(kind),
         purposes=PURPOSES,
@@ -573,6 +578,11 @@ def my_records(
         limit=120,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"records-list-org:{user.organization_id}",
+        limit=240,
+        window_sec=60,
+    )
     purpose = _bound_purpose(purpose)
     query = db.query(MoneyRecord).filter(
         MoneyRecord.organization_id == user.organization_id,
@@ -711,6 +721,11 @@ def pending_count(
         limit=120,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"records-list-org:{user.organization_id}",
+        limit=240,
+        window_sec=60,
+    )
     purpose = _bound_purpose(purpose)
     q = db.query(func.count(MoneyRecord.id)).filter(
         MoneyRecord.organization_id == user.organization_id,
@@ -729,6 +744,11 @@ def issue_media_token(user: User = Depends(get_current_user)):
     from app.services.rate_limit import enforce_rate_limit
 
     enforce_rate_limit(f"media-token:{user.organization_id}:{user.id}", limit=60, window_sec=60)
+    enforce_rate_limit(
+        f"media-token-org:{user.organization_id}",
+        limit=120,
+        window_sec=60,
+    )
     token = create_media_token(
         user.id, user.organization_id, user.token_version or 0, minutes=15
     )
@@ -815,6 +835,11 @@ def last_fuel_odometer(
     enforce_rate_limit(
         f"fuel-odo:{user.organization_id}:{user.id}",
         limit=60,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"fuel-odo-org:{user.organization_id}",
+        limit=120,
         window_sec=60,
     )
     if at is not None and len(at) > 40:

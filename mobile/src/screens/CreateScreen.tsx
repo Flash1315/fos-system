@@ -72,6 +72,10 @@ export function CreateScreen({
   const [teamLoadError, setTeamLoadError] = useState("");
   const closedCycleGen = useRef(0);
   const odoGen = useRef(0);
+  const catGen = useRef(0);
+  const teamGen = useRef(0);
+  const kindRef = useRef(kind);
+  kindRef.current = kind;
 
   useEffect(() => {
     void billingMe()
@@ -101,10 +105,13 @@ export function CreateScreen({
   ]);
 
   const loadCategories = async () => {
+    const gen = ++catGen.current;
+    const requestKind = kind;
     try {
       setCategoriesError("");
-      const res = await getCategories(kind);
-      const list = res.categories[kind] || [];
+      const res = await getCategories(requestKind);
+      if (gen !== catGen.current || requestKind !== kindRef.current) return;
+      const list = res.categories[requestKind] || [];
       setCategories(list);
       setCategory((prev) => (list.includes(prev) ? prev : list[0] || ""));
       if (res.purposes?.length) {
@@ -118,6 +125,7 @@ export function CreateScreen({
         );
       }
     } catch (e) {
+      if (gen !== catGen.current || requestKind !== kindRef.current) return;
       setCategoriesError(e instanceof Error ? e.message : "Categories failed to load");
     }
   };
@@ -127,25 +135,32 @@ export function CreateScreen({
   }, [kind]);
 
   const loadTeamContext = async () => {
+    const gen = ++teamGen.current;
     if (!isManager) return;
     try {
       setTeamLoadError("");
       const rows = await orgDirectory();
+      if (gen !== teamGen.current) return;
       const ready = rows.filter((m) => m.is_active !== false && !m.must_set_password);
       setMembers(ready);
       setForUserId((prev) => (prev != null && ready.some((m) => m.id === prev) ? prev : null));
       try {
-        setTeamBals(await teamBalances());
+        const nextBalances = await teamBalances();
+        if (gen !== teamGen.current) return;
+        setTeamBals(nextBalances);
       } catch {
         /* keep previous team balances */
       }
+      if (gen !== teamGen.current) return;
       try {
         const org = await myOrg();
+        if (gen !== teamGen.current) return;
         setMyCurrency(org.currency || "IDR");
       } catch {
         /* ignore currency */
       }
     } catch (e) {
+      if (gen !== teamGen.current) return;
       // Keep last-known teammate directory on a transient failure.
       setTeamLoadError(e instanceof Error ? e.message : "Failed to load teammates");
     }

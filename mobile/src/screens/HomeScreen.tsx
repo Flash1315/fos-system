@@ -4,6 +4,7 @@ import { BILLING_READONLY_MSG, makeIdempotencyKey, billingMe, isBillingReadOnly,
 import { alertFosError } from "../alertError";
 import { Brand, Btn, Card, Chip, Field, Label, LinkText, Row, Screen, Sub } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
+import { hasMorePage, mergeById } from "../listUtil";
 import { colors } from "../theme";
 
 export function HomeScreen({
@@ -158,7 +159,7 @@ export function HomeScreen({
         }
       }
       setRows(list);
-      setHasMore(list.length >= PAGE);
+      setHasMore(hasMorePage(list.length, PAGE));
     } catch (e) {
       if (gen !== reloadGen.current) return;
       // Retain previous rows/hasMore on refresh failure (stale-data soft-fail).
@@ -175,13 +176,13 @@ export function HomeScreen({
     try {
       const more = await myRecords({ ...recordParams(), offset: rows.length });
       if (gen !== reloadGen.current) return;
-      setRows((prev) => [...prev, ...more]);
-      setHasMore(more.length >= PAGE);
+      setRows((prev) => mergeById(prev, more));
+      setHasMore(hasMorePage(more.length, PAGE));
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setLoadError(e instanceof Error ? e.message : "Load more failed");
     } finally {
-      setLoadingMore(false);
+      if (gen === reloadGen.current) setLoadingMore(false);
     }
   };
 

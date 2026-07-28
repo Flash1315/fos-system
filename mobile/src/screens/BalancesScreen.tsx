@@ -20,6 +20,7 @@ import { alertFosError } from "../alertError";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, parseFiniteSignedMoney } from "../format";
+import { hasMorePage, mergeById } from "../listUtil";
 import { colors } from "../theme";
 
 export function BalancesScreen({
@@ -102,7 +103,7 @@ export function BalancesScreen({
       }
       if (adjRes.status === "fulfilled") {
         setAdjustments(adjRes.value);
-        setAdjHasMore(adjRes.value.length >= PAGE);
+        setAdjHasMore(hasMorePage(adjRes.value.length, PAGE));
       } else {
         // Retain previous adjustments pane on a transient list failure.
         setAdjLoadError(
@@ -122,13 +123,13 @@ export function BalancesScreen({
     try {
       const more = await listAdjustments({ ...adjParams(), offset: adjustments.length });
       if (gen !== reloadGen.current) return;
-      setAdjustments((prev) => [...prev, ...more]);
-      setAdjHasMore(more.length >= PAGE);
+      setAdjustments((prev) => mergeById(prev, more));
+      setAdjHasMore(hasMorePage(more.length, PAGE));
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setLoadError(e instanceof Error ? e.message : "Load more failed");
     } finally {
-      setLoadingMoreAdj(false);
+      if (gen === reloadGen.current) setLoadingMoreAdj(false);
     }
   };
 

@@ -29,27 +29,33 @@ export function TransferScreen({
   const [billingReadonly, setBillingReadonly] = useState(false);
   const submitLock = useRef(false);
   const idemKeyRef = useRef<string | null>(null);
+  const bootstrapGen = useRef(0);
 
   useEffect(() => {
     idemKeyRef.current = null;
   }, [email, amount, comment]);
 
   const bootstrap = async () => {
+    const gen = ++bootstrapGen.current;
     setBooting(true);
     setBootError("");
     try {
       const u = await me();
+      if (gen !== bootstrapGen.current) return;
       const rows = await orgDirectory();
+      if (gen !== bootstrapGen.current) return;
       setMembers(rows.filter((m) => m.id !== u.id));
       const bal = await myBalance();
+      if (gen !== bootstrapGen.current) return;
       setHeld(bal.cash_on_hand);
       setReserved(bal.reserved_cash ?? 0);
       setAvailable(bal.available_cash ?? bal.cash_on_hand);
       setCurrency(bal.currency);
     } catch (e) {
+      if (gen !== bootstrapGen.current) return;
       setBootError(e instanceof Error ? e.message : "Could not load balances");
     } finally {
-      setBooting(false);
+      if (gen === bootstrapGen.current) setBooting(false);
     }
   };
 

@@ -43,16 +43,30 @@ export function PayoutScreen({
   const batchSpendIdemRef = useRef<string | null>(null);
   const batchCashIdemRef = useRef<string | null>(null);
   const amountDirty = useRef(false);
+  const bootGen = useRef(0);
+  const balancesGen = useRef(0);
 
-  const reloadBalances = async () => {
-    setBalances(await teamBalances());
+  const reloadBalances = async (expectedBootGen?: number) => {
+    const gen = ++balancesGen.current;
+    try {
+      const next = await teamBalances();
+      if (gen !== balancesGen.current) return;
+      if (expectedBootGen != null && expectedBootGen !== bootGen.current) return;
+      setBalances(next);
+    } catch (e) {
+      if (gen !== balancesGen.current) return;
+      if (expectedBootGen != null && expectedBootGen !== bootGen.current) return;
+      throw e;
+    }
   };
 
   const boot = async (opts?: { preserveSelection?: boolean }) => {
+    const gen = ++bootGen.current;
     const selected = userId;
     try {
       setBootError("");
       const rows = await orgDirectory();
+      if (gen !== bootGen.current) return;
       const active = rows.filter((m) => m.is_active !== false && !m.must_set_password);
       setMembers(active);
       if (opts?.preserveSelection && selected != null && active.some((m) => m.id === selected)) {
@@ -62,11 +76,12 @@ export function PayoutScreen({
       } else {
         setUserId(null);
       }
-      await reloadBalances();
+      await reloadBalances(gen);
     } catch (e) {
+      if (gen !== bootGen.current) return;
       setBootError(e instanceof Error ? e.message : "Failed");
     } finally {
-      setBooting(false);
+      if (gen === bootGen.current) setBooting(false);
     }
   };
 

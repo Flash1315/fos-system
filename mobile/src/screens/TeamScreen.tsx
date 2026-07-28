@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Share, Text, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "../useFocus";
 import {
@@ -37,6 +37,7 @@ export function TeamScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const reloadGen = useRef(0);
   const [lastReset, setLastReset] = useState<{
     name: string;
     slug: string;
@@ -46,13 +47,17 @@ export function TeamScreen({
   } | null>(null);
 
   const reload = async () => {
+    const gen = ++reloadGen.current;
     try {
       setLoadError("");
-      setRows(await listMembers());
+      const next = await listMembers();
+      if (gen !== reloadGen.current) return;
+      setRows(next);
     } catch (e) {
+      if (gen !== reloadGen.current) return;
       setLoadError(e instanceof Error ? e.message : "Failed");
     } finally {
-      setLoading(false);
+      if (gen === reloadGen.current) setLoading(false);
     }
   };
 

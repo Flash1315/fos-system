@@ -26,6 +26,7 @@ import { alertFosError } from "../alertError";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
 import { parseFiniteMoney, passwordStrengthError } from "../format";
+import { hasMorePage, mergeById } from "../listUtil";
 
 type ReqRow = {
   id: number;
@@ -88,15 +89,21 @@ export function AccountScreen({
   const cancelIdemRef = useRef<string | null>(null);
   const cancelSlotRef = useRef<number | null>(null);
   const reqReloadGen = useRef(0);
+  const orgReloadGen = useRef(0);
+  const suggestGen = useRef(0);
+  const kindRef = useRef(kind);
+  kindRef.current = kind;
 
   useEffect(() => {
     requestIdemRef.current = null;
   }, [kind, amount, note]);
 
   const reloadOrg = async () => {
+    const gen = ++orgReloadGen.current;
     try {
       setOrgLoadError("");
       const org = await myOrg();
+      if (gen !== orgReloadGen.current) return;
       setOrgName(org.name);
       setOrgSlug(org.slug);
       setCurrency(org.currency || "IDR");
@@ -104,6 +111,7 @@ export function AccountScreen({
       setOrgLoaded(true);
       try {
         const b = await billingMe();
+        if (gen !== orgReloadGen.current) return;
         setBilling(b);
         setBillingReadonly(isBillingReadOnly(b.billing_status));
         if (isOwner) setTgChat(b.telegram_chat_id || "");
@@ -111,6 +119,7 @@ export function AccountScreen({
         /* keep previous billingReadonly */
       }
     } catch (e) {
+      if (gen !== orgReloadGen.current) return;
       setOrgLoadError(e instanceof Error ? e.message : "Failed to load company");
     }
   };
@@ -126,7 +135,7 @@ export function AccountScreen({
       });
       if (gen !== reqReloadGen.current) return;
       setMine(mineRows);
-      setMineHasMore(mineRows.length >= PAGE);
+      setMineHasMore(hasMorePage(mineRows.length, PAGE));
     } catch (e) {
       if (gen !== reqReloadGen.current) return;
       // Retain previous personal requests on refresh failure.
@@ -141,7 +150,7 @@ export function AccountScreen({
       });
       if (gen !== reqReloadGen.current) return;
       setRequests(teamRows);
-      setTeamHasMore(teamRows.length >= PAGE);
+      setTeamHasMore(hasMorePage(teamRows.length, PAGE));
     } catch (e) {
       if (gen !== reqReloadGen.current) return;
       // Retain previous team requests on refresh failure.
@@ -161,8 +170,8 @@ export function AccountScreen({
         offset,
       });
       if (gen !== reqReloadGen.current) return;
-      setMine((prev) => [...prev, ...more]);
-      setMineHasMore(more.length >= PAGE);
+      setMine((prev) => mergeById(prev, more));
+      setMineHasMore(hasMorePage(more.length, PAGE));
     } catch (e) {
       if (gen !== reqReloadGen.current) return;
       setReqLoadError(e instanceof Error ? e.message : "Load more failed");
@@ -183,8 +192,8 @@ export function AccountScreen({
         offset,
       });
       if (gen !== reqReloadGen.current) return;
-      setRequests((prev) => [...prev, ...more]);
-      setTeamHasMore(more.length >= PAGE);
+      setRequests((prev) => mergeById(prev, more));
+      setTeamHasMore(hasMorePage(more.length, PAGE));
     } catch (e) {
       if (gen !== reqReloadGen.current) return;
       setReqLoadError(e instanceof Error ? e.message : "Load more failed");
@@ -194,13 +203,16 @@ export function AccountScreen({
   };
 
   const refreshSuggestedAmount = async () => {
+    const gen = ++suggestGen.current;
+    const requestKind = kind;
     try {
       const b = await myBalance();
+      if (gen !== suggestGen.current || requestKind !== kindRef.current) return;
       const available =
-        kind === "expense_payout"
+        requestKind === "expense_payout"
           ? (b.available_spendings ?? b.spendings)
           : (b.available_cash ?? b.cash_on_hand);
-      if (!amount.trim()) setAmount(available > 0 ? String(available) : "");
+      setAmount((prev) => (prev.trim() ? prev : available > 0 ? String(available) : ""));
     } catch {
       // Keep previous suggested amount on a transient balance blip.
     }

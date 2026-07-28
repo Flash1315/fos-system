@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, Share, View, StyleSheet } from "react-native";
 import { BILLING_READONLY_MSG, billingMe, inviteUser, isBillingReadOnly, myOrg, onResumeRefresh, type InviteResult, type User } from "../api";
 import { alertFosError } from "../alertError";
@@ -28,6 +28,7 @@ export function InviteScreen({
   const [slugError, setSlugError] = useState("");
   const [role, setRole] = useState<"employee" | "manager" | "owner">("employee");
   const [billingReadonly, setBillingReadonly] = useState(false);
+  const slugGen = useRef(0);
   const [lastInvite, setLastInvite] = useState<{
     res: InviteResult;
     email: string;
@@ -40,11 +41,14 @@ export function InviteScreen({
       : (["employee"] as const);
 
   const loadSlug = async () => {
+    const gen = ++slugGen.current;
     try {
       setSlugError("");
       const org = await myOrg();
+      if (gen !== slugGen.current) return;
       setOrgSlug(org.slug);
     } catch (e) {
+      if (gen !== slugGen.current) return;
       // Keep last-known slug on a resume/network blip.
       setSlugError(e instanceof Error ? e.message : "Could not load company slug");
     }

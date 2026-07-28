@@ -17,6 +17,7 @@ import { alertFosError } from "../alertError";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Row, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
+import { hasMorePage, mergeById } from "../listUtil";
 import { colors } from "../theme";
 
 export function ApproveScreen({
@@ -66,7 +67,7 @@ export function ApproveScreen({
       });
       if (gen !== reloadGen.current) return;
       setRows(list);
-      setHasMore(list.length >= PAGE);
+      setHasMore(hasMorePage(list.length, PAGE));
       try {
         const settle = await pendingSettlementCount();
         if (gen !== reloadGen.current) return;
@@ -95,13 +96,13 @@ export function ApproveScreen({
         offset: rows.length,
       });
       if (gen !== reloadGen.current) return;
-      setRows((prev) => [...prev, ...more]);
-      setHasMore(more.length >= PAGE);
+      setRows((prev) => mergeById(prev, more));
+      setHasMore(hasMorePage(more.length, PAGE));
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setLoadError(e instanceof Error ? e.message : "Load more failed");
     } finally {
-      setLoadingMore(false);
+      if (gen === reloadGen.current) setLoadingMore(false);
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, AppState, type AppStateStatus } from "react-native";
 import {
   getToken,
@@ -53,6 +53,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [recordId, setRecordId] = useState<number | null>(null);
   const [recordReturnTo, setRecordReturnTo] = useState<"home" | "approve" | "ledger">("home");
+  const probeGen = useRef(0);
 
   const openRecord = (id: number, from: "home" | "approve" | "ledger" = "home") => {
     setRecordId(id);
@@ -125,8 +126,10 @@ export default function App() {
     const onChange = (next: AppStateStatus) => {
       if (next !== "active") return;
       if (screen === "boot" || screen === "auth") return;
+      const gen = ++probeGen.current;
       void (async () => {
         const ok = await probeApiLive();
+        if (gen !== probeGen.current) return;
         if (ok) {
           offlineAlerted.current = false;
           notifyResumeRefresh();
@@ -142,7 +145,10 @@ export default function App() {
       })();
     };
     const sub = AppState.addEventListener("change", onChange);
-    return () => sub.remove();
+    return () => {
+      probeGen.current += 1;
+      sub.remove();
+    };
   }, [screen]);
 
   if (screen === "boot") return <Loading />;

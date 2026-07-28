@@ -3,6 +3,7 @@ import { Alert, FlatList, Pressable, RefreshControl, Text, StyleSheet, View } fr
 import { listMembers, onResumeRefresh, orgRecords, type MoneyRecord, type User } from "../api";
 import { Btn, Chip, Field, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen, statusColor } from "../format";
+import { hasMorePage, mergeById } from "../listUtil";
 import { colors } from "../theme";
 
 export function LedgerScreen({
@@ -27,6 +28,7 @@ export function LedgerScreen({
   const [loadError, setLoadError] = useState("");
   const [membersError, setMembersError] = useState("");
   const reloadGen = useRef(0);
+  const membersGen = useRef(0);
   const PAGE = 40;
 
   useEffect(() => {
@@ -35,10 +37,14 @@ export function LedgerScreen({
   }, [search]);
 
   const loadMembers = async () => {
+    const gen = ++membersGen.current;
     try {
       setMembersError("");
-      setMembers(await listMembers());
+      const next = await listMembers();
+      if (gen !== membersGen.current) return;
+      setMembers(next);
     } catch (e) {
+      if (gen !== membersGen.current) return;
       // Keep last-known teammate filter choices on a transient directory blip.
       setMembersError(e instanceof Error ? e.message : "Failed to load teammates");
     }
@@ -66,7 +72,7 @@ export function LedgerScreen({
       const list = await orgRecords({ ...listParams(), offset: 0 });
       if (gen !== reloadGen.current) return;
       setRows(list);
-      setHasMore(list.length >= PAGE);
+      setHasMore(hasMorePage(list.length, PAGE));
     } catch (e) {
       if (gen !== reloadGen.current) return;
       // Retain previous rows/hasMore on refresh failure (stale-data soft-fail).
@@ -83,13 +89,13 @@ export function LedgerScreen({
     try {
       const more = await orgRecords({ ...listParams(), offset: rows.length });
       if (gen !== reloadGen.current) return;
-      setRows((prev) => [...prev, ...more]);
-      setHasMore(more.length >= PAGE);
+      setRows((prev) => mergeById(prev, more));
+      setHasMore(hasMorePage(more.length, PAGE));
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setLoadError(e instanceof Error ? e.message : "Load more failed");
     } finally {
-      setLoadingMore(false);
+      if (gen === reloadGen.current) setLoadingMore(false);
     }
   };
 

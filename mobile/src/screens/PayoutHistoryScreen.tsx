@@ -5,6 +5,7 @@ import { alertFosError } from "../alertError";
 import { NoteModal } from "../components/NoteModal";
 import { Btn, Chip, Screen, Sub, TopBar } from "../components/ui";
 import { formatMoney, formatWhen } from "../format";
+import { hasMorePage, mergeById } from "../listUtil";
 import { colors } from "../theme";
 
 type PayoutRow = {
@@ -49,16 +50,21 @@ export function PayoutHistoryScreen({
   const [loadError, setLoadError] = useState("");
   const [membersError, setMembersError] = useState("");
   const reloadGen = useRef(0);
+  const membersGen = useRef(0);
   const voidIdemRef = useRef<string | null>(null);
   const voidSlotRef = useRef<number | null>(null);
   const PAGE = 40;
 
   const loadMembers = async () => {
+    const gen = ++membersGen.current;
     if (!isManager) return;
     try {
       setMembersError("");
-      setMembers(await listMembers());
+      const next = await listMembers();
+      if (gen !== membersGen.current) return;
+      setMembers(next);
     } catch (e) {
+      if (gen !== membersGen.current) return;
       // Keep last-known teammate filter choices on a transient directory blip.
       setMembersError(e instanceof Error ? e.message : "Failed to load teammates");
     }
@@ -92,7 +98,7 @@ export function PayoutHistoryScreen({
             });
       if (gen !== reloadGen.current) return;
       setRows(data);
-      setHasMore(data.length >= PAGE);
+      setHasMore(hasMorePage(data.length, PAGE));
     } catch (e) {
       if (gen !== reloadGen.current) return;
       // Retain previous rows/hasMore on refresh failure (stale-data soft-fail).
@@ -125,13 +131,13 @@ export function PayoutHistoryScreen({
               offset: rows.length,
             });
       if (gen !== reloadGen.current) return;
-      setRows((prev) => [...prev, ...more]);
-      setHasMore(more.length >= PAGE);
+      setRows((prev) => mergeById(prev, more));
+      setHasMore(hasMorePage(more.length, PAGE));
     } catch (e) {
       if (gen !== reloadGen.current) return;
       setLoadError(e instanceof Error ? e.message : "Load more failed");
     } finally {
-      setLoadingMore(false);
+      if (gen === reloadGen.current) setLoadingMore(false);
     }
   };
 

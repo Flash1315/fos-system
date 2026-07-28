@@ -248,10 +248,12 @@ export function ApproveScreen({
       if (res.skipped > 0) {
         const cash = res.skipped_insufficient_cash || 0;
         const inactive = res.skipped_inactive || 0;
-        const other = res.skipped - cash - inactive;
+        const closedSkip = res.skipped_closed_cycle || 0;
+        const other = res.skipped - cash - inactive - closedSkip;
         const parts = [`Rejected ${res.decided.length}`];
         if (cash > 0) parts.push(`skipped ${cash} (insufficient cash)`);
         if (inactive > 0) parts.push(`skipped ${inactive} (inactive teammate)`);
+        if (closedSkip > 0) parts.push(`skipped ${closedSkip} (settled period)`);
         if (other > 0) parts.push(`skipped ${other} (already decided or missing)`);
         Alert.alert("Fos", parts.join("; "));
       }

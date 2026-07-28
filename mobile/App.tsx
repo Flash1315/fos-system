@@ -4,6 +4,7 @@ import {
   getToken,
   logout,
   me,
+  notifyResumeRefresh,
   probeApiLive,
   saveToken,
   setUnauthorizedHandler,
@@ -122,6 +123,7 @@ export default function App() {
         const ok = await probeApiLive();
         if (ok) {
           offlineAlerted.current = false;
+          notifyResumeRefresh();
           return;
         }
         if (offlineAlerted.current) return;

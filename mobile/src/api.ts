@@ -29,6 +29,8 @@ export const API_URL = resolveApiUrl();
 
 const TOKEN_KEY = "fos_token";
 let cachedToken: string | null = null;
+let cachedMediaToken: string | null = null;
+let cachedMediaTokenExpMs = 0;
 const REQUEST_TIMEOUT_MS = 30000;
 const UPLOAD_TIMEOUT_MS = 120000;
 type UnauthorizedHandler = () => void;
@@ -178,6 +180,8 @@ export async function saveToken(token: string) {
 
 export async function clearToken() {
   cachedToken = null;
+  cachedMediaToken = null;
+  cachedMediaTokenExpMs = 0;
   await storageDelete(TOKEN_KEY);
 }
 
@@ -232,20 +236,23 @@ async function request<T>(
   init: RequestInit = {},
   opts?: { timeoutMs?: number; retries?: number },
 ): Promise<T> {
-  const maxAttempts = Math.max(1, (opts?.retries ?? 2) + 1);
+  const auth = await authHeaders();
+  const requestToken = auth.Authorization?.startsWith("Bearer ")
+    ? auth.Authorization.slice(7)
+    : null;
+  const headers: Record<string, string> = {
+    ...(isFormDataBody(init.body) ? {} : { "Content-Type": "application/json" }),
+    ...auth,
+    ...((init.headers as Record<string, string>) || {}),
+  };
+  // Keep the same client request id + Idempotency-Key across soft retries.
+  if (!headers["X-Request-Id"]) headers["X-Request-Id"] = newClientRequestId();
+  const method = (init.method || "GET").toUpperCase();
+  const hasIdem = !!(headers["Idempotency-Key"] || headers["idempotency-key"]);
+  const safeRetry = method === "GET" || hasIdem;
+  const maxAttempts = Math.max(1, (opts?.retries ?? (safeRetry ? 2 : 0)) + 1);
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const auth = await authHeaders();
-    const requestToken = auth.Authorization?.startsWith("Bearer ")
-      ? auth.Authorization.slice(7)
-      : null;
-    const headers: Record<string, string> = {
-      ...(isFormDataBody(init.body) ? {} : { "Content-Type": "application/json" }),
-      ...auth,
-      ...((init.headers as Record<string, string>) || {}),
-    };
-    // Keep the same client request id + Idempotency-Key across soft retries.
-    if (!headers["X-Request-Id"]) headers["X-Request-Id"] = newClientRequestId();
     const controller = new AbortController();
     const timeoutMs = opts?.timeoutMs ?? REQUEST_TIMEOUT_MS;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -316,67 +323,73 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
     ...((init.headers as Record<string, string>) || {}),
   };
   if (!headers["X-Request-Id"]) headers["X-Request-Id"] = newClientRequestId();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  let res: Response;
-  try {
-    res = await fetch(`${API_URL}${path}`, {
-      ...init,
-      headers,
-      signal: init.signal || controller.signal,
-    });
-  } catch (e) {
-    if (e instanceof Error && e.name === "AbortError") {
-      throw new Error("Request timed out — check connection and try again");
-    }
-    throw new Error(e instanceof Error ? e.message : "Network request failed");
-  } finally {
-    clearTimeout(timer);
-  }
-  const text = await res.text();
-  if (!res.ok) {
-    if (res.status === 401) {
-      await notifyUnauthorized(requestToken);
-    }
-    let detail = text;
+  const method = (init.method || "GET").toUpperCase();
+  const hasIdem = !!(headers["Idempotency-Key"] || headers["idempotency-key"]);
+  const safeRetry = method === "GET" || hasIdem;
+  const maxAttempts = Math.max(1, (safeRetry ? 2 : 0) + 1);
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let res: Response | null = null;
     try {
-      const data = JSON.parse(text);
-      detail = formatApiError(
-        data,
-        res.statusText || `HTTP ${res.status}`,
-        res.status,
-        res.headers.get("Retry-After"),
-        res.headers.get("X-Request-Id"),
-      );
-    } catch {
-      detail =
-        res.status === 429
-          ? formatApiError(
-              null,
-              res.statusText || `HTTP ${res.status}`,
-              429,
-              res.headers.get("Retry-After"),
-              res.headers.get("X-Request-Id"),
-            )
-          : res.status === 413
+      res = await fetch(`${API_URL}${path}`, {
+        ...init,
+        headers,
+        signal: init.signal || controller.signal,
+      });
+    } catch (e) {
+      lastError =
+        e instanceof Error && e.name === "AbortError"
+          ? new Error("Request timed out — check connection and try again")
+          : new Error(e instanceof Error ? e.message : "Network request failed");
+      if (attempt < maxAttempts && shouldSoftRetry(null, e)) {
+        await sleep(Math.min(1500, 250 * attempt));
+        continue;
+      }
+      throw lastError;
+    } finally {
+      clearTimeout(timer);
+    }
+    const text = await res.text();
+    if (!res.ok) {
+      if (res.status === 401) {
+        await notifyUnauthorized(requestToken);
+      }
+      if (attempt < maxAttempts && shouldSoftRetry(res.status, null) && res.status !== 401) {
+        const retryAfter = parseRetryAfterSec(res.headers.get("Retry-After"));
+        const waitMs =
+          retryAfter != null ? retryAfter * 1000 : Math.min(1500, 300 * attempt);
+        await sleep(waitMs);
+        continue;
+      }
+      let detail = text;
+      try {
+        const data = JSON.parse(text);
+        detail = formatApiError(
+          data,
+          res.statusText || `HTTP ${res.status}`,
+          res.status,
+          res.headers.get("Retry-After"),
+          res.headers.get("X-Request-Id"),
+        );
+      } catch {
+        detail =
+          res.status === 429
             ? formatApiError(
                 null,
                 res.statusText || `HTTP ${res.status}`,
-                413,
-                null,
+                429,
+                res.headers.get("Retry-After"),
                 res.headers.get("X-Request-Id"),
               )
-          : formatApiError(
-              null,
-              res.statusText || `HTTP ${res.status}`,
-              res.status,
-              null,
-              res.headers.get("X-Request-Id"),
-            );
+            : text || res.statusText || `HTTP ${res.status}`;
+      }
+      throw new Error(detail);
     }
-    throw new Error(detail);
+    return text;
   }
-  return text;
+  throw lastError instanceof Error ? lastError : new Error("Request failed");
 }
 
 function formatApiError(
@@ -472,6 +485,27 @@ export function login(body: {
 
 export function me() {
   return request<User>("/auth/me");
+}
+
+type ResumeListener = () => void;
+const resumeListeners = new Set<ResumeListener>();
+
+/** Screens subscribe to refresh after AppState reconnect. */
+export function onResumeRefresh(listener: ResumeListener): () => void {
+  resumeListeners.add(listener);
+  return () => {
+    resumeListeners.delete(listener);
+  };
+}
+
+export function notifyResumeRefresh() {
+  for (const listener of [...resumeListeners]) {
+    try {
+      listener();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /** Cheap liveness probe (no auth) for reconnect UX. */
@@ -771,6 +805,7 @@ export function createRecord(
     created_for_user_id?: number;
     occurred_at?: string;
     approve_now?: boolean;
+    allow_closed_cycle?: boolean;
   },
   opts?: { idempotencyKey?: string },
 ) {
@@ -1265,12 +1300,26 @@ export function mediaUrl(path: string, token?: string | null): string {
   return `${base}${sep}token=${encodeURIComponent(token)}`;
 }
 
+async function getMediaToken(): Promise<string> {
+  const now = Date.now();
+  if (cachedMediaToken && now < cachedMediaTokenExpMs - 30_000) {
+    return cachedMediaToken;
+  }
+  const res = await request<{ access_token: string }>("/records/media-token", {
+    method: "GET",
+  });
+  cachedMediaToken = res.access_token;
+  // API media JWTs are ~15m — refresh a minute early.
+  cachedMediaTokenExpMs = now + 14 * 60 * 1000;
+  return cachedMediaToken;
+}
+
 export async function mediaUrlWithMediaToken(path: string): Promise<string> {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;
   if (!path.startsWith("/media/files/")) {
     return mediaUrl(path);
   }
-  const res = await request<{ access_token: string }>("/records/media-token");
-  return mediaUrl(path, res.access_token);
+  const token = await getMediaToken();
+  return mediaUrl(path, token);
 }

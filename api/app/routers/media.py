@@ -1,7 +1,6 @@
 import hashlib
 import logging
 import re
-import uuid
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import Response
@@ -50,9 +49,8 @@ async def upload_photo(
     )
     key = normalize_idem_key(idempotency_key)
     data = await read_upload_capped(file)
-    fp = (
-        fingerprint({"bytes_sha": hashlib.sha256(data).hexdigest()}) if key else None
-    )
+    content_sha = hashlib.sha256(data).hexdigest()
+    fp = fingerprint({"bytes_sha": content_sha}) if key else None
     if key:
         hit = lookup_idem(
             db,
@@ -70,7 +68,8 @@ async def upload_photo(
 
     require_org_writable(db, user.organization_id)
     suffix, content_type = detect_image(data)
-    name = f"{uuid.uuid4().hex}{suffix}"
+    # Content-addressed name (32 hex) — same bytes → same path, fewer orphan uploads.
+    name = f"{content_sha[:32]}{suffix}"
     try:
         url = await run_in_threadpool(
             storage.store_photo,

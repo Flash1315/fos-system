@@ -46,7 +46,11 @@ def _s3_client():
 
 
 def store_photo(org_id: int, filename: str, data: bytes, content_type: str = "image/jpeg") -> str:
-    """Persist bytes; return API-relative photo_url path."""
+    """Persist bytes; return API-relative photo_url path.
+
+    Content-addressed callers reuse the same filename for identical bytes; local
+    storage skips rewrite when the object already exists.
+    """
     if media_backend() == "s3":
         key = f"{org_id}/{filename}"
         try:
@@ -66,12 +70,36 @@ def store_photo(org_id: int, filename: str, data: bytes, content_type: str = "im
         org_dir = ensure_upload_root() / str(org_id)
         org_dir.mkdir(parents=True, exist_ok=True)
         dest = org_dir / filename
+        if dest.is_file() and dest.stat().st_size == len(data):
+            return f"/media/files/{org_id}/{filename}"
         dest.write_bytes(data)
     except OSError as exc:
         logger.warning("local put failed org=%s err=%s", org_id, type(exc).__name__)
         raise RuntimeError("Media storage unavailable") from exc
     logger.info("photo uploaded local org=%s", org_id)
     return f"/media/files/{org_id}/{filename}"
+
+
+def delete_photo(org_id: int, filename: str) -> bool:
+    """Best-effort delete; returns True when the object was removed."""
+    if media_backend() == "s3":
+        key = f"{org_id}/{filename}"
+        try:
+            client = _s3_client()
+            client.delete_object(Bucket=settings.s3_bucket.strip(), Key=key)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("s3 delete failed org=%s err=%s", org_id, type(exc).__name__)
+            return False
+    try:
+        path = local_path(org_id, filename)
+        if path.is_file():
+            path.unlink()
+            return True
+        return False
+    except (OSError, ValueError) as exc:
+        logger.warning("local delete failed org=%s err=%s", org_id, type(exc).__name__)
+        return False
 
 
 def content_type_for(filename: str) -> str:

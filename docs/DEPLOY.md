@@ -36,7 +36,7 @@ DB_POOL_RECYCLE=1800
 ## 4. Boot / health
 
 - Probe `GET /health/live` (liveness) and `GET /health/ready` (DB)
-- Optional scrape `GET /metrics` (set `METRICS_TOKEN` in production)
+- `METRICS_TOKEN` is **required** in production; scrapers call `GET /metrics` with `Authorization: Bearer <token>`
 - Production refuses `CORS_ORIGINS=*`; schema via Alembic only (no create_all)
 - OpenAPI/docs are hidden when `ENVIRONMENT=production`
 - Example compose shape: [`docker-compose.prod.example.yml`](../docker-compose.prod.example.yml)

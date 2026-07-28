@@ -512,6 +512,8 @@ export function CreateScreen({
           created_for_user_id: forUserId ?? undefined,
           occurred_at: occurredDate.trim() ? `${occurredDate.trim()}T12:00:00` : undefined,
           approve_now: isManager && approveNow,
+          // Confirmed closed-cycle alert before Review when approve_now + settled period.
+          allow_closed_cycle: !!(isManager && approveNow && closedCycleHint),
         },
         { idempotencyKey: idemKeyRef.current },
       );

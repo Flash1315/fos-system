@@ -2,14 +2,25 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+        env_ignore_empty=True,
+        case_sensitive=False,
+    )
 
     app_name: str = "Fos"
     secret_key: str = "dev-secret-change-me"
     database_url: str = "sqlite:///./fos.db"
     access_token_expire_minutes: int = 60 * 24 * 7
+    media_token_expire_minutes: int = 15
     cors_origins: str = "*"
     algorithm: str = "HS256"
+    jwt_issuer: str = "fos"
+    jwt_audience: str = "fos"
+    json_body_limit_bytes: int = 256 * 1024
+    upload_body_limit_bytes: int = 9 * 1024 * 1024
+    readiness_timeout_seconds: float = 3.0
 
     # Optional SMTP — when smtp_host is set, invite/reset emails are sent
     smtp_host: str = ""
@@ -18,6 +29,7 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = ""
     smtp_use_tls: bool = True
+    smtp_timeout_seconds: float = 5.0
     public_app_url: str = ""  # e.g. https://app.example.com — shown in invite emails
 
     # Media: local (default) or s3

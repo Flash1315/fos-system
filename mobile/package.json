@@ -1,6 +1,6 @@
 {
   "name": "fos",
-  "version": "0.7.230",
+  "version": "0.7.255",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.7",

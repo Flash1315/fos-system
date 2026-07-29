@@ -6,6 +6,7 @@ import logging
 import re
 import secrets
 import uuid
+from concurrent.futures import ThreadPoolExecutor, wait
 from urllib.parse import parse_qsl, urlparse
 
 from app.config import settings
@@ -15,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 _INSECURE_SECRETS = ("dev-secret-change-me", "change-me-in-production", "")
 _ALLOWED_ENVS = {"development", "dev", "test", "production", "prod"}
+_ALLOWED_LOG_FORMATS = {"text", "json"}
+_ALLOWED_LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}
+_MAX_VALIDATION_ERRORS = 20
+_MAX_VALIDATION_DETAIL = 2048
 
 
 def _validate_runtime_settings() -> str:
@@ -42,6 +47,46 @@ def _validate_runtime_settings() -> str:
         raise RuntimeError("HSTS_MAX_AGE must be between 0 and 63072000")
     if settings.enable_hsts and hsts <= 0:
         raise RuntimeError("HSTS_MAX_AGE must be > 0 when ENABLE_HSTS is true")
+    log_format = (settings.log_format or "").strip().lower()
+    if log_format not in _ALLOWED_LOG_FORMATS:
+        raise RuntimeError("LOG_FORMAT must be text or json")
+    log_level = (settings.log_level or "").strip().upper()
+    if log_level not in _ALLOWED_LOG_LEVELS:
+        raise RuntimeError(
+            f"LOG_LEVEL must be one of {sorted(_ALLOWED_LOG_LEVELS)}"
+        )
+    pool_recycle = int(settings.db_pool_recycle or 0)
+    if pool_recycle < 60 or pool_recycle > 86_400:
+        raise RuntimeError("DB_POOL_RECYCLE must be between 60 and 86400")
+    pool_timeout = int(settings.db_pool_timeout or 0)
+    if pool_timeout < 1 or pool_timeout > 300:
+        raise RuntimeError("DB_POOL_TIMEOUT must be between 1 and 300")
+    connect_timeout = int(settings.db_connect_timeout or 0)
+    if connect_timeout < 1 or connect_timeout > 120:
+        raise RuntimeError("DB_CONNECT_TIMEOUT must be between 1 and 120")
+    if not (1024 <= int(settings.json_body_limit_bytes or 0) <= 10 * 1024 * 1024):
+        raise RuntimeError(
+            "JSON_BODY_LIMIT_BYTES must be between 1024 and 10485760"
+        )
+    if not (
+        int(settings.json_body_limit_bytes)
+        <= int(settings.upload_body_limit_bytes or 0)
+        <= 100 * 1024 * 1024
+    ):
+        raise RuntimeError(
+            "UPLOAD_BODY_LIMIT_BYTES must be at least JSON_BODY_LIMIT_BYTES "
+            "and at most 104857600"
+        )
+    if not (1 <= int(settings.media_token_expire_minutes or 0) <= 60):
+        raise RuntimeError("MEDIA_TOKEN_EXPIRE_MINUTES must be between 1 and 60")
+    smtp_timeout = float(settings.smtp_timeout_seconds or 0)
+    if smtp_timeout < 0.5 or smtp_timeout > 60:
+        raise RuntimeError("SMTP_TIMEOUT_SECONDS must be between 0.5 and 60")
+    readiness_timeout = float(settings.readiness_timeout_seconds or 0)
+    if readiness_timeout < 0.1 or readiness_timeout > 30:
+        raise RuntimeError("READINESS_TIMEOUT_SECONDS must be between 0.1 and 30")
+    if not (1 <= int(settings.smtp_port or 0) <= 65_535):
+        raise RuntimeError("SMTP_PORT must be between 1 and 65535")
     algo = (settings.algorithm or "").strip()
     if algo != "HS256":
         raise RuntimeError(f"ALGORITHM must be HS256 (got {settings.algorithm!r})")
@@ -127,6 +172,8 @@ def _validate_runtime_settings() -> str:
             raise RuntimeError(
                 "METRICS_TOKEN is required in production (protect GET /metrics)"
             )
+        if len((settings.metrics_token or "").strip()) < 32:
+            raise RuntimeError("METRICS_TOKEN must be at least 32 characters in production")
         try:
             parsed_db = urlparse((settings.database_url or "").strip())
         except ValueError as exc:
@@ -257,8 +304,22 @@ app.add_middleware(
 )
 
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{8,128}$")
-_MAX_JSON_BODY = 256 * 1024
-_MAX_UPLOAD_BODY = 9 * 1024 * 1024
+
+
+def _security_headers() -> dict[str, str]:
+    """Headers shared by normal, validation, and early middleware responses."""
+    return {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "no-referrer",
+        "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "X-Permitted-Cross-Domain-Policies": "none",
+        "Content-Security-Policy": "default-src 'none'",
+        "Cache-Control": "no-store",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
 
 
 def _ensure_request_id(request: Request) -> str:
@@ -278,15 +339,8 @@ def _json_error(
     request: Request,
     headers: dict[str, str] | None = None,
 ) -> JSONResponse:
-    out = {
-        "X-Content-Type-Options": "nosniff",
-        "X-Frame-Options": "DENY",
-        "Referrer-Policy": "no-referrer",
-        "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
-        "Cross-Origin-Opener-Policy": "same-origin",
-        "Cache-Control": "no-store",
-        "X-Request-Id": _ensure_request_id(request),
-    }
+    out = _security_headers()
+    out["X-Request-Id"] = _ensure_request_id(request)
     if headers:
         out.update(headers)
     if settings.enable_hsts:
@@ -363,16 +417,8 @@ class RequestLogMetricsMiddleware(BaseHTTPMiddleware):
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
-        response.headers.setdefault(
-            "Permissions-Policy",
-            "geolocation=(), microphone=(), camera=()",
-        )
-        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
-        # Authenticated API / media — avoid shared caches storing bearer-scoped bodies
-        response.headers.setdefault("Cache-Control", "no-store")
+        for name, value in _security_headers().items():
+            response.headers.setdefault(name, value)
         if settings.enable_hsts:
             max_age = max(0, int(settings.hsts_max_age or 0))
             response.headers.setdefault(
@@ -389,19 +435,32 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
         if request.method not in ("POST", "PUT", "PATCH"):
             return await call_next(request)
         path = request.url.path.rstrip("/")
-        limit = _MAX_UPLOAD_BODY if path.endswith("/media/photo") else _MAX_JSON_BODY
+        limit = (
+            int(settings.upload_body_limit_bytes)
+            if path.endswith("/media/photo")
+            else int(settings.json_body_limit_bytes)
+        )
         raw = request.headers.get("content-length")
-        if raw and raw.isdigit():
-            if int(raw) > limit:
+        if raw is not None:
+            if not re.fullmatch(r"[0-9]+", raw):
+                return _json_error(400, "Invalid Content-Length", request=request)
+            try:
+                content_length = int(raw)
+            except (ValueError, OverflowError):
+                return _json_error(400, "Invalid Content-Length", request=request)
+            if content_length > limit:
                 return _json_error(413, "Request body too large", request=request)
             return await call_next(request)
 
         # No Content-Length — buffer with a hard cap (JSON paths; uploads usually send CL).
-        body = b""
+        chunks: list[bytes] = []
+        body_size = 0
         async for chunk in request.stream():
-            body += chunk
-            if len(body) > limit:
+            body_size += len(chunk)
+            if body_size > limit:
                 return _json_error(413, "Request body too large", request=request)
+            chunks.append(chunk)
+        body = b"".join(chunks)
 
         async def receive():
             return {"type": "http.request", "body": body, "more_body": False}
@@ -469,17 +528,7 @@ app.include_router(billing_router.router)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     request_id = _ensure_request_id(request)
     logger.exception("unhandled error request_id=%s", request_id)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"},
-        headers={
-            "X-Request-Id": request_id,
-            "X-Content-Type-Options": "nosniff",
-            "X-Frame-Options": "DENY",
-            "Referrer-Policy": "no-referrer",
-            "Cache-Control": "no-store",
-        },
-    )
+    return _json_error(500, "Internal server error", request=request)
 
 
 from fastapi.exceptions import RequestValidationError  # noqa: E402
@@ -489,14 +538,19 @@ from fastapi.exceptions import RequestValidationError  # noqa: E402
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Flatten Pydantic errors to a single detail string (mobile-friendly)."""
     parts: list[str] = []
-    for err in exc.errors():
+    errors = exc.errors()
+    for err in errors[:_MAX_VALIDATION_ERRORS]:
         loc = err.get("loc") or ()
         # Skip leading "body" / "query" / "path"
         fields = [str(x) for x in loc if x not in ("body", "query", "path", "header")]
         where = ".".join(fields)
         msg = str(err.get("msg") or "invalid")
         parts.append(f"{where}: {msg}" if where else msg)
+    if len(errors) > _MAX_VALIDATION_ERRORS:
+        parts.append(f"{len(errors) - _MAX_VALIDATION_ERRORS} more error(s)")
     detail = "; ".join(parts) if parts else "Validation error"
+    if len(detail) > _MAX_VALIDATION_DETAIL:
+        detail = detail[: _MAX_VALIDATION_DETAIL - 1] + "…"
     return _json_error(422, detail, request=request)
 
 
@@ -532,12 +586,38 @@ def health_live():
 @app.get("/health/ready")
 def health_ready(request: Request):
     """Readiness — requires DB. Media/limiter status reported but do not fail ready."""
-    from app.services.rate_limit import limiter_health
+    from app.services.rate_limit import client_ip, enforce_rate_limit, limiter_health
     from app.services.storage import media_backend, media_health
 
-    db_status = _db_ping()
-    media_status = media_health()
-    limiter_status = limiter_health()
+    enforce_rate_limit(
+        f"health-ready:ip:{client_ip(request)}",
+        limit=120,
+        window_sec=60,
+    )
+    timeout = float(settings.readiness_timeout_seconds)
+    executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="fos-ready")
+    futures = {
+        "db": executor.submit(_db_ping),
+        "media": executor.submit(media_health),
+        "limiter": executor.submit(limiter_health),
+    }
+    done, pending = wait(set(futures.values()), timeout=timeout)
+    statuses: dict[str, str] = {}
+    for name, future in futures.items():
+        if future not in done:
+            statuses[name] = "timeout"
+            future.cancel()
+            continue
+        try:
+            value = future.result()
+            statuses[name] = value if isinstance(value, str) else "error"
+        except Exception:  # noqa: BLE001
+            logger.warning("health %s check failed", name, exc_info=True)
+            statuses[name] = "error"
+    executor.shutdown(wait=False, cancel_futures=True)
+    db_status = statuses["db"]
+    media_status = statuses["media"]
+    limiter_status = statuses["limiter"]
     body = {
         "ok": db_status == "ok",
         "app": settings.app_name,
@@ -577,7 +657,11 @@ def metrics(request: Request):
         if auth.lower().startswith("bearer "):
             bearer = auth[7:].strip()
         if not (_tok_ok(got, expected) or _tok_ok(bearer, expected)):
-            raise HTTPException(401, "Metrics token required")
+            raise HTTPException(
+                401,
+                "Metrics token required",
+                headers={"WWW-Authenticate": 'Bearer realm="metrics"'},
+            )
     enforce_rate_limit(f"metrics:ip:{client_ip(request)}", limit=30, window_sec=60)
     if expected:
         enforce_rate_limit("metrics:token", limit=60, window_sec=60)

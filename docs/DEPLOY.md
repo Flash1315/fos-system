@@ -17,6 +17,8 @@ DATABASE_URL=postgresql+psycopg2://USER:PASS@HOST:5432/fos?sslmode=require
 DB_POOL_SIZE=5
 DB_MAX_OVERFLOW=10
 DB_POOL_RECYCLE=1800
+DB_POOL_TIMEOUT=30
+DB_CONNECT_TIMEOUT=10
 ```
 
 4. Production **refuses** SQLite `DATABASE_URL`.
@@ -29,6 +31,8 @@ DB_POOL_RECYCLE=1800
 - Terminate TLS at a reverse proxy; `ENABLE_HSTS=true` only behind HTTPS
 - If the proxy sets client IPs: `TRUST_X_FORWARDED_FOR=true` and `TRUSTED_PROXY_CIDRS=…`
 - Keep `RATE_LIMIT_ENABLED=true` (required in production)
+- Request ceilings are configurable with `JSON_BODY_LIMIT_BYTES` (default 256 KiB)
+  and `UPLOAD_BODY_LIMIT_BYTES` (default 9 MiB).
 
 ## 3. Media
 
@@ -38,6 +42,7 @@ DB_POOL_RECYCLE=1800
 ## 4. Boot / health
 
 - Probe `GET /health/live` (liveness; use for container healthchecks) and `GET /health/ready` (DB; also reports `media` status without failing ready on media blips)
+- `READINESS_TIMEOUT_SECONDS` (default `3`) caps readiness dependency checks.
 - Live/ready responses send `Cache-Control: no-store`
 - Authenticated media file responses send `Cache-Control: no-store`
 - Invite endpoints enforce per-org `invite-org:` rate limits
@@ -71,6 +76,8 @@ DB_POOL_RECYCLE=1800
 - Ready reports `limiter` (`memory` / `redis` / `redis_error`) without failing on Redis blips; multi-worker should set `RATE_LIMIT_REDIS_URL`
 - CSV export is rate-limited per user (10/min) and per org (20/min)
 - `METRICS_TOKEN` is **required** in production; scrapers call `GET /metrics` with `Authorization: Bearer <token>`
+- `MEDIA_TOKEN_EXPIRE_MINUTES` (default `15`) controls receipt-image token lifetime.
+- `SMTP_TIMEOUT_SECONDS` (default `5`) caps optional mail delivery attempts.
 - Production refuses `CORS_ORIGINS=*`; schema via Alembic only (no create_all)
 - OpenAPI/docs are hidden when `ENVIRONMENT=production` (`/docs`, `/redoc`, `/openapi.json`)
 - Example compose shape: [`docker-compose.prod.example.yml`](../docker-compose.prod.example.yml)

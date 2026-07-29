@@ -8,10 +8,6 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Keep invite/reset HTTP paths snappy; SMTP failures never fail the API.
-_SMTP_TIMEOUT_SEC = 5
-
-
 def email_configured() -> bool:
     return bool(settings.smtp_host.strip())
 
@@ -28,7 +24,9 @@ def send_email(to: str, subject: str, body: str) -> bool:
     msg.set_content(body)
     try:
         with smtplib.SMTP(
-            settings.smtp_host, settings.smtp_port, timeout=_SMTP_TIMEOUT_SEC
+            settings.smtp_host,
+            settings.smtp_port,
+            timeout=float(settings.smtp_timeout_seconds),
         ) as server:
             if settings.smtp_use_tls:
                 server.starttls()

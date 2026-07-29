@@ -1,0 +1,73 @@
+# Production-shaped example — do NOT use the default docker-compose.yml as a public deploy.
+# Copy to docker-compose.prod.yml, set secrets via env file / orchestrator, and prefer a
+# managed Postgres (replace the `db` service) with SSL in DATABASE_URL.
+#
+#   cp docker-compose.prod.example.yml docker-compose.prod.yml
+#   # edit secrets, CORS, TRUSTED_PROXY_CIDRS, PUBLIC_APP_URL, METRICS_TOKEN, …
+#   docker compose -f docker-compose.prod.yml up --build -d
+#
+# Health: container healthcheck uses /health/live (liveness). Orchestrators that
+# distinguish readiness should also probe /health/ready (DB; includes media signal).
+# Production hides /docs /redoc /openapi.json; probes send Cache-Control: no-store.
+
+services:
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: Fos
+      ENVIRONMENT: production
+      SECRET_KEY: replace-with-32plus-char-secret-not-a-default
+      DATABASE_URL: postgresql+psycopg2://fos:CHANGE_ME@db:5432/fos
+      # Or managed PG: postgresql+psycopg2://user:pass@host:5432/fos?sslmode=require
+      DB_POOL_SIZE: "5"
+      DB_MAX_OVERFLOW: "10"
+      DB_SSLMODE: require
+      ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
+      CORS_ORIGINS: https://app.example.com
+      RATE_LIMIT_ENABLED: "true"
+      # RATE_LIMIT_REDIS_URL: redis://redis:6379/0
+      ENABLE_HSTS: "true"
+      TRUST_X_FORWARDED_FOR: "true"
+      TRUSTED_PROXY_CIDRS: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+      MEDIA_BACKEND: local
+      # MEDIA_BACKEND: s3
+      # S3_BUCKET: …
+      # S3_ACCESS_KEY: …
+      # S3_SECRET_KEY: …
+      PUBLIC_APP_URL: https://app.example.com
+      # Required in production — scrapers must send Authorization: Bearer <token>
+      METRICS_TOKEN: replace-with-long-random-metrics-token
+    volumes:
+      - fos_uploads_prod:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fos
+      POSTGRES_PASSWORD: CHANGE_ME
+      POSTGRES_DB: fos
+    # No host publish — reach Postgres only on the compose network
+    volumes:
+      - fos_pg_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fos -d fos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  fos_pg_prod:
+  fos_uploads_prod:

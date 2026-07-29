@@ -1,0 +1,278 @@
+name: API and mobile checks
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Dependency lock gate
+        working-directory: .
+        run: test -f api/requirements.lock.txt
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.lock.txt
+          pip install -r requirements-dev.txt
+      - name: Dependency audit
+        run: |
+          python -m pip install pip-audit
+          # python-jose pulls ecdsa; PYSEC-2026-1325 has no fixed release and
+          # affects ECDSA signing/ECDH, while this API is configured for HS256.
+          pip-audit -r requirements.lock.txt --ignore-vuln PYSEC-2026-1325
+      - name: Test
+        env:
+          SECRET_KEY: ci-secret
+          DATABASE_URL: sqlite:////tmp/fos-ci.db
+        run: PYTHONPATH=. pytest -q
+
+  mobile-tsc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit smoke
+        run: node scripts/unit-smoke.mjs
+      - name: Dependency audit
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+      - name: Expo config gate
+        run: |
+          set -euo pipefail
+          # Missing URL must fail for production env
+          if EXPO_PUBLIC_APP_ENV=production node -e "require('./app.config.js')()"; then
+            echo "expected production config without URL to fail" >&2
+            exit 1
+          fi
+          EXPO_PUBLIC_APP_ENV=production EXPO_PUBLIC_API_URL=https://api.example.com \
+            npx expo config --type public >/tmp/fos-expo-config.json
+          grep -q 'api.example.com' /tmp/fos-expo-config.json
+
+  docker-api-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Hardening inventory
+        run: python3 scripts/audit_hardening.py
+      - name: Version sync
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, re
+          api = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', pathlib.Path("api/app/version.py").read_text()).group(1)
+          pkg = json.loads(pathlib.Path("mobile/package.json").read_text())["version"]
+          app = json.loads(pathlib.Path("mobile/app.json").read_text())["expo"]["version"]
+          lock = json.loads(pathlib.Path("mobile/package-lock.json").read_text())
+          lock_root = lock.get("version")
+          lock_pkg = (lock.get("packages") or {}).get("", {}).get("version")
+          print(f"versions api={api} package={pkg} app={app} lock={lock_root} lock_pkg={lock_pkg}")
+          assert api == pkg == app == lock_root == lock_pkg, (api, pkg, app, lock_root, lock_pkg)
+          PY
+      - name: Build API image
+        run: docker build -t fos-api ./api
+      - name: Health smoke
+        run: |
+          set -euo pipefail
+          docker run -d --name fos-api \
+            -e SECRET_KEY=ci-docker-secret-key-32chars-minxx \
+            -e DATABASE_URL=sqlite:////tmp/fos.db \
+            -e ENVIRONMENT=development \
+            -e ENABLE_HSTS=true \
+            -e HSTS_MAX_AGE=31536000 \
+            -p 8000:8000 \
+            fos-api
+          ok=0
+          for _ in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8000/health/live | grep -q '"ok"'; then
+              headers=$(curl -fsS -D- -o /tmp/fos-live.json http://127.0.0.1:8000/health/live)
+              echo "$headers"
+              echo "$headers" | grep -qi 'cache-control:.*no-store'
+              echo "$headers" | grep -qi 'strict-transport-security:.*max-age=31536000'
+              cat /tmp/fos-live.json
+              ready_headers=$(curl -fsS -D- -o /tmp/fos-ready.json http://127.0.0.1:8000/health/ready)
+              echo "$ready_headers"
+              echo "$ready_headers" | grep -qi 'cache-control:.*no-store'
+              ready=$(cat /tmp/fos-ready.json)
+              echo "$ready"
+              echo "$ready" | grep -q '"db":"ok"'
+              echo "$ready" | grep -q '"limiter"'
+              echo "$ready" | grep -q '"media"'
+              grep -q 'comment-org:' docs/DEPLOY.md
+              grep -q 'team-org:' docs/DEPLOY.md
+              grep -q 'upload-org:' docs/DEPLOY.md
+              grep -q 'telegram-org:' docs/DEPLOY.md
+              grep -q 'records-list-org:' docs/DEPLOY.md
+              grep -q 'record-write-org:' docs/DEPLOY.md
+              grep -q 'org-update-org:' docs/DEPLOY.md
+              grep -q 'settle-cancel-org:' docs/DEPLOY.md
+              grep -q 'balances-read-org:' docs/DEPLOY.md
+              grep -q 'reports-read-org:' docs/DEPLOY.md
+              grep -q 'finance-list-org:' docs/DEPLOY.md
+              grep -q 'password-org:' docs/DEPLOY.md
+              grep -q 'logout-org:' docs/DEPLOY.md
+              grep -q 'accept-invite-org:' docs/DEPLOY.md
+              grep -q 'categories-org:' docs/DEPLOY.md
+              grep -q 'media-token-org:' docs/DEPLOY.md
+              grep -q 'fuel-odo-org:' docs/DEPLOY.md
+              grep -q 'billing-me-org:' docs/DEPLOY.md
+              grep -q 'adjustment-org:' docs/DEPLOY.md
+              grep -q 'payout-org:' docs/DEPLOY.md
+              grep -q 'decide-batch-org:' docs/DEPLOY.md
+              expected=$(python3 -c "import pathlib,re; print(re.search(r'APP_VERSION\s*=\s*\"([^\"]+)\"', pathlib.Path('api/app/version.py').read_text()).group(1))")
+              echo "$ready" | grep -q "\"version\":\"$expected\""
+              # Dev image still exposes OpenAPI; prod hide is source-gated (_IS_PROD).
+              code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/docs)
+              test "$code" = "200"
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ok" != "1" ]; then
+            docker logs fos-api || true
+            exit 1
+          fi
+          docker stop fos-api
+          # Production must refuse SQLite before becoming healthy.
+          docker run -d --name fos-api-prod-bad \
+            -e SECRET_KEY=ci-docker-secret-key-32chars-minxx \
+            -e DATABASE_URL=sqlite:////tmp/fos.db \
+            -e ENVIRONMENT=production \
+            -e CORS_ORIGINS=https://app.example.com \
+            -e METRICS_TOKEN=ci-metrics-token-32charsxxxx \
+            fos-api
+          prod_stopped=0
+          for _ in $(seq 1 10); do
+            if [ "$(docker inspect -f '{{.State.Running}}' fos-api-prod-bad)" != "true" ]; then
+              prod_stopped=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$prod_stopped" != "1" ]; then
+            docker logs fos-api-prod-bad || true
+            docker stop fos-api-prod-bad || true
+            echo "production container unexpectedly stayed running with SQLite" >&2
+            exit 1
+          fi
+          prod_logs=$(docker logs fos-api-prod-bad 2>&1)
+          echo "$prod_logs"
+          echo "$prod_logs" | grep -Eqi 'PostgreSQL|sqlite'
+          # OpenAPI hiding remains source-gated; development /docs was checked above.
+          grep -q '_IS_PROD' api/app/main.py
+          grep -q 'docs_url=None if _IS_PROD' api/app/main.py
+
+  pytest-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: api
+    services:
+      postgres:
+        # Keep the major/minor line explicit; production deployments should pin a digest.
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fos
+          POSTGRES_PASSWORD: fos
+          POSTGRES_DB: fos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fos -d fos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.lock.txt
+          pip install -r requirements-dev.txt
+      - name: Smoke on Postgres
+        env:
+          SECRET_KEY: ci-secret-key-32chars-minimumxx
+          DATABASE_URL: postgresql+psycopg2://fos:fos@localhost:5432/fos
+          RATE_LIMIT_ENABLED: "0"
+        run: |
+          PYTHONPATH=. python - <<'PY'
+          from fastapi.testclient import TestClient
+          from app.main import app
+          with TestClient(app) as client:
+              h = client.get("/health")
+              assert h.status_code == 200, h.text
+              assert h.json()["db"] == "ok"
+              reg = client.post(
+                  "/orgs/register",
+                  json={
+                      "name": "CI PG",
+                      "slug": "ci-pg",
+                      "currency": "IDR",
+                      "owner_email": "ci-pg@example.com",
+                      "owner_name": "CI",
+                      "owner_password": "secret12",
+                      "owner_password_confirm": "secret12",
+                  },
+              )
+              assert reg.status_code == 200, reg.text
+              login = client.post(
+                  "/auth/login",
+                  json={
+                      "email": "ci-pg@example.com",
+                      "password": "secret12",
+                      "organization_slug": "ci-pg",
+                  },
+              )
+              assert login.status_code == 200, login.text
+              live = client.get("/health/live")
+              assert live.status_code == 200
+              assert "no-store" in (live.headers.get("cache-control") or "").lower()
+              ready = client.get("/health/ready")
+              assert ready.status_code == 200
+              assert "no-store" in (ready.headers.get("cache-control") or "").lower()
+              docs = client.get("/docs")
+              assert docs.status_code == 200  # development image
+          print("postgres smoke ok")
+          PY
+      - name: PostgreSQL concurrency
+        env:
+          SECRET_KEY: ci-secret-key-32chars-minimumxx
+          DATABASE_URL: postgresql+psycopg2://fos:fos@localhost:5432/fos
+          RATE_LIMIT_ENABLED: "0"
+        run: PYTHONPATH=. pytest -q tests/test_pg_concurrency.py

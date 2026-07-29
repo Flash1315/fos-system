@@ -1,0 +1,493 @@
+import React, { useEffect, useRef, useState } from "react";
+import { Alert, FlatList, RefreshControl, Share, Text, StyleSheet, View } from "react-native";
+import { useFocusEffect } from "../useFocus";
+import {
+  BILLING_READONLY_MSG,
+  billingMe,
+  idemKeyFor,
+  isBillingReadOnly,
+  listMembers,
+  onResumeRefresh,
+  resetMemberPassword,
+  issueMemberResetToken,
+  makeIdempotencyKey,
+  setMemberActive,
+  setMemberRole,
+  type User,
+} from "../api";
+import { alertFosError } from "../alertError";
+import { NoteModal } from "../components/NoteModal";
+import { Btn, Chip, Label, Screen, Sub, TopBar } from "../components/ui";
+import { passwordStrengthError } from "../format";
+import { colors } from "../theme";
+
+export function TeamScreen({
+  busy,
+  setBusy,
+  currentUser,
+  onBack,
+}: {
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+  currentUser: User;
+  onBack: () => void;
+}) {
+  const [rows, setRows] = useState<User[]>([]);
+  const [billingReadonly, setBillingReadonly] = useState(false);
+  const [resetId, setResetId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [shareError, setShareError] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const reloadGen = useRef(0);
+  const activeIdemRef = useRef<string | null>(null);
+  const activeSlotRef = useRef<string | null>(null);
+  const roleIdemRef = useRef<string | null>(null);
+  const roleSlotRef = useRef<string | null>(null);
+  const resetTokenIdemRef = useRef<string | null>(null);
+  const resetTokenSlotRef = useRef<string | null>(null);
+  const passwordIdemRef = useRef<string | null>(null);
+  const passwordSlotRef = useRef<number | null>(null);
+  const [lastReset, setLastReset] = useState<{
+    name: string;
+    slug: string;
+    email: string;
+    token: string;
+    emailSent?: boolean;
+  } | null>(null);
+
+  const reload = async () => {
+    const gen = ++reloadGen.current;
+    try {
+      setLoadError("");
+      const next = await listMembers();
+      if (gen !== reloadGen.current) return;
+      setRows(next);
+    } catch (e) {
+      if (gen !== reloadGen.current) return;
+      setLoadError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      if (gen === reloadGen.current) setLoading(false);
+    }
+  };
+
+  useFocusEffect(reload);
+
+  useEffect(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => onResumeRefresh(() => {
+    void reload();
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }), []);
+
+  const toggle = async (member: User) => {
+    if (busy || billingReadonly) return;
+    if (currentUser.role !== "owner") {
+      Alert.alert("Fos", "Only owner can activate/deactivate");
+      return;
+    }
+    const nextActive = member.is_active === false;
+    const activateMsg =
+      member.must_set_password
+        ? `Activate ${member.full_name}? They must still set a password (issue a reset token if they lost the invite).`
+        : `Activate ${member.full_name}?`;
+    const deactivateMsg =
+      `Deactivate ${member.full_name}? They will not be able to log in. ` +
+      "Blocked if they still have pending records, settlement requests, or nonzero cash/spendings.";
+    Alert.alert("Fos", nextActive ? activateMsg : deactivateMsg, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: nextActive ? "Activate" : "Deactivate",
+        style: nextActive ? "default" : "destructive",
+        onPress: async () => {
+          if (busy || billingReadonly) {
+            if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+            return;
+          }
+          setBusy(true);
+          try {
+            try {
+              const b = await billingMe();
+              const frozen = isBillingReadOnly(b.billing_status);
+              setBillingReadonly(frozen);
+              if (frozen) {
+                Alert.alert("Fos", BILLING_READONLY_MSG);
+                return;
+              }
+            } catch { /* API 403 if frozen */ }
+            const key = idemKeyFor(
+              activeIdemRef,
+              activeSlotRef,
+              "member-active",
+              `${member.id}:${nextActive}`,
+            );
+            await setMemberActive(member.id, nextActive, { idempotencyKey: key });
+            activeIdemRef.current = null;
+            activeSlotRef.current = null;
+            await reload();
+          } catch (e) {
+            alertFosError(e);
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const changeRole = async (member: User, role: "owner" | "manager" | "employee") => {
+    if (busy || billingReadonly) return;
+    if (currentUser.role !== "owner") return;
+    if (member.role === role) return;
+    Alert.alert("Fos", `Change ${member.full_name} role to ${role}? Their current sessions will end.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Change",
+        onPress: async () => {
+          if (busy || billingReadonly) {
+            if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+            return;
+          }
+          setBusy(true);
+          try {
+            try {
+              const b = await billingMe();
+              const frozen = isBillingReadOnly(b.billing_status);
+              setBillingReadonly(frozen);
+              if (frozen) {
+                Alert.alert("Fos", BILLING_READONLY_MSG);
+                return;
+              }
+            } catch { /* API 403 if frozen */ }
+            const key = idemKeyFor(
+              roleIdemRef,
+              roleSlotRef,
+              "member-role",
+              `${member.id}:${role}`,
+            );
+            await setMemberRole(member.id, role, { idempotencyKey: key });
+            roleIdemRef.current = null;
+            roleSlotRef.current = null;
+            await reload();
+          } catch (e) {
+            alertFosError(e);
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  return (
+    <Screen>
+      <TopBar onBack={onBack} onCancel={onBack} />
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
+      {!!shareError && <Sub>{shareError}</Sub>}
+      <Text style={styles.title}>Team</Text>
+      {currentUser.role === "owner" ? (
+        <View style={styles.kinds}>
+          <Chip
+            label={showAdvanced ? "Hide advanced" : "Show advanced"}
+            on={showAdvanced}
+            onPress={() => setShowAdvanced((v) => !v)}
+          />
+        </View>
+      ) : null}
+      <FlatList
+        data={rows}
+        keyExtractor={(item) => String(item.id)}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={colors.accent}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await reload();
+              setRefreshing(false);
+            }}
+          />
+        }
+        ListEmptyComponent={
+          <Sub>
+            {loading
+              ? "Loading…"
+              : loadError
+                ? `Could not load — ${loadError}`
+                : "No members"}
+          </Sub>
+        }
+        ListHeaderComponent={
+          loadError && !loading ? (
+            <Btn title="Retry" variant="ghost" onPress={reload} />
+          ) : null
+        }
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <Text style={styles.row}>
+              {item.full_name} · {item.role}
+              {"\n"}
+              <Text style={styles.meta}>
+                {item.email} · {item.is_active === false ? "inactive" : "active"}
+                {item.must_set_password ? " · must set password" : ""}
+              </Text>
+            </Text>
+            {currentUser.role === "owner" && item.id !== currentUser.id && showAdvanced && (
+              <>
+                <View style={styles.kinds}>
+                  {(["employee", "manager", "owner"] as const).map((r) => (
+                    <Chip
+                      key={r}
+                      label={r}
+                      on={item.role === r}
+                      onPress={() => {
+                        if (!busy) void changeRole(item, r);
+                      }}
+                    />
+                  ))}
+                </View>
+                <Btn
+                  title={item.is_active === false ? "Activate" : "Deactivate"}
+                  variant="ghost"
+                  disabled={busy || billingReadonly}
+                  onPress={() => toggle(item)}
+                />
+                <Btn
+                  title="Issue reset token"
+                  variant="ghost"
+                  disabled={busy || billingReadonly}
+                  onPress={() => {
+                    Alert.alert(
+                      "Fos",
+                      `Issue a one-time reset token for ${item.full_name}? Their current sessions will be signed out.`,
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Issue",
+                          onPress: async () => {
+                            if (busy || billingReadonly) {
+                              if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+                              return;
+                            }
+                            setBusy(true);
+                            try {
+                              try {
+                                const b = await billingMe();
+                                const frozen = isBillingReadOnly(b.billing_status);
+                                setBillingReadonly(frozen);
+                                if (frozen) {
+                                  Alert.alert("Fos", BILLING_READONLY_MSG);
+                                  return;
+                                }
+                              } catch { /* API 403 if frozen */ }
+                              let res;
+                              try {
+                                const key = idemKeyFor(
+                                  resetTokenIdemRef,
+                                  resetTokenSlotRef,
+                                  "reset-token",
+                                  `${item.id}:false`,
+                                );
+                                res = await issueMemberResetToken(item.id, {
+                                  idempotencyKey: key,
+                                });
+                              } catch (first) {
+                                const msg =
+                                  first instanceof Error ? first.message : "Failed";
+                                if (!/already exists|force=true/i.test(msg)) {
+                                  throw first;
+                                }
+                                const rotate = await new Promise<boolean>((resolve) => {
+                                  Alert.alert(
+                                    "Fos",
+                                    "An active token already exists. Rotate and invalidate the previous one?",
+                                    [
+                                      {
+                                        text: "Cancel",
+                                        style: "cancel",
+                                        onPress: () => resolve(false),
+                                      },
+                                      {
+                                        text: "Rotate",
+                                        style: "destructive",
+                                        onPress: () => resolve(true),
+                                      },
+                                    ],
+                                  );
+                                });
+                                if (!rotate) return;
+                                const key = idemKeyFor(
+                                  resetTokenIdemRef,
+                                  resetTokenSlotRef,
+                                  "reset-token",
+                                  `${item.id}:true`,
+                                );
+                                res = await issueMemberResetToken(item.id, {
+                                  force: true,
+                                  idempotencyKey: key,
+                                });
+                              }
+                              resetTokenIdemRef.current = null;
+                              resetTokenSlotRef.current = null;
+                              const payload = {
+                                name: item.full_name,
+                                slug: res.organization_slug,
+                                email: res.email,
+                                token: res.invite_token || "",
+                                emailSent: res.email_sent,
+                              };
+                              setLastReset(payload);
+                              const shareMsg =
+                                `Fos password reset\nSlug: ${payload.slug}\nEmail: ${payload.email}\n` +
+                                `Reset token: ${payload.token}\n\nOpen Accept invite and set a new password.`;
+                              Alert.alert(
+                                "Fos",
+                                `Reset token issued${res.email_sent ? " (email sent)" : ""}. Share now?`,
+                                [
+                                  { text: "Later", style: "cancel" },
+                                  {
+                                    text: "Share",
+                                    onPress: () => {
+                                      void (async () => {
+                                        try {
+                                          setShareError("");
+                                          await Share.share({ message: shareMsg });
+                                        } catch (e) {
+                                          setShareError(e instanceof Error ? e.message : "Share failed");
+                                        }
+                                      })();
+                                    },
+                                  },
+                                ],
+                              );
+                              await reload();
+                            } catch (e) {
+                              alertFosError(e);
+                            } finally {
+                              setBusy(false);
+                            }
+                          },
+                        },
+                      ],
+                    );
+                  }}
+                />
+                <Btn
+                  title="Set password (owner)"
+                  variant="ghost"
+                  disabled={busy || billingReadonly}
+                  onPress={() => setResetId(item.id)}
+                />
+              </>
+            )}
+          </View>
+        )}
+      />
+      {lastReset && (
+        <View style={styles.card}>
+          <Label>
+            Last reset token — share before leaving
+          </Label>
+          <Sub>
+            {`Share with ${lastReset.name}:\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\nReset token: ${lastReset.token}\n\nThey open Accept invite and set a new password.`}
+          </Sub>
+          {lastReset.emailSent ? <Sub>Email delivery attempted.</Sub> : null}
+          <Btn
+            title="Share reset details"
+            variant="secondary"
+            onPress={async () => {
+              try {
+                setShareError("");
+                await Share.share({
+                  message:
+                    `Fos password reset\nSlug: ${lastReset.slug}\nEmail: ${lastReset.email}\n` +
+                    `Reset token: ${lastReset.token}\n\nOpen Accept invite and set a new password.`,
+                });
+              } catch (e) {
+                setShareError(e instanceof Error ? e.message : "Share failed");
+              }
+            }}
+          />
+          <Btn title="Dismiss" variant="ghost" onPress={() => setLastReset(null)} />
+        </View>
+      )}
+      <NoteModal
+        visible={resetId != null}
+        title="New password (min 8)"
+        required
+        secureTextEntry
+        confirmField
+        minLength={8}
+        maxLength={128}
+        label="New password"
+        placeholder="min 8 characters, letter + digit"
+        confirmLabel="Confirm password"
+        confirmPlaceholder="repeat password"
+        onCancel={() => {
+          passwordIdemRef.current = null;
+          passwordSlotRef.current = null;
+          setResetId(null);
+        }}
+        onSubmit={async (pwd) => {
+          const id = resetId;
+          if (id == null) throw new Error("Teammate is no longer selected");
+          if (billingReadonly) {
+            Alert.alert("Fos", BILLING_READONLY_MSG);
+            throw new Error(BILLING_READONLY_MSG);
+          }
+          const pwErr = passwordStrengthError(pwd);
+          if (pwErr) {
+            Alert.alert("Fos", pwErr);
+            throw new Error(pwErr);
+          }
+          setBusy(true);
+          try {
+            try {
+              const b = await billingMe();
+              const frozen = isBillingReadOnly(b.billing_status);
+              setBillingReadonly(frozen);
+              if (frozen) {
+                Alert.alert("Fos", BILLING_READONLY_MSG);
+                return Promise.reject(new Error(BILLING_READONLY_MSG));
+              }
+            } catch { /* API 403 if frozen */ }
+            if (passwordSlotRef.current !== id) {
+              passwordSlotRef.current = id;
+              passwordIdemRef.current = null;
+            }
+            if (!passwordIdemRef.current) {
+              passwordIdemRef.current = makeIdempotencyKey("member-password");
+            }
+            await resetMemberPassword(id, pwd, pwd, {
+              idempotencyKey: passwordIdemRef.current,
+            });
+            passwordIdemRef.current = null;
+            passwordSlotRef.current = null;
+            Alert.alert("Fos", "Password reset — their other sessions signed out");
+            await reload();
+          } catch (e) {
+            alertFosError(e);
+            throw e;
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  title: { color: colors.text, fontSize: 26, fontWeight: "700", marginVertical: 8 },
+  card: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 8 },
+  row: { color: colors.text, fontWeight: "600" },
+  meta: { color: colors.muted, fontWeight: "400" },
+  kinds: { flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" },
+});

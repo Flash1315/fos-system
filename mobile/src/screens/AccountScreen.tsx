@@ -1,0 +1,818 @@
+import React, { useEffect, useRef, useState } from "react";
+import { Alert, View, StyleSheet } from "react-native";
+import {
+  BILLING_READONLY_MSG,
+  billingMe,
+  isBillingReadOnly,
+  onResumeRefresh,
+  changePassword,
+  listSettlementRequests,
+  listMySettlementRequests,
+  idemKeyFor,
+  makeIdempotencyKey,
+  myBalance,
+  myOrg,
+  requestSettlement,
+  approveSettlementRequest,
+  cancelSettlementRequest,
+  saveToken,
+  setTelegramChat,
+  testTelegram,
+  updateOrg,
+  type BillingInfo,
+  type User,
+} from "../api";
+import { alertFosError } from "../alertError";
+import { NoteModal } from "../components/NoteModal";
+import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
+import { formatMoney, parseFiniteMoney, passwordStrengthError } from "../format";
+import { hasMorePage, mergeById } from "../listUtil";
+
+type ReqRow = {
+  id: number;
+  user_name: string;
+  kind: string;
+  amount: number;
+  note: string;
+  status?: string;
+  settled_amount?: number | null;
+  payout_id?: number | null;
+};
+
+export function AccountScreen({
+  user,
+  busy,
+  setBusy,
+  onBack,
+}: {
+  user: User;
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+  onBack: () => void;
+}) {
+  const isManager = user.role === "owner" || user.role === "manager";
+  const isOwner = user.role === "owner";
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [nextConfirm, setNextConfirm] = useState("");
+  const [kind, setKind] = useState<"expense_payout" | "income_handover">("income_handover");
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [requests, setRequests] = useState<ReqRow[]>([]);
+  const [mine, setMine] = useState<ReqRow[]>([]);
+  const [orgName, setOrgName] = useState("");
+  const [orgSlug, setOrgSlug] = useState("");
+  const [currency, setCurrency] = useState("IDR");
+  const [currencyLocked, setCurrencyLocked] = useState(false);
+  const [orgLoadError, setOrgLoadError] = useState("");
+  const [orgLoaded, setOrgLoaded] = useState(false);
+  const [cancelId, setCancelId] = useState<number | null>(null);
+  const [teamReqFilter, setTeamReqFilter] = useState<"pending" | "approved" | "cancelled" | "all">(
+    "pending",
+  );
+  const [mineReqFilter, setMineReqFilter] = useState<"all" | "pending" | "approved" | "cancelled">(
+    "all",
+  );
+  const [reqLoadError, setReqLoadError] = useState("");
+  const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [billingReadonly, setBillingReadonly] = useState(false);
+  const [tgChat, setTgChat] = useState("");
+  const [mineHasMore, setMineHasMore] = useState(false);
+  const [teamHasMore, setTeamHasMore] = useState(false);
+  const [loadingMoreMine, setLoadingMoreMine] = useState(false);
+  const [loadingMoreTeam, setLoadingMoreTeam] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const PAGE = 40;
+  const requestIdemRef = useRef<string | null>(null);
+  const approveIdemRef = useRef<string | null>(null);
+  const approveSlotRef = useRef<number | null>(null);
+  const cancelIdemRef = useRef<string | null>(null);
+  const cancelSlotRef = useRef<number | null>(null);
+  const orgIdemRef = useRef<string | null>(null);
+  const orgSlotRef = useRef<string | null>(null);
+  const telegramChatIdemRef = useRef<string | null>(null);
+  const telegramChatSlotRef = useRef<string | null>(null);
+  const telegramTestIdemRef = useRef<string | null>(null);
+  const reqReloadGen = useRef(0);
+  const orgReloadGen = useRef(0);
+  const suggestGen = useRef(0);
+  const kindRef = useRef(kind);
+  kindRef.current = kind;
+
+  useEffect(() => {
+    requestIdemRef.current = null;
+  }, [kind, amount, note]);
+
+  const reloadOrg = async () => {
+    const gen = ++orgReloadGen.current;
+    try {
+      setOrgLoadError("");
+      const org = await myOrg();
+      if (gen !== orgReloadGen.current) return;
+      setOrgName(org.name);
+      setOrgSlug(org.slug);
+      setCurrency(org.currency || "IDR");
+      setCurrencyLocked(!!org.currency_locked);
+      setOrgLoaded(true);
+      try {
+        const b = await billingMe();
+        if (gen !== orgReloadGen.current) return;
+        setBilling(b);
+        setBillingReadonly(isBillingReadOnly(b.billing_status));
+        if (isOwner) setTgChat(b.telegram_chat_id || "");
+      } catch {
+        /* keep previous billingReadonly */
+      }
+    } catch (e) {
+      if (gen !== orgReloadGen.current) return;
+      setOrgLoadError(e instanceof Error ? e.message : "Failed to load company");
+    }
+  };
+
+  const reloadRequests = async () => {
+    const gen = ++reqReloadGen.current;
+    setReqLoadError("");
+    try {
+      const mineRows = await listMySettlementRequests({
+        ...(mineReqFilter === "all" ? {} : { status: mineReqFilter }),
+        limit: PAGE,
+        offset: 0,
+      });
+      if (gen !== reqReloadGen.current) return;
+      setMine(mineRows);
+      setMineHasMore(hasMorePage(mineRows.length, PAGE));
+    } catch (e) {
+      if (gen !== reqReloadGen.current) return;
+      // Retain previous personal requests on refresh failure.
+      setReqLoadError(e instanceof Error ? e.message : "Failed to load requests");
+    }
+    if (!isManager) return;
+    try {
+      const teamRows = await listSettlementRequests({
+        status: teamReqFilter,
+        limit: PAGE,
+        offset: 0,
+      });
+      if (gen !== reqReloadGen.current) return;
+      setRequests(teamRows);
+      setTeamHasMore(hasMorePage(teamRows.length, PAGE));
+    } catch (e) {
+      if (gen !== reqReloadGen.current) return;
+      // Retain previous team requests on refresh failure.
+      setReqLoadError(e instanceof Error ? e.message : "Failed to load team requests");
+    }
+  };
+
+  const loadMoreMine = async () => {
+    if (loadingMoreMine || !mineHasMore) return;
+    const gen = reqReloadGen.current;
+    const offset = mine.length;
+    setLoadingMoreMine(true);
+    try {
+      const more = await listMySettlementRequests({
+        ...(mineReqFilter === "all" ? {} : { status: mineReqFilter }),
+        limit: PAGE,
+        offset,
+      });
+      if (gen !== reqReloadGen.current) return;
+      setMine((prev) => mergeById(prev, more));
+      setMineHasMore(hasMorePage(more.length, PAGE));
+    } catch (e) {
+      if (gen !== reqReloadGen.current) return;
+      setReqLoadError(e instanceof Error ? e.message : "Load more failed");
+    } finally {
+      if (gen === reqReloadGen.current) setLoadingMoreMine(false);
+    }
+  };
+
+  const loadMoreTeam = async () => {
+    if (loadingMoreTeam || !teamHasMore || !isManager) return;
+    const gen = reqReloadGen.current;
+    const offset = requests.length;
+    setLoadingMoreTeam(true);
+    try {
+      const more = await listSettlementRequests({
+        status: teamReqFilter,
+        limit: PAGE,
+        offset,
+      });
+      if (gen !== reqReloadGen.current) return;
+      setRequests((prev) => mergeById(prev, more));
+      setTeamHasMore(hasMorePage(more.length, PAGE));
+    } catch (e) {
+      if (gen !== reqReloadGen.current) return;
+      setReqLoadError(e instanceof Error ? e.message : "Load more failed");
+    } finally {
+      if (gen === reqReloadGen.current) setLoadingMoreTeam(false);
+    }
+  };
+
+  const refreshSuggestedAmount = async () => {
+    const gen = ++suggestGen.current;
+    const requestKind = kind;
+    try {
+      const b = await myBalance();
+      if (gen !== suggestGen.current || requestKind !== kindRef.current) return;
+      const available =
+        requestKind === "expense_payout"
+          ? (b.available_spendings ?? b.spendings)
+          : (b.available_cash ?? b.cash_on_hand);
+      setAmount((prev) => (prev.trim() ? prev : available > 0 ? String(available) : ""));
+    } catch {
+      // Keep previous suggested amount on a transient balance blip.
+    }
+  };
+
+  useEffect(() => {
+    (async () => {
+      await reloadOrg();
+      await refreshSuggestedAmount();
+      await reloadRequests();
+    })();
+  }, [kind, teamReqFilter, mineReqFilter]);
+
+  useEffect(() => onResumeRefresh(() => {
+    void (async () => {
+      await reloadOrg();
+      await refreshSuggestedAmount();
+      await reloadRequests();
+    })();
+  }), []);
+
+  const onPullRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await reloadOrg();
+      await refreshSuggestedAmount();
+      await reloadRequests();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const onPassword = async () => {
+    if (busy) return;
+    setActionError("");
+    if (!current) {
+      Alert.alert("Fos", "Enter current password and new password (min 8, letter + digit)");
+      return;
+    }
+    const pwErr = passwordStrengthError(next);
+    if (pwErr) {
+      Alert.alert("Fos", pwErr);
+      return;
+    }
+    if (current.length > 128) {
+      Alert.alert("Fos", "Password is too long (max 128 characters)");
+      return;
+    }
+    if (next === current) {
+      Alert.alert("Fos", "New password must be different from current password");
+      return;
+    }
+    if (next !== nextConfirm) {
+      Alert.alert("Fos", "Passwords do not match");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await changePassword(current, next, nextConfirm);
+      await saveToken(res.access_token, res.expires_in);
+      setCurrent("");
+      setNext("");
+      setNextConfirm("");
+      Alert.alert("Fos", "Password updated — other sessions signed out");
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Could not update password");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSaveOrg = async () => {
+    if (busy || billingReadonly) return;
+    setActionError("");
+    if (!orgName.trim() || orgName.trim().length < 2) {
+      Alert.alert("Fos", "Company name must be at least 2 characters");
+      return;
+    }
+    setBusy(true);
+    try {
+      const b = await billingMe();
+      setBilling(b);
+      setBillingReadonly(isBillingReadOnly(b.billing_status));
+      if (isBillingReadOnly(b.billing_status)) {
+        Alert.alert("Fos", BILLING_READONLY_MSG);
+        return;
+      }
+      const fresh = await myOrg();
+      setCurrencyLocked(!!fresh.currency_locked);
+      const payload: { name: string; currency?: string } = { name: orgName.trim() };
+      if (!fresh.currency_locked) {
+        payload.currency = currency.trim() || "IDR";
+      } else {
+        setCurrency(fresh.currency || currency);
+      }
+      const orgKey = idemKeyFor(
+        orgIdemRef,
+        orgSlotRef,
+        "org-update",
+        JSON.stringify(payload),
+      );
+      const org = await updateOrg(payload, { idempotencyKey: orgKey });
+      orgIdemRef.current = null;
+      orgSlotRef.current = null;
+      setOrgName(org.name);
+      setCurrency(org.currency);
+      setCurrencyLocked(!!org.currency_locked);
+      Alert.alert("Fos", "Company updated");
+    } catch (e) {
+      try {
+        const fresh = await myOrg();
+        setCurrency(fresh.currency);
+        setCurrencyLocked(!!fresh.currency_locked);
+      } catch {
+        /* ignore */
+      }
+      setActionError(e instanceof Error ? e.message : "Could not update company");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onRequest = async () => {
+    if (busy || billingReadonly) return;
+    setActionError("");
+    const value = parseFiniteMoney(amount);
+    if (value == null) {
+      Alert.alert("Fos", "Enter amount");
+      return;
+    }
+    const label =
+      kind === "expense_payout"
+        ? `Request expense reimbursement ${formatMoney(value, currency)}?`
+        : `Request cash handover ${formatMoney(value, currency)}?`;
+    Alert.alert("Fos", label, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Send",
+        onPress: async () => {
+          if (busy || billingReadonly) {
+            if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+            return;
+          }
+          setBusy(true);
+          try {
+            try {
+              const b = await billingMe();
+              const frozen = isBillingReadOnly(b.billing_status);
+              setBillingReadonly(frozen);
+              if (frozen) {
+                Alert.alert("Fos", BILLING_READONLY_MSG);
+                return;
+              }
+            } catch {
+              /* API will 403 if frozen */
+            }
+            const bal = await myBalance();
+            const available =
+              kind === "expense_payout"
+                ? bal.available_spendings ?? bal.spendings ?? 0
+                : bal.available_cash ?? bal.cash_on_hand ?? 0;
+            if (value > available + 1e-6) {
+              Alert.alert(
+                "Fos",
+                `Only ${formatMoney(available, bal.currency || currency)} available now`,
+              );
+              return;
+            }
+            if (!requestIdemRef.current) requestIdemRef.current = makeIdempotencyKey("sreq");
+            await requestSettlement(
+              { kind, amount: value, note },
+              { idempotencyKey: requestIdemRef.current },
+            );
+            requestIdemRef.current = null;
+            Alert.alert("Fos", "Settlement request sent to managers");
+            setNote("");
+            await refreshSuggestedAmount();
+            await reloadRequests();
+          } catch (e) {
+            setActionError(e instanceof Error ? e.message : "Could not send settlement request");
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const doApproveRequest = async (id: number, paymentMethod: "cash" | "transfer") => {
+    if (busy || billingReadonly) {
+      if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
+    setActionError("");
+    if (approveSlotRef.current !== id) {
+      approveSlotRef.current = id;
+      approveIdemRef.current = null;
+    }
+    if (!approveIdemRef.current) approveIdemRef.current = makeIdempotencyKey("appr");
+    setBusy(true);
+    try {
+      try {
+        const b = await billingMe();
+        const frozen = isBillingReadOnly(b.billing_status);
+        setBillingReadonly(frozen);
+        if (frozen) {
+          Alert.alert("Fos", BILLING_READONLY_MSG);
+          return;
+        }
+      } catch {
+        /* API will 403 if frozen */
+      }
+      await reloadRequests();
+      await approveSettlementRequest(id, paymentMethod, {
+        idempotencyKey: approveIdemRef.current,
+      });
+      approveIdemRef.current = null;
+      approveSlotRef.current = null;
+      await reloadRequests();
+      await refreshSuggestedAmount();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Could not approve request");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Screen scroll refreshing={refreshing} onRefresh={() => void onPullRefresh()}>
+      <TopBar onBack={onBack} onCancel={onBack} />
+      <Label>Account</Label>
+      <Sub>
+        {user.full_name} · {user.email} · {user.role}
+      </Sub>
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
+      {!!actionError && <Sub>{actionError}</Sub>}
+      <Sub>
+        {orgName || "…"}
+        {orgSlug ? ` · /${orgSlug}` : ""}
+      </Sub>
+      {!!orgLoadError && (
+        <>
+          <Sub>Could not load company — {orgLoadError}</Sub>
+          <Btn title="Retry" variant="ghost" onPress={reloadOrg} />
+        </>
+      )}
+
+      {isOwner && orgLoaded && (
+        <>
+          <Label>Company settings</Label>
+          <Sub>
+            Owners can rename the company. Currency can change only before the first money record,
+            settlement, or balance adjustment. Slug stays fixed for login.
+          </Sub>
+          <Field value={orgName} onChangeText={setOrgName} placeholder="Company name" maxLength={200} />
+          <Field
+            value={currency}
+            onChangeText={setCurrency}
+            placeholder="Currency (IDR)"
+            autoCapitalize="characters"
+            editable={!currencyLocked}
+            maxLength={3}
+          />
+          {currencyLocked ? (
+            <Sub>Currency locked after money activity — rename only.</Sub>
+          ) : null}
+          <Btn title={busy ? "…" : "Save company"} onPress={onSaveOrg} disabled={busy || billingReadonly} />
+
+          <Label>Plan & integrations</Label>
+          <Sub>
+            Plan is informational until billing goes live. Optional Telegram chat for org alerts when
+            the server has TELEGRAM_BOT_TOKEN. SMTP invites when SMTP_HOST is set.
+          </Sub>
+          {billing && (
+            <Sub>
+              Plan {billing.plan} · {billing.billing_status} · media {billing.media_backend}
+              {billing.email_configured ? " · email on" : " · email off"}
+              {billing.telegram_configured ? " · telegram bot on" : " · telegram bot off"}
+            </Sub>
+          )}
+          {isBillingReadOnly(billing?.billing_status) ? (
+            <Sub>
+              Billing {billing?.billing_status} — money writes are blocked until status is restored.
+            </Sub>
+          ) : null}
+          <Label>Telegram chat id</Label>
+          <Field value={tgChat} onChangeText={setTgChat} placeholder="-100…" autoCapitalize="none" maxLength={64} />
+          <Btn
+            title={busy ? "…" : "Save Telegram chat"}
+            variant="ghost"
+            disabled={busy || billingReadonly}
+            onPress={async () => {
+              if (busy || billingReadonly) {
+                if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+                return;
+              }
+              setActionError("");
+              setBusy(true);
+              try {
+                try {
+                  const live = await billingMe();
+                  const frozen = isBillingReadOnly(live.billing_status);
+                  setBillingReadonly(frozen);
+                  if (frozen) {
+                    Alert.alert("Fos", BILLING_READONLY_MSG);
+                    return;
+                  }
+                } catch { /* API 403 if frozen */ }
+                const chatId = tgChat.trim();
+                const chatKey = idemKeyFor(
+                  telegramChatIdemRef,
+                  telegramChatSlotRef,
+                  "telegram-chat",
+                  chatId,
+                );
+                const b = await setTelegramChat(chatId, {
+                  idempotencyKey: chatKey,
+                });
+                telegramChatIdemRef.current = null;
+                telegramChatSlotRef.current = null;
+                setBilling(b);
+                Alert.alert("Fos", "Telegram chat saved");
+              } catch (e) {
+                setActionError(e instanceof Error ? e.message : "Could not save Telegram chat");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+          <Btn
+            title="Send Telegram test"
+            variant="ghost"
+            disabled={busy || billingReadonly}
+            onPress={async () => {
+              if (busy || billingReadonly) {
+                if (billingReadonly) Alert.alert("Fos", BILLING_READONLY_MSG);
+                return;
+              }
+              setActionError("");
+              setBusy(true);
+              try {
+                try {
+                  const live = await billingMe();
+                  const frozen = isBillingReadOnly(live.billing_status);
+                  setBillingReadonly(frozen);
+                  if (frozen) {
+                    Alert.alert("Fos", BILLING_READONLY_MSG);
+                    return;
+                  }
+                } catch { /* API 403 if frozen */ }
+                if (!telegramTestIdemRef.current) {
+                  telegramTestIdemRef.current = makeIdempotencyKey("telegram-test");
+                }
+                await testTelegram({
+                  idempotencyKey: telegramTestIdemRef.current,
+                });
+                telegramTestIdemRef.current = null;
+                Alert.alert("Fos", "Test message sent");
+              } catch (e) {
+                setActionError(e instanceof Error ? e.message : "Could not send Telegram test");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        </>
+      )}
+
+      <Label>Change password</Label>
+      {billingReadonly ? (
+        <Sub>Password change still works while billing is restricted.</Sub>
+      ) : null}
+      <Field
+        secureTextEntry
+        value={current}
+        onChangeText={setCurrent}
+        placeholder="Current password"
+        maxLength={128}
+      />
+      <Field
+        secureTextEntry
+        value={next}
+        onChangeText={setNext}
+        placeholder="New password"
+        maxLength={128}
+      />
+      <Field
+        secureTextEntry
+        value={nextConfirm}
+        onChangeText={setNextConfirm}
+        placeholder="Confirm new password"
+        maxLength={128}
+      />
+      <Btn title={busy ? "…" : "Update password"} onPress={onPassword} disabled={busy} />
+
+      <Label>Request settlement</Label>
+      <Sub>
+        Amount defaults to available balance (track minus pending requests). Ask a manager to pay
+        spendings or take cash on hand.
+      </Sub>
+      <View style={styles.kinds}>
+        <Chip
+          label="Expense reimbursement"
+          on={kind === "expense_payout"}
+          onPress={() => setKind("expense_payout")}
+        />
+        <Chip
+          label="Cash handover"
+          on={kind === "income_handover"}
+          onPress={() => setKind("income_handover")}
+        />
+      </View>
+      <Field keyboardType="decimal-pad" value={amount} onChangeText={setAmount} maxLength={24} />
+      <Field value={note} onChangeText={setNote} placeholder="Optional note" maxLength={2000} />
+      <Btn title={busy ? "…" : "Send request"} onPress={onRequest} disabled={busy || billingReadonly} />
+
+      <Label>My requests</Label>
+      {!!reqLoadError && <Sub>Could not load — {reqLoadError}</Sub>}
+      <View style={styles.kinds}>
+        {(["all", "pending", "approved", "cancelled"] as const).map((s) => (
+          <Chip
+            key={s}
+            label={s}
+            on={mineReqFilter === s}
+            onPress={() => setMineReqFilter(s)}
+          />
+        ))}
+      </View>
+      {mine.length === 0 ? (
+        <Sub>{mineReqFilter === "all" ? "None yet" : `No ${mineReqFilter} requests`}</Sub>
+      ) : (
+        mine.map((r) => (
+          <View key={r.id} style={styles.card}>
+            <Sub>
+              {r.kind} · {formatMoney(r.amount, currency)} · {r.status || "pending"}
+              {r.settled_amount != null
+                ? ` · settled ${formatMoney(r.settled_amount, currency)}`
+                : ""}
+              {r.note ? ` · ${r.note}` : ""}
+            </Sub>
+            {r.status === "pending" && (
+              <Btn
+                title="Cancel request"
+                variant="ghost"
+                disabled={busy}
+                onPress={() => {
+                  Alert.alert("Fos", "Cancel this settlement request?", [
+                    { text: "Keep", style: "cancel" },
+                    {
+                      text: "Cancel request",
+                      style: "destructive",
+                      onPress: async () => {
+                        if (cancelSlotRef.current !== r.id) {
+                          cancelSlotRef.current = r.id;
+                          cancelIdemRef.current = null;
+                        }
+                        if (!cancelIdemRef.current) {
+                          cancelIdemRef.current = makeIdempotencyKey("scancel");
+                        }
+                        setBusy(true);
+                        try {
+                          await cancelSettlementRequest(r.id, "", {
+                            idempotencyKey: cancelIdemRef.current,
+                          });
+                          cancelIdemRef.current = null;
+                          cancelSlotRef.current = null;
+                          await refreshSuggestedAmount();
+                          await reloadRequests();
+                        } catch (e) {
+                          setActionError(e instanceof Error ? e.message : "Could not cancel request");
+                        } finally {
+                          setBusy(false);
+                        }
+                      },
+                    },
+                  ]);
+                }}
+              />
+            )}
+          </View>
+        ))
+      )}
+      {mineHasMore ? (
+        <Btn
+          title={loadingMoreMine ? "…" : "Load more"}
+          variant="ghost"
+          disabled={loadingMoreMine}
+          onPress={() => void loadMoreMine()}
+        />
+      ) : null}
+
+      {isManager && (
+        <>
+          <Label>Team requests</Label>
+          <View style={styles.kinds}>
+            {(["pending", "approved", "cancelled", "all"] as const).map((s) => (
+              <Chip
+                key={s}
+                label={s}
+                on={teamReqFilter === s}
+                onPress={() => setTeamReqFilter(s)}
+              />
+            ))}
+          </View>
+          {requests.length === 0 ? (
+            <Sub>{teamReqFilter === "all" ? "None" : `No ${teamReqFilter} requests`}</Sub>
+          ) : (
+            requests.map((r) => (
+              <View key={r.id} style={styles.card}>
+                <Sub>
+                  {r.user_name} · {r.kind} · {formatMoney(r.amount, currency)} ·{" "}
+                  {r.status || "pending"}
+                  {r.note ? ` · ${r.note}` : ""}
+                </Sub>
+                {r.status === "pending" && (
+                  <View style={styles.kinds}>
+                    <Btn
+                      title="Approve"
+                      disabled={busy || billingReadonly}
+                      onPress={() => {
+                        const label =
+                          r.kind === "expense_payout"
+                            ? "expense reimbursement"
+                            : "cash handover";
+                        Alert.alert(
+                          "Fos",
+                          `Approve ${label} ${formatMoney(r.amount, currency)} for ${r.user_name}? Choose payment method:`,
+                          [
+                            { text: "Cancel", style: "cancel" },
+                            {
+                              text: "Cash",
+                              onPress: () => void doApproveRequest(r.id, "cash"),
+                            },
+                            {
+                              text: "Transfer",
+                              onPress: () => void doApproveRequest(r.id, "transfer"),
+                            },
+                          ],
+                        );
+                      }}
+                    />
+                    <Btn
+                      title="Cancel"
+                      variant="ghost"
+                      disabled={busy}
+                      onPress={() => setCancelId(r.id)}
+                    />
+                  </View>
+                )}
+              </View>
+            ))
+          )}
+          {teamHasMore ? (
+            <Btn
+              title={loadingMoreTeam ? "…" : "Load more"}
+              variant="ghost"
+              disabled={loadingMoreTeam}
+              onPress={() => void loadMoreTeam()}
+            />
+          ) : null}
+        </>
+      )}
+      <NoteModal
+        visible={cancelId != null}
+        title="Cancel teammate request"
+        required
+        maxLength={2000}
+        onCancel={() => setCancelId(null)}
+        onSubmit={async (cancelNote) => {
+          const id = cancelId;
+          if (id == null) throw new Error("Request is no longer selected");
+          const noteKey = cancelNote.replace(/\s+/g, " ").trim();
+          const key = idemKeyFor(cancelIdemRef, cancelSlotRef, "scancel", `${id}:${noteKey}`);
+          setBusy(true);
+          try {
+            await cancelSettlementRequest(id, cancelNote, {
+              idempotencyKey: key,
+            });
+            cancelIdemRef.current = null;
+            cancelSlotRef.current = null;
+            await reloadRequests();
+          } catch (e) {
+            alertFosError(e);
+            throw e;
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  kinds: { flexDirection: "row", gap: 8, marginBottom: 8, flexWrap: "wrap" },
+  card: { marginBottom: 12 },
+});

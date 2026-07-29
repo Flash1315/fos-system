@@ -13,9 +13,13 @@ Stack: **FastAPI API** + **Expo mobile**. Built to sell to any small team.
 ## Layout
 ```
 api/                         Fos FastAPI app (ship this)
+api/app/routers/             auth, records, team, reports, media, transfers, payouts, adjustments
 mobile/                      Fos Expo app (ship this)
 docs/                        Fos product + how to use RJ reference
+docs/PRODUCT.md              Product logic and domain rules
+docs/RJ_BOT_REFERENCE.md     How to use the RJ snapshot
 reference/rj-spending-bot/   Full RJ Telegram bot snapshot (read-only domain knowledge)
+docker-compose.yml           API + Postgres
 ```
 
 ## What this repo is NOT
@@ -28,4 +32,5 @@ API: `cd api && python3 -m venv .venv && source .venv/bin/activate && pip instal
 Mobile: `cd mobile && npm install && EXPO_PUBLIC_API_URL=http://LAN_IP:8000 npx expo start`
 
 ## Change policy
-Surgical edits only in `api/` / `mobile/`. Tenant isolation and approval flow are sacred unless the user changes product rules.
+Surgical edits only in `api/` / `mobile/`. Tenant isolation and approval flow are sacred unless the user changes product rules.  
+Treat `reference/rj-spending-bot/` as **read-only** knowledge unless the user explicitly asks to refresh the snapshot.

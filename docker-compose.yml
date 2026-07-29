@@ -1,0 +1,51 @@
+services:
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: Fos
+      SECRET_KEY: change-me-in-production
+      DATABASE_URL: postgresql+psycopg2://fos:fos@db:5432/fos
+      ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
+      CORS_ORIGINS: "*"
+      # Optional shared limiter (uncomment redis service too):
+      # RATE_LIMIT_REDIS_URL: redis://redis:6379/0
+    volumes:
+      - fos_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fos
+      POSTGRES_PASSWORD: fos
+      POSTGRES_DB: fos
+    # Local/dev only — bind loopback so Postgres is not exposed on all interfaces
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - fos_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fos -d fos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Optional — enable with RATE_LIMIT_REDIS_URL on api
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "127.0.0.1:6379:6379"
+
+volumes:
+  fos_pg:
+  fos_uploads:

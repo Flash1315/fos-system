@@ -1,0 +1,1032 @@
+import React, { useEffect, useRef, useState } from "react";
+import { Alert, View, StyleSheet } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import {
+  BILLING_READONLY_MSG,
+  billingMe,
+  createRecord,
+  getCategories,
+  isBillingReadOnly,
+  onResumeRefresh,
+  lastFuelOdometer,
+  makeIdempotencyKey,
+  myBalance,
+  myOrg,
+  orgDirectory,
+  teamBalances,
+  uploadPhoto,
+  type TeamBalance,
+  type User,
+} from "../api";
+import { alertFosError } from "../alertError";
+import { Btn, Chip, Field, Label, Screen, Sub, TopBar } from "../components/ui";
+import { isValidYmd } from "../dates";
+import { formatWhen, parseFiniteLiters, parseFiniteMoney, parseFiniteOdometer } from "../format";
+import { asyncStorageDelete, asyncStorageGet, asyncStorageSet } from "../storage";
+
+const CREATE_DRAFT_KEY = "fos_create_draft_v1";
+
+type CreateDraft = {
+  kind: "expense" | "fuel" | "income";
+  amount: string;
+  category: string;
+  purpose: string;
+  place: string;
+  bike: string;
+  comment: string;
+  liters: string;
+  odometer: string;
+  clientName: string;
+  paymentMethod: "cash" | "transfer";
+  paymentSource: "my_pocket" | "cash_on_hand";
+  occurredDate: string;
+  forUserId: number | null;
+};
+
+function parseCreateDraft(raw: string): CreateDraft | null {
+  try {
+    const value = JSON.parse(raw) as Partial<CreateDraft>;
+    if (!value || typeof value !== "object") return null;
+    const text = (field: keyof CreateDraft) =>
+      typeof value[field] === "string" ? (value[field] as string) : "";
+    return {
+      kind: ["expense", "fuel", "income"].includes(value.kind || "")
+        ? (value.kind as CreateDraft["kind"])
+        : "expense",
+      amount: text("amount"),
+      category: text("category"),
+      purpose: text("purpose") || "Other",
+      place: text("place"),
+      bike: text("bike"),
+      comment: text("comment"),
+      liters: text("liters"),
+      odometer: text("odometer"),
+      clientName: text("clientName"),
+      paymentMethod: value.paymentMethod === "transfer" ? "transfer" : "cash",
+      paymentSource: value.paymentSource === "cash_on_hand" ? "cash_on_hand" : "my_pocket",
+      occurredDate: text("occurredDate"),
+      forUserId:
+        typeof value.forUserId === "number" && Number.isInteger(value.forUserId)
+          ? value.forUserId
+          : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function CreateScreen({
+  busy,
+  setBusy,
+  user,
+  onBack,
+  onCreated,
+}: {
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+  user: User;
+  onBack: () => void;
+  onCreated: () => void;
+}) {
+  const isManager = user.role === "owner" || user.role === "manager";
+  const submitLock = useRef(false);
+  const idemKeyRef = useRef<string | null>(null);
+  const photoIdemRef = useRef<string | null>(null);
+  const draftReadyRef = useRef(false);
+  const draftDirtyRef = useRef(false);
+  const draftRevisionRef = useRef(0);
+  const draftWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const draftKey = `${CREATE_DRAFT_KEY}:${user.organization_id}:${user.id}`;
+  const [kind, setKind] = useState<"expense" | "fuel" | "income">("expense");
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("");
+  const [approveNow, setApproveNow] = useState(false);
+  const [billingReadonly, setBillingReadonly] = useState(false);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [purposes, setPurposes] = useState<string[]>(["Rental", "Lesson", "Office", "Other"]);
+  const [purpose, setPurpose] = useState("Other");
+  const [place, setPlace] = useState("");
+  const [bike, setBike] = useState("");
+  const [comment, setComment] = useState("");
+  const [liters, setLiters] = useState("");
+  const [odometer, setOdometer] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer">("cash");
+  const [paymentSource, setPaymentSource] = useState<"my_pocket" | "cash_on_hand">("my_pocket");
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoError, setPhotoError] = useState("");
+  const [members, setMembers] = useState<User[]>([]);
+  const [forUserId, setForUserId] = useState<number | null>(null);
+  const [occurredDate, setOccurredDate] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [lastOdo, setLastOdo] = useState<number | null>(null);
+  const [minOdo, setMinOdo] = useState<number | null>(null);
+  const [maxOdo, setMaxOdo] = useState<number | null>(null);
+  const [hasFuelHistory, setHasFuelHistory] = useState(false);
+  const [closedCycleHint, setClosedCycleHint] = useState("");
+  const [teamBals, setTeamBals] = useState<TeamBalance[]>([]);
+  const [myCurrency, setMyCurrency] = useState("IDR");
+  const [categoriesError, setCategoriesError] = useState("");
+  const [teamLoadError, setTeamLoadError] = useState("");
+  const closedCycleGen = useRef(0);
+  const odoGen = useRef(0);
+  const catGen = useRef(0);
+  const teamGen = useRef(0);
+  const kindRef = useRef(kind);
+  kindRef.current = kind;
+  const markDraftDirty = () => {
+    draftDirtyRef.current = true;
+  };
+  const editDraftField = <T,>(
+    setter: React.Dispatch<React.SetStateAction<T>>,
+    value: NoInfer<T>,
+  ) => {
+    markDraftDirty();
+    setter(value);
+  };
+
+  useEffect(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    draftReadyRef.current = false;
+    draftDirtyRef.current = false;
+    void asyncStorageGet(draftKey)
+      .then((raw) => {
+        if (!active) return;
+        if (!raw) {
+          draftReadyRef.current = true;
+          return;
+        }
+        const draft = parseCreateDraft(raw);
+        if (!draft) {
+          draftReadyRef.current = true;
+          void asyncStorageDelete(draftKey);
+          return;
+        }
+        Alert.alert(
+          "Restore draft?",
+          "Restore your saved record fields? Receipt photos are not stored in drafts.",
+          [
+            {
+              text: "Discard",
+              style: "destructive",
+              onPress: () => {
+                draftReadyRef.current = true;
+                draftDirtyRef.current = false;
+                ++draftRevisionRef.current;
+                void asyncStorageDelete(draftKey);
+              },
+            },
+            {
+              text: "Restore",
+              onPress: () => {
+                setKind(draft.kind);
+                setAmount(draft.amount);
+                setCategory(draft.category);
+                setPurpose(draft.purpose);
+                setPlace(draft.place);
+                setBike(draft.bike);
+                setComment(draft.comment);
+                setLiters(draft.liters);
+                setOdometer(draft.odometer);
+                setClientName(draft.clientName);
+                setPaymentMethod(draft.paymentMethod);
+                setPaymentSource(draft.paymentSource);
+                setOccurredDate(draft.occurredDate);
+                setForUserId(draft.forUserId);
+                draftReadyRef.current = true;
+                draftDirtyRef.current = true;
+              },
+            },
+          ],
+          { cancelable: false },
+        );
+      })
+      .catch(() => {
+        if (active) draftReadyRef.current = true;
+      });
+    return () => {
+      active = false;
+    };
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftReadyRef.current || !draftDirtyRef.current) return;
+    const revision = ++draftRevisionRef.current;
+    const handle = setTimeout(() => {
+      if (revision !== draftRevisionRef.current || !draftDirtyRef.current) return;
+      const draft: CreateDraft = {
+        kind,
+        amount,
+        category,
+        purpose,
+        place,
+        bike,
+        comment,
+        liters,
+        odometer,
+        clientName,
+        paymentMethod,
+        paymentSource,
+        occurredDate,
+        forUserId,
+      };
+      // photoUrl is deliberately omitted. An uploaded photo can remain on the
+      // server if the user leaves before submitting; drafts must not restore it.
+      const write = asyncStorageSet(draftKey, JSON.stringify(draft));
+      draftWriteRef.current = write.catch(() => {});
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [
+    draftKey,
+    kind,
+    amount,
+    category,
+    purpose,
+    place,
+    bike,
+    comment,
+    liters,
+    odometer,
+    clientName,
+    paymentMethod,
+    paymentSource,
+    occurredDate,
+    forUserId,
+  ]);
+
+  useEffect(() => {
+    idemKeyRef.current = null;
+  }, [
+    kind,
+    amount,
+    category,
+    purpose,
+    place,
+    bike,
+    comment,
+    liters,
+    odometer,
+    clientName,
+    paymentMethod,
+    paymentSource,
+    photoUrl,
+    forUserId,
+    occurredDate,
+    approveNow,
+  ]);
+
+  const loadCategories = async () => {
+    const gen = ++catGen.current;
+    const requestKind = kind;
+    try {
+      setCategoriesError("");
+      const res = await getCategories(requestKind);
+      if (gen !== catGen.current || requestKind !== kindRef.current) return;
+      const list = res.categories[requestKind] || [];
+      setCategories(list);
+      setCategory((prev) => (list.includes(prev) ? prev : list[0] || ""));
+      if (res.purposes?.length) {
+        setPurposes(res.purposes);
+        setPurpose((prev) =>
+          res.purposes.includes(prev)
+            ? prev
+            : res.purposes.includes("Other")
+              ? "Other"
+              : res.purposes[0],
+        );
+      }
+    } catch (e) {
+      if (gen !== catGen.current || requestKind !== kindRef.current) return;
+      setCategoriesError(e instanceof Error ? e.message : "Categories failed to load");
+    }
+  };
+
+  useEffect(() => {
+    void loadCategories();
+  }, [kind]);
+
+  const loadTeamContext = async () => {
+    const gen = ++teamGen.current;
+    if (!isManager) return;
+    try {
+      setTeamLoadError("");
+      const rows = await orgDirectory();
+      if (gen !== teamGen.current) return;
+      const ready = rows.filter((m) => m.is_active !== false && !m.must_set_password);
+      setMembers(ready);
+      setForUserId((prev) => (prev != null && ready.some((m) => m.id === prev) ? prev : null));
+      try {
+        const nextBalances = await teamBalances();
+        if (gen !== teamGen.current) return;
+        setTeamBals(nextBalances);
+      } catch {
+        /* keep previous team balances */
+      }
+      if (gen !== teamGen.current) return;
+      try {
+        const org = await myOrg();
+        if (gen !== teamGen.current) return;
+        setMyCurrency(org.currency || "IDR");
+      } catch {
+        /* ignore currency */
+      }
+    } catch (e) {
+      if (gen !== teamGen.current) return;
+      // Keep last-known teammate directory on a transient failure.
+      setTeamLoadError(e instanceof Error ? e.message : "Failed to load teammates");
+    }
+  };
+
+  useEffect(() => {
+    void loadTeamContext();
+  }, [isManager]);
+
+  useEffect(() => onResumeRefresh(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+    void loadTeamContext();
+  }), []);
+
+  useEffect(() => {
+    if (!occurredDate.trim()) {
+      setClosedCycleHint("");
+      return;
+    }
+    const day = occurredDate.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      setClosedCycleHint("");
+      return;
+    }
+    const gen = ++closedCycleGen.current;
+    (async () => {
+      try {
+        const cashTrack =
+          kind === "income"
+            ? paymentMethod === "cash"
+            : paymentSource === "cash_on_hand";
+        const spendTrack = kind !== "income" && paymentSource === "my_pocket";
+        let cutoff: string | null | undefined = null;
+        if (forUserId != null) {
+          const row = teamBals.find((b) => b.user_id === forUserId);
+          cutoff = cashTrack
+            ? row?.last_income_handover_at
+            : spendTrack
+              ? row?.last_expense_payout_at
+              : null;
+        } else {
+          const bal = await myBalance();
+          if (gen !== closedCycleGen.current) return;
+          setMyCurrency(bal.currency);
+          cutoff = cashTrack
+            ? bal.last_income_handover_at
+            : spendTrack
+              ? bal.last_expense_payout_at
+              : null;
+        }
+        if (gen !== closedCycleGen.current) return;
+        if (!cutoff) {
+          setClosedCycleHint("");
+          return;
+        }
+        const cutDay = cutoff.slice(0, 10);
+        if (day <= cutDay) {
+          setClosedCycleHint(
+            `This date falls in a settled period (cutoff ${formatWhen(cutoff)}). Approving will not change the current balance — use an adjustment for the open cycle if needed.`,
+          );
+        } else {
+          setClosedCycleHint("");
+        }
+      } catch {
+        if (gen !== closedCycleGen.current) return;
+      }
+    })();
+  }, [occurredDate, kind, paymentSource, paymentMethod, forUserId, teamBals]);
+
+  useEffect(() => {
+    if (kind !== "fuel") {
+      setLastOdo(null);
+      setMinOdo(null);
+      setMaxOdo(null);
+      setHasFuelHistory(false);
+      return;
+    }
+    const handle = setTimeout(() => {
+      const gen = ++odoGen.current;
+      void (async () => {
+        try {
+          const at = occurredDate.trim() || undefined;
+          const res = await lastFuelOdometer({
+            bike: bike.trim() || undefined,
+            user_id: forUserId ?? undefined,
+            at,
+          });
+          if (gen !== odoGen.current) return;
+          setLastOdo(res.odometer);
+          setMinOdo(res.min_odometer);
+          setMaxOdo(res.max_odometer);
+          setHasFuelHistory(Boolean(res.has_history));
+        } catch {
+          if (gen !== odoGen.current) return;
+        }
+      })();
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [kind, bike, forUserId, occurredDate]);
+
+  const pickPhoto = async (fromCamera: boolean) => {
+    if (billingReadonly) {
+      Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
+    if (fromCamera) {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Fos", "Camera permission required");
+        return;
+      }
+    } else {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Fos", "Photo permission required");
+        return;
+      }
+    }
+    const shot = fromCamera
+      ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
+      : await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          quality: 0.7,
+        });
+    if (shot.canceled || !shot.assets[0]) return;
+    const asset = shot.assets[0];
+    const mime = (asset.mimeType || "").toLowerCase();
+    const fname = (asset.fileName || asset.uri || "").toLowerCase();
+    if (
+      mime.includes("heic") ||
+      mime.includes("heif") ||
+      fname.endsWith(".heic") ||
+      fname.endsWith(".heif")
+    ) {
+      Alert.alert("Fos", "HEIC/HEIF is not supported. Choose JPEG, PNG, or WebP.");
+      return;
+    }
+    setBusy(true);
+    setPhotoError("");
+    try {
+      const live = await billingMe();
+      setBillingReadonly(isBillingReadOnly(live.billing_status));
+      if (isBillingReadOnly(live.billing_status)) {
+        Alert.alert("Fos", BILLING_READONLY_MSG);
+        return;
+      }
+      if (!photoIdemRef.current) photoIdemRef.current = makeIdempotencyKey("photo");
+      const up = await uploadPhoto(asset.uri, {
+        name: asset.fileName || undefined,
+        type: asset.mimeType || undefined,
+        idempotencyKey: photoIdemRef.current,
+      });
+      photoIdemRef.current = null;
+      setPhotoUrl(up.photo_url);
+      setPhotoError("");
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = async () => {
+    if (billingReadonly) {
+      Alert.alert("Fos", BILLING_READONLY_MSG);
+      return;
+    }
+    const value = parseFiniteMoney(amount);
+    if (value == null) {
+      Alert.alert("Fos", "Enter a valid amount");
+      return;
+    }
+    if (!category.trim()) {
+      Alert.alert("Fos", categoriesError ? `Categories failed — ${categoriesError}` : "Category is required");
+      return;
+    }
+    if ((kind === "expense" || kind === "fuel") && !purpose.trim()) {
+      Alert.alert("Fos", "Purpose is required");
+      return;
+    }
+    if (occurredDate.trim() && !isValidYmd(occurredDate.trim())) {
+      Alert.alert("Fos", "When must be a real calendar day (YYYY-MM-DD) or empty");
+      return;
+    }
+    if (comment.trim().length > 4000) {
+      Alert.alert("Fos", "Comment is too long (max 4000 characters)");
+      return;
+    }
+    if (kind === "fuel") {
+      const litersVal = parseFiniteLiters(liters);
+      const odoVal = odometer.trim() ? parseFiniteOdometer(odometer) : null;
+      if (litersVal == null) {
+        Alert.alert("Fos", "Liters is required for fuel (max 10000)");
+        return;
+      }
+      if (odometer.trim() && odoVal == null) {
+        Alert.alert("Fos", "Odometer must be a valid reading (0–9999999.99)");
+        return;
+      }
+      if (hasFuelHistory && odoVal == null) {
+        Alert.alert(
+          "Fos",
+          `Odometer is required after prior fuel history${
+            lastOdo != null ? ` (last ${lastOdo})` : ""
+          }`,
+        );
+        return;
+      }
+      if (odoVal != null && minOdo != null && odoVal < minOdo) {
+        Alert.alert(
+          "Fos",
+          `Odometer cannot decrease (previous ${minOdo}). Enter a higher reading.`,
+        );
+        return;
+      }
+      if (odoVal != null && maxOdo != null && odoVal > maxOdo) {
+        Alert.alert(
+          "Fos",
+          `Odometer cannot jump past the next reading (${maxOdo}).`,
+        );
+        return;
+      }
+    }
+    if (!confirming) {
+      if (kind !== "income" && paymentSource === "cash_on_hand") {
+        try {
+          let available = 0;
+          let held = 0;
+          let reserved = 0;
+          let currency = myCurrency;
+          if (forUserId != null) {
+            const row = teamBals.find((b) => b.user_id === forUserId);
+            if (row) {
+              held = row.cash_on_hand;
+              available = row.available_cash ?? row.cash_on_hand;
+              reserved = row.reserved_cash ?? 0;
+              if (row.currency) currency = row.currency;
+            }
+          } else {
+            const bal = await myBalance();
+            held = bal.cash_on_hand;
+            available = bal.available_cash ?? bal.cash_on_hand;
+            reserved = bal.reserved_cash || 0;
+            currency = bal.currency;
+            setMyCurrency(bal.currency);
+          }
+          if (value > available) {
+            const who = forUserId != null ? "Teammate available cash" : "Available cash";
+            const msg =
+              `${who} is ${available.toLocaleString()} ${currency}` +
+              ` (${held.toLocaleString()} held` +
+              `${reserved > 0 ? `, ${reserved.toLocaleString()} reserved` : ""}).`;
+            if (isManager && approveNow) {
+              Alert.alert(
+                "Fos",
+                `${msg} Cannot approve from cash on hand for more than available.`,
+              );
+              return;
+            }
+            Alert.alert(
+              "Fos",
+              `${msg} Amount exceeds available — continue anyway on confirm if intentional.`,
+            );
+          }
+        } catch (e) {
+          if (isManager && approveNow) {
+            alertFosError(e, "Could not verify cash balance");
+            return;
+          }
+        }
+      }
+      if (isManager && approveNow && closedCycleHint) {
+        Alert.alert(
+          "Fos",
+          `${closedCycleHint}\n\nApprove immediately anyway? Approving will not change the current open balance.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Continue", onPress: () => setConfirming(true) },
+          ],
+        );
+        return;
+      }
+      setConfirming(true);
+      return;
+    }
+    if (busy || billingReadonly || submitLock.current) return;
+    try {
+      const b = await billingMe();
+      const frozen = isBillingReadOnly(b.billing_status);
+      setBillingReadonly(frozen);
+      if (frozen) {
+        Alert.alert("Fos", BILLING_READONLY_MSG);
+        return;
+      }
+    } catch {
+      /* API will 403 if frozen */
+    }
+    // Re-check cash right before submit (approve_now must not use stale Review numbers)
+    if (kind !== "income" && paymentSource === "cash_on_hand" && isManager && approveNow) {
+      try {
+        let available = 0;
+        let currency = myCurrency;
+        if (forUserId != null) {
+          const bals = await teamBalances();
+          setTeamBals(bals);
+          const row = bals.find((b) => b.user_id === forUserId);
+          available = row?.available_cash ?? row?.cash_on_hand ?? 0;
+          if (row?.currency) currency = row.currency;
+        } else {
+          const bal = await myBalance();
+          available = bal.available_cash ?? bal.cash_on_hand;
+          currency = bal.currency;
+          setMyCurrency(bal.currency);
+        }
+        if (value > available + 1e-6) {
+          Alert.alert(
+            "Fos",
+            `Only ${available.toLocaleString()} ${currency} available now — cannot approve from cash.`,
+          );
+          return;
+        }
+      } catch (e) {
+        alertFosError(e, "Could not verify cash balance");
+        return;
+      }
+    }
+    if (kind === "fuel") {
+      try {
+        const last = await lastFuelOdometer({
+          bike: bike.trim() || undefined,
+          user_id: forUserId ?? undefined,
+          at: occurredDate.trim() || undefined,
+        });
+        setLastOdo(last.odometer);
+        setMinOdo(last.min_odometer);
+        setMaxOdo(last.max_odometer);
+        setHasFuelHistory(Boolean(last.has_history));
+        const odoRaw = odometer.trim();
+        if (last.has_history && !odoRaw) {
+          Alert.alert(
+            "Fos",
+            `Odometer is required after prior fuel history${
+              last.odometer != null ? ` (last ${last.odometer})` : ""
+            }`,
+          );
+          return;
+        }
+        if (odoRaw) {
+          const odoVal = parseFiniteOdometer(odoRaw);
+          if (odoVal == null) {
+            Alert.alert("Fos", "Odometer must be a valid reading (0–9999999.99)");
+            return;
+          }
+          if (last.min_odometer != null && odoVal < last.min_odometer) {
+            Alert.alert(
+              "Fos",
+              `Odometer cannot decrease (previous ${last.min_odometer}). Enter a higher reading.`,
+            );
+            return;
+          }
+          if (last.max_odometer != null && odoVal > last.max_odometer) {
+            Alert.alert(
+              "Fos",
+              `Odometer cannot jump past the next reading (${last.max_odometer}).`,
+            );
+            return;
+          }
+        }
+      } catch (e) {
+        alertFosError(e, "Could not verify odometer");
+        return;
+      }
+    }
+    if (submitLock.current) return;
+    submitLock.current = true;
+    if (!idemKeyRef.current) idemKeyRef.current = makeIdempotencyKey("rec");
+    setBusy(true);
+    try {
+      const collapse = (s: string) => s.replace(/\s+/g, " ").trim();
+      await createRecord(
+        {
+          kind,
+          amount: value,
+          category: collapse(category),
+          purpose,
+          place: collapse(place),
+          bike: collapse(bike),
+          comment: collapse(comment),
+          photo_url: photoUrl,
+          payment_method: kind === "income" ? paymentMethod : "",
+          payment_source: kind === "income" ? "" : paymentSource,
+          client_name: kind === "income" ? collapse(clientName) : "",
+          liters: kind === "fuel" ? parseFiniteLiters(liters) ?? undefined : undefined,
+          odometer:
+            kind === "fuel" && odometer.trim()
+              ? parseFiniteOdometer(odometer) ?? undefined
+              : undefined,
+          created_for_user_id: forUserId ?? undefined,
+          occurred_at: occurredDate.trim() ? `${occurredDate.trim()}T12:00:00` : undefined,
+          approve_now: isManager && approveNow,
+          // Confirmed closed-cycle alert before Review when approve_now + settled period.
+          allow_closed_cycle: !!(isManager && approveNow && closedCycleHint),
+        },
+        { idempotencyKey: idemKeyRef.current },
+      );
+      idemKeyRef.current = null;
+      draftDirtyRef.current = false;
+      ++draftRevisionRef.current;
+      await draftWriteRef.current;
+      await asyncStorageDelete(draftKey).catch(() => {});
+      onCreated();
+    } catch (e) {
+      alertFosError(e);
+    } finally {
+      submitLock.current = false;
+      setBusy(false);
+    }
+  };
+
+  const forName =
+    forUserId == null
+      ? "Myself"
+      : members.find((m) => m.id === forUserId)?.full_name || "Teammate";
+
+  if (confirming) {
+    const value = Number(amount.replace(",", ".") || 0);
+    return (
+      <Screen scroll>
+        <TopBar onBack={() => setConfirming(false)} onCancel={onBack} />
+        <Label>Confirm record</Label>
+        {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
+        <Label>For</Label>
+        <Field editable={false} value={forName} />
+        <Label>Kind</Label>
+        <Field editable={false} value={kind} />
+        <Label>Purpose</Label>
+        <Field editable={false} value={purpose} />
+        <Label>Amount</Label>
+        <Field editable={false} value={String(value)} />
+        <Label>When</Label>
+        <Field editable={false} value={occurredDate || "now"} />
+        {!!closedCycleHint && <Sub>{closedCycleHint}</Sub>}
+        <Label>Category</Label>
+        <Field editable={false} value={category || "—"} />
+        <Label>Place</Label>
+        <Field editable={false} value={place || "—"} />
+        <Label>Bike</Label>
+        <Field editable={false} value={bike || "—"} />
+        {kind !== "income" && (
+          <>
+            <Label>Payment source</Label>
+            <Field
+              editable={false}
+              value={paymentSource === "my_pocket" ? "My pocket" : "Cash on hand"}
+            />
+          </>
+        )}
+        {kind === "income" && (
+          <>
+            <Label>Client / method</Label>
+            <Field editable={false} value={`${clientName || "—"} · ${paymentMethod}`} />
+          </>
+        )}
+        <Label>Comment</Label>
+        <Field editable={false} value={comment || "—"} />
+        <Label>Photo</Label>
+        <Field editable={false} value={photoUrl ? "Attached" : "None"} />
+        {isManager && (
+          <>
+            <Label>Status</Label>
+            <Field editable={false} value={approveNow ? "Approve immediately" : "Send to queue"} />
+          </>
+        )}
+        <Btn
+          title={busy ? "…" : approveNow && isManager ? "Confirm & approve" : "Confirm & submit"}
+          onPress={submit}
+          disabled={busy || billingReadonly}
+        />
+        <Btn title="Back to edit" variant="ghost" onPress={() => setConfirming(false)} />
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen scroll>
+      <TopBar onBack={onBack} onCancel={onBack} />
+      <Label>New record</Label>
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
+      {isManager && (
+        <>
+          <Label>File for</Label>
+          <Sub>Balances attribute to the selected teammate.</Sub>
+          {!!teamLoadError && (
+            <>
+              <Sub>Could not load teammates — {teamLoadError}</Sub>
+              <Btn title="Retry teammates" variant="ghost" onPress={loadTeamContext} />
+            </>
+          )}
+          <View style={styles.kinds}>
+            <Chip
+              label="Myself"
+              on={forUserId == null}
+              onPress={() => editDraftField(setForUserId, null)}
+            />
+            {members
+              .filter((m) => m.id !== user.id)
+              .map((m) => (
+                <Chip
+                  key={m.id}
+                  label={m.full_name.split(" ")[0] || m.full_name}
+                  on={forUserId === m.id}
+                  onPress={() => editDraftField(setForUserId, m.id)}
+                />
+              ))}
+          </View>
+        </>
+      )}
+      <View style={styles.kinds}>
+        {(["expense", "fuel", "income"] as const).map((k) => (
+          <Chip key={k} label={k} on={kind === k} onPress={() => editDraftField(setKind, k)} />
+        ))}
+      </View>
+      <Label>Purpose</Label>
+      <View style={styles.kinds}>
+        {purposes.map((p) => (
+          <Chip
+            key={p}
+            label={p}
+            on={purpose === p}
+            onPress={() => editDraftField(setPurpose, p)}
+          />
+        ))}
+      </View>
+      <Label>Amount</Label>
+      <Field
+        keyboardType="decimal-pad"
+        value={amount}
+        onChangeText={(value) => editDraftField(setAmount, value)}
+        maxLength={24}
+      />
+      <Label>When (optional YYYY-MM-DD)</Label>
+      <Field
+        autoCapitalize="none"
+        value={occurredDate}
+        onChangeText={(value) => editDraftField(setOccurredDate, value)}
+        placeholder="leave empty = now"
+        maxLength={10}
+      />
+      {!!closedCycleHint && <Sub>{closedCycleHint}</Sub>}
+      <Label>Category</Label>
+      {!!categoriesError && (
+        <>
+          <Sub>Could not load categories — {categoriesError}. You can still type a category below if needed.</Sub>
+          <Btn title="Retry categories" variant="ghost" onPress={loadCategories} />
+        </>
+      )}
+      <View style={styles.kinds}>
+        {categories.map((c) => (
+          <Chip
+            key={c}
+            label={c}
+            on={category === c}
+            onPress={() => editDraftField(setCategory, c)}
+          />
+        ))}
+      </View>
+      {categories.length === 0 && (
+        <Field
+          value={category}
+          onChangeText={(value) => editDraftField(setCategory, value)}
+          placeholder="Category"
+          maxLength={120}
+        />
+      )}
+      <Label>Place</Label>
+      <Field
+        value={place}
+        onChangeText={(value) => editDraftField(setPlace, value)}
+        placeholder="Station / shop (optional)"
+        maxLength={200}
+      />
+      {(kind === "fuel" || kind === "expense") && (
+        <>
+          <Label>Bike</Label>
+          <Field
+            value={bike}
+            onChangeText={(value) => editDraftField(setBike, value)}
+            placeholder="Optional bike name"
+            maxLength={120}
+          />
+        </>
+      )}
+      {kind !== "income" && (
+        <>
+          <Label>Payment source</Label>
+          <View style={styles.kinds}>
+            <Chip
+              label="My pocket"
+              on={paymentSource === "my_pocket"}
+              onPress={() => editDraftField(setPaymentSource, "my_pocket")}
+            />
+            <Chip
+              label="Cash on hand"
+              on={paymentSource === "cash_on_hand"}
+              onPress={() => editDraftField(setPaymentSource, "cash_on_hand")}
+            />
+          </View>
+        </>
+      )}
+      {kind === "fuel" && (
+        <>
+          <Label>Liters</Label>
+          <Field
+            keyboardType="decimal-pad"
+            value={liters}
+            onChangeText={(value) => editDraftField(setLiters, value)}
+            maxLength={12}
+          />
+          <Label>Odometer</Label>
+          <Field
+            keyboardType="decimal-pad"
+            value={odometer}
+            onChangeText={(value) => editDraftField(setOdometer, value)}
+            maxLength={12}
+          />
+          {minOdo != null && maxOdo != null && (
+            <Sub>
+              Allowed range {minOdo.toLocaleString()}–{maxOdo.toLocaleString()}.
+            </Sub>
+          )}
+          {minOdo != null && maxOdo == null && (
+            <Sub>Previous reading {minOdo.toLocaleString()} — cannot go lower.</Sub>
+          )}
+          {minOdo == null && maxOdo != null && (
+            <Sub>Next reading {maxOdo.toLocaleString()} — cannot go higher.</Sub>
+          )}
+        </>
+      )}
+      {kind === "income" && (
+        <>
+          <Label>Client name</Label>
+          <Field
+            value={clientName}
+            onChangeText={(value) => editDraftField(setClientName, value)}
+            maxLength={200}
+          />
+          <Label>Payment method</Label>
+          <View style={styles.kinds}>
+            {(["cash", "transfer"] as const).map((m) => (
+              <Chip
+                key={m}
+                label={m}
+                on={paymentMethod === m}
+                onPress={() => editDraftField(setPaymentMethod, m)}
+              />
+            ))}
+          </View>
+        </>
+      )}
+      <Label>Comment</Label>
+      <Field
+        value={comment}
+        onChangeText={(value) => editDraftField(setComment, value)}
+        maxLength={4000}
+      />
+      {isManager && (
+        <>
+          <Label>After submit</Label>
+          <View style={styles.kinds}>
+            <Chip label="Send to queue" on={!approveNow} onPress={() => setApproveNow(false)} />
+            <Chip label="Approve now" on={approveNow} onPress={() => setApproveNow(true)} />
+          </View>
+        </>
+      )}
+      <Btn
+        title={photoUrl ? "Photo attached ✓ (library)" : "Photo from library"}
+        onPress={() => pickPhoto(false)}
+        variant="ghost"
+        disabled={busy || billingReadonly}
+      />
+      <Btn title="Photo from camera" onPress={() => pickPhoto(true)} variant="ghost" disabled={busy || billingReadonly} />
+      {!!photoError && <Sub>{photoError}</Sub>}
+      <Btn title={busy ? "…" : "Review"} onPress={submit} disabled={busy || billingReadonly} />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  kinds: { flexDirection: "row", gap: 8, marginBottom: 8, flexWrap: "wrap" },
+});

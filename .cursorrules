@@ -45,7 +45,7 @@ Make only surgical, targeted changes. Never rewrite entire functions or files.
 - Roles: `owner` | `manager` | `employee`
 - Money kinds: `expense` | `fuel` | `income`
 - Record status: `pending` → `approved` | `rejected` (managers/owners decide)
-- Cash on hand (v1): approved `income` with `payment_method=cash` − approved `expense` − approved `fuel` (per user)
+- Dual balance (RJ cutoffs): `spendings` = my_pocket spend since last expense_payout; `cash_on_hand` = cash income − cash_on_hand spend since last income_handover (+ adjustments/carry)
 - Login requires `organization_slug` + email + password
 - Local DB default: SQLite; Postgres via `DATABASE_URL` only
 

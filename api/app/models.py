@@ -1,12 +1,18 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     String, Integer, Float, DateTime, ForeignKey, Enum, Text, Boolean, UniqueConstraint,
+    Index,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+from app.db_types import MoneyAmount
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class UserRole(str, enum.Enum):
@@ -34,7 +40,12 @@ class Organization(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="IDR")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Billing stub (no payment processor yet)
+    plan: Mapped[str] = mapped_column(String(40), default="free")  # free / trial / pro
+    billing_status: Mapped[str] = mapped_column(String(40), default="ok")  # ok / past_due / canceled
+    # Optional Telegram notify chat for org events
+    telegram_chat_id: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     users: Mapped[list["User"]] = relationship(back_populates="organization")
     records: Mapped[list["MoneyRecord"]] = relationship(back_populates="organization")
@@ -42,7 +53,10 @@ class Organization(Base):
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("organization_id", "email", name="uq_org_email"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "email", name="uq_org_email"),
+        Index("ix_users_org_active", "organization_id", "is_active"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
@@ -51,7 +65,13 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.employee)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Bumped on password change/reset so existing JWTs stop working
+    token_version: Mapped[int] = mapped_column(Integer, default=0)
+    # One-time invite acceptance (optional password invite)
+    invite_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    invite_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    must_set_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     organization: Mapped[Organization] = relationship(back_populates="users")
     records: Mapped[list["MoneyRecord"]] = relationship(
@@ -60,18 +80,66 @@ class User(Base):
     )
 
 
+class AuditEvent(Base):
+    """Append-only organization audit journal."""
+
+    __tablename__ = "audit_events"
+    __table_args__ = (
+        Index("ix_audit_events_org_created", "organization_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id"), nullable=False
+    )
+    actor_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    detail_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 class MoneyRecord(Base):
     """Unified expense / fuel / income row."""
     __tablename__ = "money_records"
+    __table_args__ = (
+        Index(
+            "ix_money_records_org_creator_created",
+            "organization_id",
+            "created_by",
+            "created_at",
+        ),
+        Index(
+            "ix_money_records_org_status_void_created",
+            "organization_id",
+            "status",
+            "is_voided",
+            "created_at",
+        ),
+        Index(
+            "ix_money_records_org_creator_status_void",
+            "organization_id",
+            "created_by",
+            "status",
+            "is_voided",
+        ),
+        Index("ix_money_records_transfer_group", "transfer_group_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     kind: Mapped[RecordKind] = mapped_column(Enum(RecordKind), nullable=False)
     status: Mapped[RecordStatus] = mapped_column(Enum(RecordStatus), default=RecordStatus.pending)
-    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    amount: Mapped[float] = mapped_column(MoneyAmount, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="IDR")
     category: Mapped[str] = mapped_column(String(120), default="")
+    purpose: Mapped[str] = mapped_column(String(80), default="")  # Rental / Lesson / Office / Other
+    place: Mapped[str] = mapped_column(String(200), default="")
+    bike: Mapped[str] = mapped_column(String(120), default="")
     comment: Mapped[str] = mapped_column(Text, default="")
     photo_url: Mapped[str] = mapped_column(String(500), default="")
     # fuel extras
@@ -80,11 +148,148 @@ class MoneyRecord(Base):
     # income extras
     client_name: Mapped[str] = mapped_column(String(200), default="")
     payment_method: Mapped[str] = mapped_column(String(40), default="")  # cash / transfer
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # expense/fuel: who paid — inspired by RJ My pocket / Cash on hand
+    payment_source: Mapped[str] = mapped_column(String(40), default="")  # my_pocket / cash_on_hand
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    # When the money actually moved (may differ from created_at for late entries)
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Manager void of an approved row (kept for audit; excluded from balances)
+    is_voided: Mapped[bool] = mapped_column(Boolean, default=False)
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    voided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Links paired transfer legs (sender expense + recipient income)
+    transfer_group_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     organization: Mapped[Organization] = relationship(back_populates="records")
     created_by_user: Mapped[User] = relationship(
         back_populates="records", foreign_keys=[created_by],
     )
+
+
+class PayoutKind(str, enum.Enum):
+    expense_payout = "expense_payout"
+    income_handover = "income_handover"
+
+
+class Payout(Base):
+    """Manager settlement rows — RJ Expense payout / Income handover."""
+    __tablename__ = "payouts"
+    __table_args__ = (
+        Index(
+            "ix_payouts_org_user_kind_void_created",
+            "organization_id",
+            "user_id",
+            "kind",
+            "is_voided",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    kind: Mapped[PayoutKind] = mapped_column(Enum(PayoutKind), nullable=False)
+    amount: Mapped[float] = mapped_column(MoneyAmount, nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), default="IDR")
+    payment_method: Mapped[str] = mapped_column(String(40), default="cash")  # cash / transfer
+    note: Mapped[str] = mapped_column(Text, default="")
+    # RJ-style: amount paid above current spendings reduces next-cycle owed
+    overpayment: Mapped[float] = mapped_column(MoneyAmount, default=0.0)
+    # Unpaid remainder after a partial settlement (carry into next cycle)
+    balance_after: Mapped[float] = mapped_column(MoneyAmount, default=0.0)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    is_voided: Mapped[bool] = mapped_column(Boolean, default=False)
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    voided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    void_note: Mapped[str] = mapped_column(Text, default="")
+
+
+class SettlementRequestStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    cancelled = "cancelled"
+
+
+class SettlementRequest(Base):
+    """Employee asks manager to settle (expense payout or income handover)."""
+    __tablename__ = "settlement_requests"
+    __table_args__ = (
+        Index(
+            "ix_settlement_requests_org_status_created",
+            "organization_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_settlement_requests_org_user_status",
+            "organization_id",
+            "user_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    kind: Mapped[PayoutKind] = mapped_column(Enum(PayoutKind), nullable=False)
+    amount: Mapped[float] = mapped_column(MoneyAmount, nullable=False)
+    note: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[SettlementRequestStatus] = mapped_column(
+        Enum(SettlementRequestStatus), default=SettlementRequestStatus.pending
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Filled when approved — actual payout amount may be clamped
+    settled_amount: Mapped[float | None] = mapped_column(MoneyAmount, nullable=True)
+    payout_id: Mapped[int | None] = mapped_column(ForeignKey("payouts.id"), nullable=True)
+
+
+class AdjustmentTrack(str, enum.Enum):
+    cash_on_hand = "cash_on_hand"
+    spendings = "spendings"
+
+
+class BalanceAdjustment(Base):
+    """Non-operating opening/correction entries — do not hit P&L reports."""
+    __tablename__ = "balance_adjustments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    track: Mapped[AdjustmentTrack] = mapped_column(Enum(AdjustmentTrack), nullable=False)
+    amount: Mapped[float] = mapped_column(MoneyAmount, nullable=False)  # signed
+    note: Mapped[str] = mapped_column(Text, default="")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    is_voided: Mapped[bool] = mapped_column(Boolean, default=False)
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    voided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class IdempotencyKey(Base):
+    """Client Idempotency-Key → created resource (records / transfers)."""
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "user_id", "scope", "key", name="uq_idempotency_scope_key"
+        ),
+        Index("ix_idempotency_keys_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    scope: Mapped[str] = mapped_column(String(40), nullable=False)
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
+    resource_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    secondary_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Optional cached JSON body for multi-resource responses (batch payouts)
+    response_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # SHA-256 of canonical request payload — mismatch → 409 on key reuse
+    request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

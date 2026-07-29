@@ -1,0 +1,316 @@
+import React, { useEffect, useRef, useState } from "react";
+import { Alert, Share, View, StyleSheet } from "react-native";
+import { BILLING_READONLY_MSG, billingMe, inviteUser, isBillingReadOnly, makeIdempotencyKey, myOrg, onResumeRefresh, type InviteResult, type User } from "../api";
+import { alertFosError } from "../alertError";
+import { Btn, Chip, Field, Label, LinkText, Screen, Sub, TopBar } from "../components/ui";
+import { emailFormatError, passwordStrengthError } from "../format";
+
+export function InviteScreen({
+  busy,
+  setBusy,
+  currentRole,
+  onBack,
+  onDone,
+}: {
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+  currentRole: User["role"];
+  onBack: () => void;
+  onDone: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [setTempPassword, setSetTempPassword] = useState(false);
+  const [orgSlug, setOrgSlug] = useState("");
+  const [slugError, setSlugError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [role, setRole] = useState<"employee" | "manager" | "owner">("employee");
+  const [billingReadonly, setBillingReadonly] = useState(false);
+  const slugGen = useRef(0);
+  const inviteIdemRef = useRef<string | null>(null);
+  const [lastInvite, setLastInvite] = useState<{
+    res: InviteResult;
+    email: string;
+    slug: string;
+    usedTempPassword: boolean;
+  } | null>(null);
+  const roles =
+    currentRole === "owner"
+      ? (["employee", "manager", "owner"] as const)
+      : (["employee"] as const);
+
+  useEffect(() => {
+    inviteIdemRef.current = null;
+  }, [email, fullName, password, passwordConfirm, role, setTempPassword]);
+
+  const loadSlug = async () => {
+    const gen = ++slugGen.current;
+    try {
+      setSlugError("");
+      const org = await myOrg();
+      if (gen !== slugGen.current) return;
+      setOrgSlug(org.slug);
+    } catch (e) {
+      if (gen !== slugGen.current) return;
+      // Keep last-known slug on a resume/network blip.
+      setSlugError(e instanceof Error ? e.message : "Could not load company slug");
+    }
+  };
+
+  useEffect(() => {
+    void loadSlug();
+  }, []);
+
+  useEffect(() => {
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => onResumeRefresh(() => {
+    void loadSlug();
+    void billingMe()
+      .then((b) => setBillingReadonly(isBillingReadOnly(b.billing_status)))
+      .catch(() => {});
+  }), []);
+
+  const shareText = (payload: {
+    res: InviteResult;
+    email: string;
+    slug: string;
+    usedTempPassword: boolean;
+  }) => {
+    if (payload.res.invite_token) {
+      return (
+        `Fos invite\nSlug: ${payload.slug}\nEmail: ${payload.email}\n` +
+        `Invite token: ${payload.res.invite_token}\n\n` +
+        `Open Accept invite, paste the token, and set a password.`
+      );
+    }
+    if (payload.res.email_sent) {
+      return (
+        `Fos invite\nSlug: ${payload.slug}\nEmail: ${payload.email}\n` +
+        `Invite email was sent — ask them to check their inbox.`
+      );
+    }
+    if (payload.usedTempPassword) {
+      return (
+        `Fos invite\nSlug: ${payload.slug}\nEmail: ${payload.email}\n` +
+        `Password: (the temporary password you set)`
+      );
+    }
+    return `Fos invite\nSlug: ${payload.slug}\nEmail: ${payload.email}`;
+  };
+
+  const submit = async () => {
+    if (busy || billingReadonly) return;
+    setFormError("");
+    if (!orgSlug) {
+      setFormError("Company slug not loaded — tap Retry first");
+      return;
+    }
+    if (!email.trim() || !fullName.trim()) {
+      setFormError("Name and email required");
+      return;
+    }
+    const mailErr = emailFormatError(email);
+    if (mailErr) {
+      setFormError(mailErr);
+      return;
+    }
+    if (setTempPassword) {
+      const pwErr = passwordStrengthError(password);
+      if (pwErr) {
+        setFormError(pwErr);
+        return;
+      }
+      if (password !== passwordConfirm) {
+        setFormError("Passwords do not match");
+        return;
+      }
+    }
+    const mode = setTempPassword ? "temporary password" : "invite token";
+    Alert.alert(
+      "Fos",
+      `Invite ${fullName.trim()} <${email.trim().toLowerCase()}> as ${role} via ${mode}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Send invite",
+          onPress: () => void doInvite(),
+        },
+      ],
+    );
+  };
+
+  const doInvite = async () => {
+    if (busy || billingReadonly) {
+      if (billingReadonly) setFormError(BILLING_READONLY_MSG);
+      return;
+    }
+    setFormError("");
+    setBusy(true);
+    try {
+      try {
+        const b = await billingMe();
+        const frozen = isBillingReadOnly(b.billing_status);
+        setBillingReadonly(frozen);
+        if (frozen) {
+          setFormError(BILLING_READONLY_MSG);
+          return;
+        }
+      } catch {
+        /* API will 403 if frozen */
+      }
+      const invitedEmail = email.trim().toLowerCase();
+      if (!inviteIdemRef.current) inviteIdemRef.current = makeIdempotencyKey("invite");
+      const res = await inviteUser(
+        {
+          email: invitedEmail,
+          full_name: fullName.trim(),
+          role,
+          ...(setTempPassword
+            ? { password, password_confirm: passwordConfirm }
+            : {}),
+        },
+        { idempotencyKey: inviteIdemRef.current },
+      );
+      inviteIdemRef.current = null;
+      const payload = {
+        res,
+        email: invitedEmail,
+        slug: orgSlug,
+        usedTempPassword: setTempPassword,
+      };
+      setLastInvite(payload);
+      const mailNote = res.email_sent ? " Invite email was sent." : "";
+      Alert.alert(
+        "Fos",
+        `Teammate invited.${mailNote} Share the invite details now?`,
+        [
+          { text: "Later", style: "cancel" },
+          {
+            text: "Share",
+            onPress: () => {
+              void (async () => {
+                try {
+                  await Share.share({ message: shareText(payload) });
+                } catch (e) {
+                  alertFosError(e, "Share failed");
+                }
+              })();
+            },
+          },
+        ],
+      );
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : "Invite failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Screen scroll>
+      <TopBar onBack={onBack} onCancel={onBack} />
+      <Label>Invite teammate</Label>
+      {billingReadonly ? <Sub>{BILLING_READONLY_MSG}</Sub> : null}
+      <Sub>
+        Default: share an invite token — they set their own password. Optional: set a temporary
+        password yourself.
+      </Sub>
+      {!!formError && <Sub>{formError}</Sub>}
+      {!!slugError && (
+        <>
+          <Sub>Could not load slug — {slugError}</Sub>
+          <Btn title="Retry" variant="ghost" onPress={loadSlug} />
+        </>
+      )}
+      <Label>Full name</Label>
+      <Field value={fullName} onChangeText={setFullName} maxLength={200} />
+      <Label>Email</Label>
+      <Field
+        autoCapitalize="none"
+        keyboardType="email-address"
+        value={email}
+        onChangeText={setEmail}
+        maxLength={254}
+      />
+      <View style={styles.kinds}>
+        <Chip
+          label="Invite token (recommended)"
+          on={!setTempPassword}
+          onPress={() => setSetTempPassword(false)}
+        />
+        <Chip
+          label="Temp password"
+          on={setTempPassword}
+          onPress={() => setSetTempPassword(true)}
+        />
+      </View>
+      {setTempPassword && (
+        <>
+          <Label>Temporary password</Label>
+          <Field
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
+            placeholder="min 8 characters, letter + digit"
+            maxLength={128}
+          />
+          <Label>Confirm password</Label>
+          <Field
+            secureTextEntry={!showPassword}
+            value={passwordConfirm}
+            onChangeText={setPasswordConfirm}
+            placeholder="repeat password"
+            maxLength={128}
+          />
+          <LinkText onPress={() => setShowPassword((v) => !v)}>
+            {showPassword ? "Hide password" : "Show password"}
+          </LinkText>
+        </>
+      )}
+      <Label>Role</Label>
+      <View style={styles.kinds}>
+        {roles.map((r) => (
+          <Chip key={r} label={r} on={role === r} onPress={() => setRole(r)} />
+        ))}
+      </View>
+      <Btn title={busy ? "…" : "Invite"} onPress={submit} disabled={busy || billingReadonly} />
+
+      {lastInvite && (
+        <>
+          <Label>Last invite — share before leaving</Label>
+          <Sub>{shareText(lastInvite)}</Sub>
+          {lastInvite.res.email_sent ? <Sub>Email delivery attempted.</Sub> : null}
+          <Btn
+            title="Share invite details"
+            variant="secondary"
+            onPress={async () => {
+              try {
+                await Share.share({ message: shareText(lastInvite) });
+              } catch (e) {
+                alertFosError(e, "Share failed");
+              }
+            }}
+          />
+          <Btn
+            title="Done"
+            onPress={() => {
+              setLastInvite(null);
+              onDone();
+            }}
+          />
+        </>
+      )}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  kinds: { flexDirection: "row", gap: 8, marginBottom: 8, flexWrap: "wrap" },
+});

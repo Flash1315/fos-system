@@ -9,6 +9,11 @@ from pathlib import Path
 
 
 EXPECTED_ORG_KEYS = {
+    "directory-read-org",
+    "members-read-org",
+    "balance-read-org",
+    "org-me-org",
+    "auth-me-org",
     "accept-invite-org",
     "adjustment-org",
     "balances-read-org",

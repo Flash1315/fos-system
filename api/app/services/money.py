@@ -11,6 +11,8 @@ MAX_MONEY = Decimal("9999999999999999.99")
 
 
 def as_decimal(value: MoneyLike) -> Decimal:
+    if isinstance(value, bool):
+        raise ValueError("Amount must be a finite number")
     try:
         raw = Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError) as exc:

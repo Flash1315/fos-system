@@ -27,7 +27,10 @@ DB_CONNECT_TIMEOUT=10
 ## 2. Secrets & HTTP
 
 - `SECRET_KEY` ≥ 32 chars (not a known default)
+- Set stable `JWT_ISSUER` and `JWT_AUDIENCE` values (both default to `fos`);
+  changing either invalidates existing access and media tokens.
 - Explicit `CORS_ORIGINS` (never `*` or empty — at least one origin)
+- If set, `PUBLIC_APP_URL` must be HTTPS in production.
 - Terminate TLS at a reverse proxy; `ENABLE_HSTS=true` only behind HTTPS
 - If the proxy sets client IPs: `TRUST_X_FORWARDED_FOR=true` and `TRUSTED_PROXY_CIDRS=…`
 - Keep `RATE_LIMIT_ENABLED=true` (required in production)
@@ -38,6 +41,7 @@ DB_CONNECT_TIMEOUT=10
 
 - Persist `/app/uploads`, **or**
 - `MEDIA_BACKEND=s3` with `S3_BUCKET` + paired access/secret keys
+- `S3_BUCKET` is a bare bucket name (no `/` path segments).
 
 ## 4. Boot / health
 
@@ -67,6 +71,9 @@ DB_CONNECT_TIMEOUT=10
 - Accept-invite enforces `accept-invite-org:` only after the invite token resolves to an organization
 - Categories, media-token, and fuel-odometer reads enforce per-org `categories-org:` / `media-token-org:` / `fuel-odo-org:` rate limits
 - Billing status reads enforce per-org `billing-me-org:` rate limits
+- Auth /me and org /me enforce per-org `auth-me-org:` / `org-me-org:` rate limits
+- Personal balance reads enforce per-org `balance-read-org:` rate limits
+- Team members/directory reads enforce per-org `members-read-org:` / `directory-read-org:` rate limits
 - `/metrics` sends `Cache-Control: no-store`; CORS allows `X-Metrics-Token`
 - Media file responses send `X-Content-Type-Options: nosniff`
 - CSV export responses send `Cache-Control: no-store`
@@ -82,6 +89,56 @@ DB_CONNECT_TIMEOUT=10
 - OpenAPI/docs are hidden when `ENVIRONMENT=production` (`/docs`, `/redoc`, `/openapi.json`)
 - Example compose shape: [`docker-compose.prod.example.yml`](../docker-compose.prod.example.yml)
 
+- JWT access/media tokens carry iss/aud/jti claims validated on decode
+
+- Production requires JWT_ISSUER and JWT_AUDIENCE non-empty values
+
+- Production Redis limiter URLs must use rediss:// TLS
+
+- PUBLIC_APP_URL must be absolute HTTPS when set in production
+
+- S3_BUCKET must be a bare bucket name without path separators
+
+- Empty environment variables do not override Settings defaults
+
+- Media token lifetime is configurable via MEDIA_TOKEN_EXPIRE_MINUTES
+
+- JSON and upload body ceilings are configurable via settings
+
+- SMTP timeout is configurable via SMTP_TIMEOUT_SECONDS
+
+- Readiness dependency probes honor READINESS_TIMEOUT_SECONDS
+
+- Corrupt password hashes authenticate as invalid credentials
+
+- Database sessions roll back before close after handler exceptions
+
+- Boolean JSON amounts are rejected by money parsing
+
+- Audit detail redacts password/token/secret fields
+
+- Sanitized receipt recompression is byte-capped
+
+- Approve/reject-all pages pending IDs up to the batch cap
+
+- Native CSV export shares a temporary file via expo-sharing
+
+- CreateScreen drafts persist field state without receipt bytes
+
+- Alembic upgrades on Postgres take a session advisory lock
+
+- CI installs Python deps from requirements.lock.txt
+
+- Hardening inventory script fails CI when org keys drift
+
+- Workflow concurrency cancels superseded branch runs
+
+- API responses send Pragma no-cache and Expires 0
+
+- Metrics unauthorized responses include WWW-Authenticate Bearer
+
+- Ready probes are rate-limited separately from liveness
+
 ## 5. Mobile
 
 - Release builds need `EXPO_PUBLIC_API_URL=https://…` (see [`docs/EAS.md`](EAS.md))
@@ -91,6 +148,7 @@ DB_CONNECT_TIMEOUT=10
 Default image runs one uvicorn worker. For `uvicorn --workers N`:
 
 - Set `RATE_LIMIT_REDIS_URL`
+- Production Redis URLs must use `rediss://` TLS.
 - Size `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` so `N × (pool + overflow)` fits Postgres
 
 ## 7. Optional next

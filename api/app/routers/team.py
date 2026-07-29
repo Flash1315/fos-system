@@ -1,7 +1,8 @@
+from typing import Annotated
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
+from fastapi import Path, APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.schemas import (
@@ -55,6 +56,11 @@ def list_members(
         limit=120,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"members-read-org:{user.organization_id}",
+        limit=120,
+        window_sec=60,
+    )
     require_org_member_capacity(db, user.organization_id)
     rows = (
         db.query(User)
@@ -82,6 +88,11 @@ def org_directory(
         limit=120,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"directory-read-org:{user.organization_id}",
+        limit=120,
+        window_sec=60,
+    )
     require_org_member_capacity(db, user.organization_id, active_only=True)
     rows = (
         db.query(User)
@@ -100,7 +111,7 @@ def org_directory(
 
 @router.post("/members/{member_id}/active", response_model=MemberOut)
 def set_member_active(
-    member_id: int,
+    member_id: Annotated[int, Path(ge=1)],
     body: MemberActiveIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
@@ -297,7 +308,7 @@ def set_member_active(
 
 @router.post("/members/{member_id}/role", response_model=MemberOut)
 def set_member_role(
-    member_id: int,
+    member_id: Annotated[int, Path(ge=1)],
     body: MemberRoleIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner)),
@@ -429,7 +440,7 @@ def set_member_role(
 
 @router.post("/members/{member_id}/password", response_model=MemberOut)
 def reset_member_password(
-    member_id: int,
+    member_id: Annotated[int, Path(ge=1)],
     body: MemberPasswordResetIn,
     request: Request,
     background_tasks: BackgroundTasks,
@@ -571,7 +582,7 @@ def reset_member_password(
 
 @router.post("/members/{member_id}/reset-token", response_model=MemberResetTokenOut)
 def issue_member_reset_token(
-    member_id: int,
+    member_id: Annotated[int, Path(ge=1)],
     request: Request,
     background_tasks: BackgroundTasks,
     force: bool = Query(default=False),

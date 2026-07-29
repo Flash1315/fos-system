@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+MAX_SANITIZED_BYTES = 8 * 1024 * 1024
 MAX_IMAGE_PIXELS = 40_000_000
 MAX_IMAGE_SIDE = 8_000
 _MIN_BYTES = 24
@@ -80,11 +81,21 @@ def sanitize_image(data: bytes) -> tuple[bytes, str, str]:
         raise HTTPException(400, "Invalid or corrupted image") from exc
 
     output = BytesIO()
-    if suffix == ".png":
-        cleaned.save(output, format="PNG", optimize=True)
-        return output.getvalue(), ".png", "image/png"
-    if suffix == ".webp":
-        cleaned.save(output, format="WEBP", quality=85, method=4)
-        return output.getvalue(), ".webp", "image/webp"
-    cleaned.save(output, format="JPEG", quality=85, optimize=True)
-    return output.getvalue(), ".jpg", "image/jpeg"
+    try:
+        if suffix == ".png":
+            cleaned.save(output, format="PNG", optimize=True)
+            out, out_suffix, out_type = output.getvalue(), ".png", "image/png"
+        elif suffix == ".webp":
+            cleaned.save(output, format="WEBP", quality=85, method=4)
+            out, out_suffix, out_type = output.getvalue(), ".webp", "image/webp"
+        else:
+            cleaned.save(output, format="JPEG", quality=85, optimize=True)
+            out, out_suffix, out_type = output.getvalue(), ".jpg", "image/jpeg"
+    finally:
+        try:
+            cleaned.close()
+        except Exception:
+            pass
+    if len(out) > MAX_SANITIZED_BYTES:
+        raise HTTPException(400, "Sanitized image too large")
+    return out, out_suffix, out_type

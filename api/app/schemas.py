@@ -3,7 +3,7 @@ from typing import Optional
 import math
 import re
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.models import RecordKind, RecordStatus, UserRole
 
@@ -52,6 +52,8 @@ def _require_finite(v: Optional[float], *, field: str) -> Optional[float]:
 
 
 class OrgCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=2, max_length=80, pattern=r"^[a-z0-9-]+$")
     currency: str = "IDR"
@@ -116,6 +118,8 @@ class OrgOut(BaseModel):
 
 
 class OrgUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     currency: Optional[str] = Field(default=None, min_length=1, max_length=8)
 
@@ -159,6 +163,8 @@ class TokenOut(BaseModel):
 
 
 class LoginIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
     organization_slug: str
@@ -182,6 +188,8 @@ class LoginIn(BaseModel):
 
 
 class InviteIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: EmailStr
     full_name: str = Field(min_length=1, max_length=200)
     role: UserRole = UserRole.employee
@@ -235,6 +243,8 @@ class InviteOut(BaseModel):
 
 
 class AcceptInviteIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     token: str = Field(min_length=16, max_length=128)
     password: str = Field(min_length=8, max_length=128)
     password_confirm: str = Field(min_length=8, max_length=128)
@@ -260,6 +270,8 @@ class AcceptInviteIn(BaseModel):
 
 
 class PasswordChangeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     current_password: str = Field(min_length=1, max_length=128)
     new_password: str = Field(min_length=8, max_length=128)
     password_confirm: str = Field(min_length=8, max_length=128)
@@ -279,6 +291,8 @@ class PasswordChangeIn(BaseModel):
 
 
 class MemberPasswordResetIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     new_password: str = Field(min_length=8, max_length=128)
     password_confirm: str = Field(min_length=8, max_length=128)
 
@@ -305,6 +319,8 @@ class MemberResetTokenOut(BaseModel):
 
 
 class RecordCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     kind: RecordKind
     amount: float = Field(gt=0)
     category: str = Field(default="", max_length=120)
@@ -374,6 +390,8 @@ class RecordCreate(BaseModel):
 
 
 class RecordUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     amount: Optional[float] = Field(default=None, gt=0)
     category: Optional[str] = Field(default=None, max_length=120)
     purpose: Optional[str] = Field(default=None, max_length=80)
@@ -485,6 +503,8 @@ class BalanceOut(BaseModel):
 
 
 class DecideIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     approve: bool
     note: str = Field(default="", max_length=2000)
     allow_closed_cycle: bool = False
@@ -502,6 +522,8 @@ class DecideIn(BaseModel):
 
 
 class DecideBatchIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     ids: list[int] = Field(min_length=1, max_length=100)
     approve: bool
     note: str = Field(default="", max_length=2000)
@@ -542,6 +564,8 @@ class DecideBatchOut(BaseModel):
 
 
 class CommentIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     note: str = Field(min_length=1, max_length=2000)
 
     @field_validator("note")
@@ -566,10 +590,14 @@ class MemberOut(BaseModel):
 
 
 class MemberActiveIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     is_active: bool
 
 
 class MemberRoleIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     role: UserRole
 
 

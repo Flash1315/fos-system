@@ -1,13 +1,15 @@
+from typing import Annotated
 from datetime import datetime, timedelta, timezone
 import logging
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import Path, APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import create_media_token, get_current_user, require_roles
 from app.categories import PAYMENT_METHODS, PAYMENT_SOURCES, PURPOSES, categories_for
+from app.config import settings
 from app.db import get_db
 from app.models import MoneyRecord, Organization, RecordKind, RecordStatus, User, UserRole
 from app.schemas import (
@@ -751,9 +753,15 @@ def issue_media_token(user: User = Depends(get_current_user)):
         window_sec=60,
     )
     token = create_media_token(
-        user.id, user.organization_id, user.token_version or 0, minutes=15
+        user.id,
+        user.organization_id,
+        user.token_version or 0,
     )
-    return {"access_token": token, "token_type": "bearer", "expires_in": 900}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": int(settings.media_token_expire_minutes) * 60,
+    }
 
 
 @router.get("/balance/me", response_model=BalanceOut)
@@ -766,6 +774,11 @@ def my_balance(
 
     enforce_rate_limit(
         f"balance-me:{user.organization_id}:{user.id}",
+        limit=120,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"balance-read-org:{user.organization_id}",
         limit=120,
         window_sec=60,
     )
@@ -1155,7 +1168,7 @@ def decide_batch(
 
 @router.get("/{record_id}", response_model=RecordOut)
 def get_record(
-    record_id: int,
+    record_id: Annotated[int, Path(ge=1)],
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -1177,7 +1190,7 @@ def get_record(
 
 @router.patch("/{record_id}", response_model=RecordOut)
 def update_pending_record(
-    record_id: int,
+    record_id: Annotated[int, Path(ge=1)],
     body: RecordUpdate,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -1334,7 +1347,7 @@ def update_pending_record(
 
 @router.post("/{record_id}/decide", response_model=RecordOut)
 def decide_record(
-    record_id: int,
+    record_id: Annotated[int, Path(ge=1)],
     body: DecideIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
@@ -1487,7 +1500,7 @@ def decide_record(
 
 @router.post("/{record_id}/comment", response_model=RecordOut)
 def comment_record(
-    record_id: int,
+    record_id: Annotated[int, Path(ge=1)],
     body: CommentIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
@@ -1585,7 +1598,7 @@ def comment_record(
 
 @router.post("/{record_id}/void", response_model=RecordOut)
 def void_approved_record(
-    record_id: int,
+    record_id: Annotated[int, Path(ge=1)],
     body: CommentIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
@@ -1766,7 +1779,7 @@ def void_approved_record(
 
 @router.delete("/{record_id}", response_model=RecordOut)
 def cancel_pending_record(
-    record_id: int,
+    record_id: Annotated[int, Path(ge=1)],
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),

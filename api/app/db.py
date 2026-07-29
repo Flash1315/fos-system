@@ -4,8 +4,15 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from app.config import settings
 
 
-def _engine_kwargs() -> dict:
+def _database_url() -> str:
     url = (settings.database_url or "").strip()
+    if not url:
+        raise RuntimeError("DATABASE_URL must not be empty")
+    return url
+
+
+def _engine_kwargs(url: str | None = None) -> dict:
+    url = url or _database_url()
     kwargs: dict = {"pool_pre_ping": True}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
@@ -25,7 +32,8 @@ def _engine_kwargs() -> dict:
     return kwargs
 
 
-engine = create_engine(settings.database_url, **_engine_kwargs())
+_ENGINE_URL = _database_url()
+engine = create_engine(_ENGINE_URL, **_engine_kwargs(_ENGINE_URL))
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -37,5 +45,8 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

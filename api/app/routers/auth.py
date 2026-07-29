@@ -197,6 +197,11 @@ def me(user: User = Depends(get_current_user)):
         limit=120,
         window_sec=60,
     )
+    enforce_rate_limit(
+        f"auth-me-org:{user.organization_id}",
+        limit=120,
+        window_sec=60,
+    )
     return UserOut.model_validate(user)
 
 
@@ -402,6 +407,11 @@ def my_org(user: User = Depends(get_current_user), db: Session = Depends(get_db)
     enforce_rate_limit(
         f"org-me:{user.organization_id}:{user.id}",
         limit=60,
+        window_sec=60,
+    )
+    enforce_rate_limit(
+        f"org-me-org:{user.organization_id}",
+        limit=120,
         window_sec=60,
     )
     org = db.get(Organization, user.organization_id)

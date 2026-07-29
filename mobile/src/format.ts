@@ -22,7 +22,9 @@ export function parseFiniteMoney(
 }
 
 export function parseFiniteSignedMoney(raw: string): number | null {
-  const value = Number(String(raw ?? "").trim().replace(",", "."));
+  const cleaned = String(raw ?? "").trim().replace(",", ".");
+  if (/[eE]/.test(cleaned)) return null;
+  const value = Number(cleaned);
   if (!Number.isFinite(value) || value === 0) return null;
   return normalizeMoney(value);
 }
@@ -42,8 +44,12 @@ export function parseFiniteOdometer(raw: string): number | null {
 }
 
 export function formatMoney(amount: number, currency: string) {
+  if (!Number.isFinite(amount)) return `— ${currency}`;
   try {
-    return `${amount.toLocaleString()} ${currency}`;
+    return `${amount.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} ${currency}`;
   } catch {
     return `${amount} ${currency}`;
   }

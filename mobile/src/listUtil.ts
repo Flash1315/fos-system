@@ -1,8 +1,16 @@
 export function mergeById<T extends { id: number }>(prev: T[], more: T[]): T[] {
   if (!more.length) return prev;
-  const seen = new Set(prev.map((r) => r.id));
-  const extra = more.filter((r) => !seen.has(r.id));
-  return extra.length ? [...prev, ...extra] : prev;
+  const byId = new Map<number, T>();
+  const order: number[] = [];
+  for (const row of prev) {
+    byId.set(row.id, row);
+    order.push(row.id);
+  }
+  for (const row of more) {
+    if (!byId.has(row.id)) order.push(row.id);
+    byId.set(row.id, row);
+  }
+  return order.map((id) => byId.get(id)!);
 }
 
 /**

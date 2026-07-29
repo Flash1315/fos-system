@@ -2806,7 +2806,7 @@ def test_billing_and_money_numeric(client):
     assert rec.status_code == 200
     assert rec.json()["amount"] == 1.01
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
 def test_photo_url_media_token_and_invite_expiry(client):
     owner = _register(client, "flow-sec", "sec-owner@example.com")
@@ -5208,7 +5208,7 @@ def test_login_slug_norm_telegram_and_security_headers(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     assert health.headers.get("x-content-type-options") == "nosniff"
     assert health.headers.get("x-frame-options") == "DENY"
     assert health.headers.get("referrer-policy") == "no-referrer"
@@ -5275,7 +5275,7 @@ def test_login_bounds_password_same_and_transfer_email(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     assert health.headers.get("cache-control") == "no-store"
 
     # Seed cash via income then transfer with mixed-case email
@@ -5378,7 +5378,7 @@ def test_idem_charset_invite_email_and_org_patch(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
 
 def test_logout_bike_normalize_and_register_slug(client):
@@ -5388,7 +5388,7 @@ def test_logout_bike_normalize_and_register_slug(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     assert health.json()["db"] == "ok"
     assert health.json()["ok"] is True
 
@@ -5455,7 +5455,7 @@ def test_place_client_normalize_and_coop_header(client):
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     assert health.headers.get("cross-origin-opener-policy") == "same-origin"
 
     rec = client.post(
@@ -5510,7 +5510,7 @@ def test_slug_shape_category_collapse(client):
     owner = _register(client, "flow-0731", "v0731-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     rec = client.post(
         "/records",
@@ -5541,7 +5541,7 @@ def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
     """v0.7.32: X-Request-Id, note whitespace collapse, team mutation rate limit."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     assert "X-Request-Id" in health.headers
     rid = health.headers["X-Request-Id"]
     assert len(rid) >= 8
@@ -5665,7 +5665,7 @@ def test_request_id_note_collapse_and_team_rate_limit(client, monkeypatch):
 def test_list_rate_limits_comment_collapse_batch_method(client, monkeypatch):
     """v0.7.33: list GET rate limits, decide/comment collapse, batch payment_method."""
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     assert "X-Request-Id" in health.headers
 
     owner = _register(client, "flow-0733", "v0733-owner@example.com")
@@ -5729,7 +5729,7 @@ def test_list_rate_limits_comment_collapse_batch_method(client, monkeypatch):
 def test_control_chars_read_limits_and_request_id_header(client, monkeypatch):
     """v0.7.34: reject control chars, rate-limit remaining reads."""
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     assert health.headers.get("X-Request-Id")
 
     owner = _register(client, "flow-0734", "v0734-owner@example.com")
@@ -5802,7 +5802,7 @@ def test_health_controls_before_collapse_and_export_names(client, monkeypatch):
     """v0.7.35: health readiness, control-char order, CSV export still works."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     assert health.json()["ok"] is True
     assert health.json()["db"] == "ok"
 
@@ -5870,7 +5870,7 @@ def test_login_timing_media_token_bound_and_export_cap(client):
     """v0.7.36: dummy-hash login path, media token bound, health version."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     # Missing account still 401 (dummy hash path)
     missing = client.post(
@@ -5899,7 +5899,7 @@ def test_preauth_429_body_limit_purpose_and_settings(client, monkeypatch, tmp_pa
     """v0.7.37: middleware 429 JSON, body size, purpose reject, settings guard."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     from app.config import settings
     from app.services.rate_limit import reset_limiter_for_tests
@@ -5944,7 +5944,7 @@ def test_preauth_429_body_limit_purpose_and_settings(client, monkeypatch, tmp_pa
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "database_url", "postgresql+psycopg2://fos:fos@localhost:5432/fos")
     monkeypatch.setattr(settings, "cors_origins", "https://app.example.com")
-    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token")
+    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token-32chars-minxxxx")
     monkeypatch.setattr(settings, "secret_key", "short")
     try:
         raised = False
@@ -5962,7 +5962,7 @@ def test_org_cap_jwt_bind_pagination_csv_and_plaintext_invite(client, monkeypatc
     """v0.7.38: invite ceiling, JWT org bind, pagination, CSV defaults, hashed-only invites."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     from app.config import settings
     from app.db import SessionLocal
@@ -6067,7 +6067,7 @@ def test_org_cap_jwt_bind_pagination_csv_and_plaintext_invite(client, monkeypatc
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "database_url", "postgresql+psycopg2://fos:fos@localhost:5432/fos")
     monkeypatch.setattr(settings, "cors_origins", "https://app.example.com")
-    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token")
+    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token-32chars-minxxxx")
     monkeypatch.setattr(settings, "secret_key", "a" * 40)
     monkeypatch.setattr(settings, "media_backend", "s3")
     monkeypatch.setattr(settings, "s3_bucket", "")
@@ -6089,7 +6089,7 @@ def test_reset_force_accept_message_reports_default_and_amount(client):
     """v0.7.39: reset 409/force, accept message, reports default window, amount schema."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     owner = _register(client, "flow-0739", "v0739-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -6169,7 +6169,7 @@ def test_password_strength_hsts_reject_note_and_media_path(client, monkeypatch):
     """v0.7.40: password rules, optional HSTS, reject note min 2, media path guard."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     weak = client.post(
         "/orgs/register",
@@ -6236,7 +6236,7 @@ def test_invitee_billing_idem_ttl_and_docs_gate(client, monkeypatch):
     """v0.7.41: block unsettled invitees, canceled billing, idem prune, JWT ceiling."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     assert client.get("/docs").status_code == 200
 
     owner = _register(client, "flow-0741", "v0741-owner@example.com")
@@ -6330,7 +6330,7 @@ def test_invitee_billing_idem_ttl_and_docs_gate(client, monkeypatch):
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "database_url", "postgresql+psycopg2://fos:fos@localhost:5432/fos")
     monkeypatch.setattr(settings, "cors_origins", "https://app.example.com")
-    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token")
+    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token-32chars-minxxxx")
     monkeypatch.setattr(settings, "secret_key", "a" * 40)
     try:
         raised = False
@@ -6349,7 +6349,7 @@ def test_billing_freeze_mutations_and_media_type(client):
     """v0.7.42: canceled org blocks decide/void; media content-type; invitee JWT rejected."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     from app.services.storage import content_type_for
 
@@ -6448,7 +6448,7 @@ def test_billing_readonly_cancel_and_startup_bounds(client, monkeypatch):
     """v0.7.43: canceled org is read-only; cancel pending still works; startup bounds."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     owner = _register(client, "flow-0743", "v0743-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -6597,7 +6597,7 @@ def test_tenant_ready_leak_reactivate_cap_and_prod_guards(client, monkeypatch):
     """v0.7.44: org-first create-for, reactivate seats, secret/proxy prod guards, freeze team/billing."""
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     a = _register(client, "flow-0744a", "v0744a-owner@example.com")
     ha = {"Authorization": f"Bearer {a['access_token']}"}
@@ -6715,7 +6715,7 @@ def test_tenant_ready_leak_reactivate_cap_and_prod_guards(client, monkeypatch):
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "database_url", "postgresql+psycopg2://fos:fos@localhost:5432/fos")
     monkeypatch.setattr(settings, "cors_origins", "https://app.example.com")
-    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token")
+    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token-32chars-minxxxx")
     monkeypatch.setattr(settings, "secret_key", "dev-secret-change-me" + (" " * 20))
     try:
         raised = False
@@ -6759,7 +6759,7 @@ def test_tenant_ready_leak_reactivate_cap_and_prod_guards(client, monkeypatch):
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "database_url", "postgresql+psycopg2://fos:fos@localhost:5432/fos")
     monkeypatch.setattr(settings, "cors_origins", "https://app.example.com")
-    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token")
+    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token-32chars-minxxxx")
     monkeypatch.setattr(settings, "secret_key", "a" * 40)
     monkeypatch.setattr(settings, "trust_x_forwarded_for", True)
     monkeypatch.setattr(settings, "trusted_proxy_cidrs", "not-a-cidr,also-bad")
@@ -6785,7 +6785,7 @@ def test_past_due_readonly_overpay_forbid_and_health_backend(client, monkeypatch
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     assert health.json()["media_backend"] == "local"
 
     from app.config import settings
@@ -6848,10 +6848,10 @@ def test_past_due_readonly_overpay_forbid_and_health_backend(client, monkeypatch
     )
     assert login.status_code == 200
 
-    from app.services.email import _SMTP_TIMEOUT_SEC
+    from app.config import settings as _settings
     from app.services.notify import _TELEGRAM_TIMEOUT_SEC
 
-    assert _SMTP_TIMEOUT_SEC == 5
+    assert float(_settings.smtp_timeout_seconds) == 5
     assert _TELEGRAM_TIMEOUT_SEC == 5
 
 
@@ -6862,7 +6862,7 @@ def test_cancel_creator_only_append_truncate_and_xff(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     owner = _register(client, "flow-0746", "v0746-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -6950,7 +6950,7 @@ def test_csv_settled_amount_currency_and_startup_pairs(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     owner = _register(client, "flow-0747", "v0747-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -7046,7 +7046,7 @@ def test_rate_limit_prod_gate_limiter_cap_and_cancel_replay_auth(client, monkeyp
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     from app.main import _validate_runtime_settings
     from app.config import settings
@@ -7054,7 +7054,7 @@ def test_rate_limit_prod_gate_limiter_cap_and_cancel_replay_auth(client, monkeyp
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "database_url", "postgresql+psycopg2://fos:fos@localhost:5432/fos")
     monkeypatch.setattr(settings, "cors_origins", "https://app.example.com")
-    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token")
+    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token-32chars-minxxxx")
     monkeypatch.setattr(settings, "secret_key", "a" * 40)
     monkeypatch.setattr(settings, "rate_limit_enabled", False)
     try:
@@ -7195,7 +7195,7 @@ def test_login_form_validation_and_docker_pack_markers(client):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     bad_email = client.post(
         "/auth/login-form",
@@ -7237,7 +7237,7 @@ def test_freeze_idem_replay_accept_invite_and_local_media_oserror(client, monkey
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     owner = _register(client, "flow-0750", "v0750-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -7358,13 +7358,13 @@ def test_prod_refuses_sqlite_and_deploy_pack_markers(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "secret_key", "a" * 40)
     monkeypatch.setattr(settings, "rate_limit_enabled", True)
     monkeypatch.setattr(settings, "cors_origins", "https://app.example.com")
-    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token")
+    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token-32chars-minxxxx")
     monkeypatch.setattr(settings, "database_url", "sqlite:///./nope.db")
     try:
         raised = False
@@ -7383,7 +7383,7 @@ def test_prod_refuses_sqlite_and_deploy_pack_markers(client, monkeypatch):
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "database_url", "postgresql+psycopg2://fos:fos@localhost:5432/fos")
     monkeypatch.setattr(settings, "cors_origins", "https://app.example.com")
-    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token")
+    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token-32chars-minxxxx")
     monkeypatch.setattr(settings, "secret_key", "a" * 40)
     monkeypatch.setattr(settings, "db_pool_size", 0)
     try:
@@ -7440,7 +7440,7 @@ def test_eas_pack_markers(client):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     root = Path(__file__).resolve().parents[2]
     assert (root / "docs" / "EAS.md").is_file()
@@ -7464,7 +7464,7 @@ def test_redis_limiter_fallback_and_hot_indexes(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     monkeypatch.setattr(settings, "rate_limit_enabled", True)
 
@@ -7527,7 +7527,7 @@ def test_ops_cors_health_metrics_and_alembic_first(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     live = client.get("/health/live")
     assert live.status_code == 200
@@ -7541,10 +7541,11 @@ def test_ops_cors_health_metrics_and_alembic_first(client, monkeypatch):
     assert "fos_http_requests_total" in metrics.text
     assert "fos_up" in metrics.text
 
-    monkeypatch.setattr(settings, "metrics_token", "secret-metrics")
+    metrics_tok = "secret-metricsxxxxxxxxxxxxxxxxxx"
+    monkeypatch.setattr(settings, "metrics_token", metrics_tok)
     denied = client.get("/metrics")
     assert denied.status_code == 401
-    okm = client.get("/metrics", headers={"X-Metrics-Token": "secret-metrics"})
+    okm = client.get("/metrics", headers={"X-Metrics-Token": metrics_tok})
     assert okm.status_code == 200
     monkeypatch.setattr(settings, "metrics_token", "")
 
@@ -7594,7 +7595,7 @@ def test_closed_cycle_gate_photo_idem_and_comment_status(client):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     owner = _register(client, "flow-0755", "v0755-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -7709,7 +7710,7 @@ def test_invite_reset_token_visibility_retry_and_closed_cycle_client(client, mon
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     owner = _register(client, "flow-0758", "v0758-owner@example.com")
     h = {"Authorization": f"Bearer {owner['access_token']}"}
@@ -7797,7 +7798,7 @@ def test_soft_retry_resume_content_hash_and_prod_metrics_compose(client):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     root = Path(__file__).resolve().parents[2]
     api_ts = (root / "mobile" / "src" / "api.ts").read_text(encoding="utf-8")
@@ -7883,7 +7884,7 @@ def test_resume_billing_media_hygiene_and_ready_media(client):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     assert health.json().get("media") in ("ok", "error")
     assert "media_backend" in health.json()
 
@@ -8051,7 +8052,7 @@ def test_account_freeze_auth_share_422_and_limiter_ready(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     assert health.json()["limiter"] in ("memory", "redis", "redis_error")
 
     ready = client.get("/health/ready")
@@ -8132,7 +8133,7 @@ def test_account_freeze_auth_share_422_and_limiter_ready(client, monkeypatch):
     monkeypatch.setattr(
         settings, "database_url", "postgresql+psycopg2://fos:fos@localhost:5432/fos"
     )
-    monkeypatch.setattr(settings, "metrics_token", "tok")
+    monkeypatch.setattr(settings, "metrics_token", "tokxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
     monkeypatch.setattr(settings, "cors_origins", "   ")
     try:
         raised = False
@@ -8165,7 +8166,7 @@ def test_detail_freeze_auth_offline_session_csv_ci(client, monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["version"] == APP_VERSION
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
 
     root = Path(__file__).resolve().parents[2]
     detail = (root / "mobile" / "src" / "screens" / "RecordDetailScreen.tsx").read_text(
@@ -8267,6 +8268,7 @@ def test_detail_freeze_auth_offline_session_csv_ci(client, monkeypatch):
     assert client.get(f"{photo_url}?token={media_tok}").status_code == 401
 
     # expired JWT detail
+    now = datetime.now(timezone.utc)
     expired = jwt.encode(
         {
             "sub": "1",
@@ -8274,7 +8276,11 @@ def test_detail_freeze_auth_offline_session_csv_ci(client, monkeypatch):
             "role": "owner",
             "ver": 0,
             "typ": "access",
-            "exp": datetime.now(timezone.utc) - timedelta(minutes=5),
+            "iat": now - timedelta(minutes=10),
+            "exp": now - timedelta(minutes=5),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+            "jti": "a" * 32,
         },
         settings.secret_key,
         algorithm=settings.algorithm,
@@ -8296,7 +8302,7 @@ def test_v0775_payout_history_freeze_void_gate_markers():
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.230"
+    assert APP_VERSION == "0.8.230"
     text = Path(REPO_ROOT / "mobile/src/screens/PayoutHistoryScreen.tsx").read_text(
         encoding="utf-8"
     )
@@ -8450,7 +8456,7 @@ def test_v0779_home_resume_freeze_markers():
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.230"
+    assert APP_VERSION == "0.8.230"
     home = Path(REPO_ROOT / "mobile/src/screens/HomeScreen.tsx").read_text(encoding="utf-8")
     assert "BILLING_READONLY_MSG" in home
     assert "isBillingReadOnly" in home
@@ -8560,7 +8566,7 @@ def test_v0783_reports_soft_fail_markers():
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.230"
+    assert APP_VERSION == "0.8.230"
     for name in ("ReportsScreen.tsx", "MyReportScreen.tsx"):
         text = Path(REPO_ROOT / f"mobile/src/screens/{name}").read_text(encoding="utf-8")
         assert "setLoadError" in text
@@ -8690,7 +8696,7 @@ def test_v0787_soft_fail_load_more_markers():
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.230"
+    assert APP_VERSION == "0.8.230"
     for name, needle in (
         ("LedgerScreen.tsx", "Load more failed"),
         ("HomeScreen.tsx", "Load more failed"),
@@ -8804,7 +8810,7 @@ def test_v0791_team_approve_confirm_billing_markers():
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.230"
+    assert APP_VERSION == "0.8.230"
     team = Path(REPO_ROOT / "mobile/src/screens/TeamScreen.tsx").read_text(encoding="utf-8")
     assert "await billingMe()" in team
     assert "setMemberActive" in team
@@ -8925,9 +8931,9 @@ def test_v07100_ready_closeout_freeze_matrix_and_version(client):
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.230"
+    assert APP_VERSION == "0.8.230"
     health = client.get("/health")
-    assert health.json()["version"] == "0.7.230"
+    assert health.json()["version"] == "0.8.230"
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert "media" in ready.json()
@@ -9000,7 +9006,7 @@ def test_v07101_payout_soft_fail_and_batch_billing_markers():
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.230"
+    assert APP_VERSION == "0.8.230"
     text = Path(REPO_ROOT / "mobile/src/screens/PayoutScreen.tsx").read_text(encoding="utf-8")
     idx = text.find('setBootError(e instanceof Error ? e.message : "Failed");')
     assert idx >= 0
@@ -9095,8 +9101,8 @@ def test_v07110_create_photo_account_tg_and_version(client):
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.230"
-    assert client.get("/health").json()["version"] == "0.7.230"
+    assert APP_VERSION == "0.8.230"
+    assert client.get("/health").json()["version"] == "0.8.230"
     create = Path(REPO_ROOT / "mobile/src/screens/CreateScreen.tsx").read_text(encoding="utf-8")
     assert "Receipt photo attached" not in create
     account = Path(REPO_ROOT / "mobile/src/screens/AccountScreen.tsx").read_text(encoding="utf-8")
@@ -9345,18 +9351,19 @@ def test_v07120_early_error_headers_docs_ci_version_seal(client):
 
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.230"
-    assert client.get("/health").json()["version"] == "0.7.230"
+    assert APP_VERSION == "0.8.230"
+    assert client.get("/health").json()["version"] == "0.8.230"
 
     main = Path(REPO_ROOT / "api/app/main.py").read_text(encoding="utf-8")
     assert '"Permissions-Policy"' in main
     assert '"Cross-Origin-Opener-Policy"' in main
-    fn = main.find("def _json_error")
+    fn = main.find("def _security_headers")
     assert fn >= 0
     block = main[fn : fn + 700]
     assert "Permissions-Policy" in block
     assert "Cross-Origin-Opener-Policy" in block
     assert "Cache-Control" in block
+    assert "def _json_error" in main
 
     huge = client.post(
         "/auth/login",
@@ -9631,7 +9638,7 @@ def test_v07181_190_rejects_bad_production_cors(monkeypatch, origin):
         "database_url",
         "postgresql+psycopg2://fos:fos@db.example.com:5432/fos?sslmode=require",
     )
-    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token")
+    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token-32chars-minxxxx")
     monkeypatch.setattr(settings, "rate_limit_enabled", True)
 
     with pytest.raises(RuntimeError, match="CORS_ORIGINS"):
@@ -9645,7 +9652,7 @@ def test_v07181_190_runtime_tls_guards(client, monkeypatch):
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "secret_key", "a" * 40)
     monkeypatch.setattr(settings, "cors_origins", "https://app.example.com")
-    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token")
+    monkeypatch.setattr(settings, "metrics_token", "ci-metrics-token-32chars-minxxxx")
     monkeypatch.setattr(settings, "rate_limit_enabled", True)
     monkeypatch.setattr(
         settings,
@@ -9703,21 +9710,22 @@ def test_v07181_190_hsts_early_error_and_metrics_tokens(client, monkeypatch):
     assert huge.status_code == 413
     assert huge.headers["Strict-Transport-Security"] == "max-age=60; includeSubDomains"
 
-    assert _tok_ok("metrics-secret", "metrics-secret")
-    assert not _tok_ok("short", "metrics-secret")
-    monkeypatch.setattr(settings, "metrics_token", "metrics-secret")
+    metrics_tok = "metrics-secretxxxxxxxxxxxxxxxxxx"
+    assert _tok_ok(metrics_tok, metrics_tok)
+    assert not _tok_ok("short", metrics_tok)
+    monkeypatch.setattr(settings, "metrics_token", metrics_tok)
     monkeypatch.setattr(settings, "rate_limit_enabled", True)
     reset_limiter_for_tests()
     assert client.get("/metrics", headers={"X-Metrics-Token": "short"}).status_code == 401
     assert (
         client.get(
-            "/metrics", headers={"X-Metrics-Token": "metrics-secret"}
+            "/metrics", headers={"X-Metrics-Token": metrics_tok}
         ).status_code
         == 200
     )
     assert (
         client.get(
-            "/metrics", headers={"Authorization": "Bearer metrics-secret"}
+            "/metrics", headers={"Authorization": f"Bearer {metrics_tok}"}
         ).status_code
         == 200
     )
@@ -9946,7 +9954,7 @@ def test_v07207_production_config_rejection_matrix(monkeypatch):
         ),
         "db_pool_size": 5,
         "db_max_overflow": 10,
-        "metrics_token": "seal-207-metrics-token",
+        "metrics_token": "seal-207-metrics-token-at-least-32",
         "smtp_host": "",
         "smtp_use_tls": True,
     }
@@ -10019,10 +10027,10 @@ def test_v07210_format_utc_and_listutil_node():
 def test_v07220_version_seal(client):
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.230"
+    assert APP_VERSION == "0.8.230"
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.7.230"
+    assert response.json()["version"] == "0.8.230"
 
 
 def test_v07225_team_balances_two_users_shape(client):
@@ -10248,8 +10256,8 @@ def test_v07230_lockfile_and_version_seal(client):
     """v0.7.230: requirements.lock + version seal."""
     from app.version import APP_VERSION
 
-    assert APP_VERSION == "0.7.230"
-    assert client.get("/health").json()["version"] == "0.7.230"
+    assert APP_VERSION == "0.8.230"
+    assert client.get("/health").json()["version"] == "0.8.230"
     assert Path(REPO_ROOT / "api/requirements.lock.txt").exists()
     lock = Path(REPO_ROOT / "api/requirements.lock.txt").read_text(encoding="utf-8")
     assert "fastapi==" in lock or "fastapi" in lock
@@ -10257,3 +10265,15 @@ def test_v07230_lockfile_and_version_seal(client):
     assert "requirements.lock.txt" in dockerfile
     deploy = Path(REPO_ROOT / "docs/DEPLOY.md").read_text(encoding="utf-8")
     assert "requirements.lock.txt" in deploy
+
+def test_pack_ledger_matches_app_version():
+    """Every post-0.7.230 pack is recorded; tip matches APP_VERSION."""
+    from app.version import APP_VERSION
+
+    ledger = (REPO_ROOT / "docs/PACK_LEDGER.md").read_text(encoding="utf-8")
+    rows = [ln for ln in ledger.splitlines() if ln[:1].isdigit() and " | " in ln]
+    assert rows, "pack ledger empty"
+    tip = rows[-1].split(" | ", 1)[0].strip()
+    assert tip == APP_VERSION
+    assert len(rows) == 1000
+

@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+import re
+import uuid
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -20,7 +22,11 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return pwd_context.verify(plain, hashed)
+    except (TypeError, ValueError):
+        # Corrupt/legacy rows must behave like a wrong password, never a 500.
+        return False
 
 
 def dummy_password_hash() -> str:
@@ -46,14 +52,27 @@ def create_access_token(user_id: int, org_id: int, role: str, token_version: int
         "typ": "access",
         "iat": now,
         "exp": expire,
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
+        "jti": uuid.uuid4().hex,
     }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
-def create_media_token(user_id: int, org_id: int, token_version: int = 0, minutes: int = 15) -> str:
+def create_media_token(
+    user_id: int,
+    org_id: int,
+    token_version: int = 0,
+    minutes: int | None = None,
+) -> str:
     """Short-lived token for <Image> query auth — scoped to media only."""
     now = _utcnow()
-    expire = now + timedelta(minutes=max(1, minutes))
+    lifetime = (
+        int(settings.media_token_expire_minutes)
+        if minutes is None
+        else int(minutes)
+    )
+    expire = now + timedelta(minutes=max(1, lifetime))
     payload = {
         "sub": str(user_id),
         "org": org_id,
@@ -61,6 +80,9 @@ def create_media_token(user_id: int, org_id: int, token_version: int = 0, minute
         "typ": "media",
         "iat": now,
         "exp": expire,
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
+        "jti": uuid.uuid4().hex,
     }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
@@ -80,18 +102,45 @@ def user_from_token(
     """
     credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="Invalid credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        user_id = int(payload.get("sub", 0))
-        token_ver = int(payload.get("ver", 0) or 0)
-        typ = payload.get("typ") or "access"
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+            options={
+                "require_exp": True,
+                "require_iat": True,
+                "require_sub": True,
+                "require_iss": True,
+                "require_aud": True,
+            },
+        )
+        required = {"sub", "org", "ver", "typ", "iat", "exp", "iss", "aud", "jti"}
+        if not required.issubset(payload):
+            raise ValueError("missing required JWT claim")
+        user_id = int(payload["sub"])
+        token_ver = int(payload["ver"])
+        typ = payload["typ"]
+        iat = payload["iat"]
+        jti = payload["jti"]
+        if (
+            user_id <= 0
+            or token_ver < 0
+            or isinstance(iat, bool)
+            or float(iat) > datetime.now(timezone.utc).timestamp() + 30
+            or not isinstance(jti, str)
+            or not re.fullmatch(r"[0-9a-f]{32}", jti)
+        ):
+            raise ValueError("invalid JWT claim")
     except ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session expired",
+            detail="Token expired",
             headers={"WWW-Authenticate": "Bearer"},
         )
     except (JWTError, ValueError, TypeError):
@@ -108,10 +157,10 @@ def user_from_token(
     if int(getattr(user, "token_version", 0) or 0) != token_ver:
         raise credentials_exc
     try:
-        claim_org = int(payload.get("org", 0) or 0)
+        claim_org = int(payload["org"])
     except (TypeError, ValueError):
         raise credentials_exc
-    if claim_org != int(user.organization_id):
+    if claim_org <= 0 or claim_org != int(user.organization_id):
         raise credentials_exc
     # Access JWTs must belong to users who finished invite/password setup.
     if typ == "access" and getattr(user, "must_set_password", False):

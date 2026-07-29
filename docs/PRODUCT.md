@@ -328,3 +328,14 @@ Mobile: `EXPO_PUBLIC_API_URL=http://<host>:8000`
 - Soft-fail retains stale lists; pane-isolated Balances/Account; resume refresh for Payout/filters; Auth API errors inline; record-write/org-update/settle-cancel + balances/reports/finance-list org limits; early-error header parity
 - v0.7.121–0.7.220 hardening: shared org budgets, non-money idempotency, security/config matrices, mobile stale-response guards, pinned/audited CI, and route inventory
 - v0.7.221–0.7.230: truthful approve-all, dismiss-safe busy, CSV file share, create drafts, batched balances, audit journal, image sanitize, alembic lock, PG concurrency CI, dependency lock
+- Access JWT role claim must match DB role; iss/aud/jti validated
+- Schema mutation models forbid unknown fields
+- Path IDs for record/payout/member mutations require ge=1
+- formatMoney uses fixed 2-decimal output and em dash for non-finite values
+- mergeById replaces stale rows with fresher payloads
+- Pack ledger tracks each post-0.7.230 harden version
+- Shared org budgets cover auth-me, org-me, balance-read, members, directory
+- Freeze matrix allows accept-invite and password change during billing freeze
+- Receipt uploads are Pillow-sanitized before durable storage
+- Append-only AuditEvent journal covers decide/void/cancel and team mutations
+- v0.7.231–0.8.230: 1000 sequential harden packs (security headers/config, JWT iss/aud/jti, schema forbid-extra, path ID bounds, audit redaction, media sanitize, CI gates, pack ledger)

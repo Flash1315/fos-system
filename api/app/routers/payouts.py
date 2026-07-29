@@ -1,6 +1,7 @@
+from typing import Annotated
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Body, Header, Query
+from fastapi import Path, APIRouter, Depends, HTTPException, Body, Header, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -427,7 +428,7 @@ def org_payouts(
 
 @router.post("/{payout_id}/void", response_model=PayoutOut)
 def void_payout(
-    payout_id: int,
+    payout_id: Annotated[int, Path(ge=1)],
     body: VoidIn,
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
@@ -1120,7 +1121,7 @@ class ApproveRequestIn(BaseModel):
 
 @router.post("/requests/{request_id}/approve", response_model=PayoutOut)
 def approve_settlement_request(
-    request_id: int,
+    request_id: Annotated[int, Path(ge=1)],
     body: ApproveRequestIn | None = Body(default=None),
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
@@ -1283,7 +1284,7 @@ def approve_settlement_request(
 
 @router.post("/requests/{request_id}/cancel", response_model=SettlementRequestOut)
 def cancel_settlement_request(
-    request_id: int,
+    request_id: Annotated[int, Path(ge=1)],
     body: CancelRequestIn = CancelRequestIn(),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),

@@ -90,6 +90,12 @@ def _validate_runtime_settings() -> str:
     algo = (settings.algorithm or "").strip()
     if algo != "HS256":
         raise RuntimeError(f"ALGORITHM must be HS256 (got {settings.algorithm!r})")
+    issuer = (settings.jwt_issuer or "").strip()
+    if not issuer or len(issuer) > 128 or any(ch.isspace() for ch in issuer):
+        raise RuntimeError("JWT_ISSUER must be 1-128 non-whitespace characters")
+    audience = (settings.jwt_audience or "").strip()
+    if not audience or len(audience) > 128 or any(ch.isspace() for ch in audience):
+        raise RuntimeError("JWT_AUDIENCE must be 1-128 non-whitespace characters")
     media = (settings.media_backend or "local").strip().lower()
     if media not in ("local", "s3"):
         raise RuntimeError(f"MEDIA_BACKEND must be local or s3 (got {settings.media_backend!r})")
@@ -97,6 +103,9 @@ def _validate_runtime_settings() -> str:
     s3_secret = (settings.s3_secret_key or "").strip()
     if bool(s3_key) != bool(s3_secret):
         raise RuntimeError("S3_ACCESS_KEY and S3_SECRET_KEY must both be set or both empty")
+    s3_bucket = (settings.s3_bucket or "").strip()
+    if "/" in s3_bucket or "\\" in s3_bucket:
+        raise RuntimeError("S3_BUCKET must be a bucket name, not a path")
     if env in ("prod", "production"):
         if not secret or secret in _INSECURE_SECRETS or len(secret) < 32:
             raise RuntimeError(
@@ -195,6 +204,36 @@ def _validate_runtime_settings() -> str:
             raise RuntimeError(
                 "SMTP_USE_TLS must be true when SMTP_HOST is configured in production"
             )
+        public_app_url = (settings.public_app_url or "").strip()
+        if public_app_url:
+            try:
+                parsed_app = urlparse(public_app_url)
+                parsed_app.port
+            except ValueError as exc:
+                raise RuntimeError("PUBLIC_APP_URL is invalid") from exc
+            if (
+                parsed_app.scheme.lower() != "https"
+                or not parsed_app.hostname
+                or parsed_app.username is not None
+                or parsed_app.password is not None
+                or parsed_app.query
+                or parsed_app.fragment
+            ):
+                raise RuntimeError(
+                    "PUBLIC_APP_URL must be an absolute HTTPS URL without "
+                    "userinfo, query, or fragment in production"
+                )
+        redis_url = (settings.rate_limit_redis_url or "").strip()
+        if redis_url:
+            try:
+                parsed_redis = urlparse(redis_url)
+                parsed_redis.port
+            except ValueError as exc:
+                raise RuntimeError("RATE_LIMIT_REDIS_URL is invalid") from exc
+            if parsed_redis.scheme.lower() != "rediss" or not parsed_redis.hostname:
+                raise RuntimeError(
+                    "RATE_LIMIT_REDIS_URL must use rediss:// TLS in production"
+                )
         endpoint = (settings.s3_endpoint_url or "").strip()
         if endpoint:
             try:

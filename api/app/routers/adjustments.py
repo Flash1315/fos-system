@@ -1,8 +1,9 @@
+from typing import Annotated
 """Opening balances and non-operating corrections."""
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import Path, APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -275,7 +276,7 @@ def create_adjustment(
 
 @router.post("/{adjustment_id}/void", response_model=AdjustmentOut)
 def void_adjustment(
-    adjustment_id: int,
+    adjustment_id: Annotated[int, Path(ge=1)],
     body: VoidIn,
     db: Session = Depends(get_db),
     manager: User = Depends(require_roles(UserRole.owner, UserRole.manager)),
